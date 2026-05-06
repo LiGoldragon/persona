@@ -1,0 +1,37 @@
+[package]
+name         = "persona"
+version      = "0.1.0"
+edition      = "2024"
+rust-version = "1.85"
+license      = "MIT OR Apache-2.0"
+repository   = "https://github.com/LiGoldragon/persona"
+description  = "Typed coordination framework for multi-harness AI systems."
+
+[lib]
+name = "persona"
+path = "src/lib.rs"
+
+[[bin]]
+name = "persona"
+path = "src/main.rs"
+
+[dependencies]
+nota-codec = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }
+ractor     = { version = "0.15", features = ["async-trait"] }
+redb       = "2"
+rkyv       = { version = "0.8", default-features = false, features = [
+    "std",
+    "bytecheck",
+    "little_endian",
+    "pointer_width_32",
+    "unaligned",
+] }
+thiserror  = "2"
+tokio      = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unused = "warn"
+dead_code = "warn"

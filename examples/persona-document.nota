@@ -1,0 +1,41 @@
+(ValidateDocument
+  (PersonaDocument [
+    (HarnessRecord operator Operator Terminal "codex")
+    (HarnessRecord designer Designer Terminal "claude")
+    (MessageRecord message-1 operator designer "Sketch the harness message fabric." [])
+    (AuthorizationRecord delivery-1 message-1 Allow "operator may send design work to designer")
+    (DeliveryRecord delivery-1 message-1 designer SafeBoundary Queued)
+    (EventRecord event-1 MessageAppended message-1 "message appended and awaiting delivery")
+    (StateCursorRecord "persona-event-log" 2)
+    (HarnessObservationRecord designer Idle event-2 "designer is ready for the next message")
+    (PendingInteractionRecord interaction-1 designer "approval" "Allow file edit?" ["approve" "deny"])
+    (StateTransitionRecord transition-1 AppendMessage message-1 0 1 event-1)
+    (PersonaStateSnapshot
+      1
+      Running
+      [
+        (HarnessRecord operator Operator Terminal "codex")
+        (HarnessRecord designer Designer Terminal "claude")
+      ]
+      [
+        (MessageRecord message-1 operator designer "Sketch the harness message fabric." [])
+      ]
+      [
+        (AuthorizationRecord delivery-1 message-1 Allow "operator may send design work to designer")
+      ]
+      [
+        (DeliveryRecord delivery-1 message-1 designer SafeBoundary Queued)
+      ]
+      [
+        (HarnessObservationRecord designer Idle event-2 "designer is ready for the next message")
+      ]
+      [
+        (PendingInteractionRecord interaction-1 designer "approval" "Allow file edit?" ["approve" "deny"])
+      ]
+      [
+        (StateCursorRecord "persona-event-log" 2)
+      ]
+      [
+        (StateTransitionRecord transition-1 AppendMessage message-1 0 1 event-1)
+      ])
+  ]))
