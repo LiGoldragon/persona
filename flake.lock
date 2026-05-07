@@ -477,27 +477,9 @@
         "type": "github"
       }
     },
-    "persona-signal": {
-      "inputs": {
-        "nixpkgs": "nixpkgs_8"
-      },
-      "locked": {
-        "lastModified": 1778168566,
-        "narHash": "sha256-1XvPOc4OiEZU3kNEHPUDj9ersfsWT9BSizrR0OZEPmQ=",
-        "owner": "LiGoldragon",
-        "repo": "persona-signal",
-        "rev": "aa6cd3ccf3a271f9fd9b984c036cd1dafcec8e67",
-        "type": "github"
-      },
-      "original": {
-        "owner": "LiGoldragon",
-        "repo": "persona-signal",
-        "type": "github"
-      }
-    },
     "persona-store": {
       "inputs": {
-        "nixpkgs": "nixpkgs_9"
+        "nixpkgs": "nixpkgs_8"
       },
       "locked": {
         "lastModified": 1778168566,
@@ -515,7 +497,7 @@
     },
     "persona-system": {
       "inputs": {
-        "nixpkgs": "nixpkgs_10"
+        "nixpkgs": "nixpkgs_9"
       },
       "locked": {
         "lastModified": 1778163102,
@@ -555,7 +537,7 @@
       "inputs": {
         "crane": "crane_5",
         "fenix": "fenix_5",
-        "nixpkgs": "nixpkgs_11"
+        "nixpkgs": "nixpkgs_10"
       },
       "locked": {
         "lastModified": 1778147413,
@@ -580,10 +562,10 @@
         "persona-message": "persona-message",
         "persona-orchestrate": "persona-orchestrate",
         "persona-router": "persona-router",
-        "persona-signal": "persona-signal",
         "persona-store": "persona-store",
         "persona-system": "persona-system",
-        "persona-wezterm": "persona-wezterm_2"
+        "persona-wezterm": "persona-wezterm_2",
+        "signal-persona": "signal-persona"
       }
     },
     "rust-analyzer-src": {
@@ -668,6 +650,24 @@
         "owner": "rust-lang",
         "ref": "nightly",
         "repo": "rust-analyzer",
+        "type": "github"
+      }
+    },
+    "signal-persona": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_11"
+      },
+      "locked": {
+        "lastModified": 1778176209,
+        "narHash": "sha256-Ve1iDXVeYpfpiAE6Bjph6R++lv6CaWk37w4ndhbllmo=",
+        "owner": "LiGoldragon",
+        "repo": "signal-persona",
+        "rev": "c1f0ee5e3e489c0a7126cc6d5ca5e79b1935e4d5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "LiGoldragon",
+        "repo": "signal-persona",
         "type": "github"
       }
     },

@@ -12,7 +12,7 @@
 
 Persona coordinates interactive AI harnesses as first-class participants in one
 inspectable system. The runtime shape is a set of typed components signaling
-through `persona-signal`; the meta repo imports those components and assembles
+through `signal-persona`; the meta repo imports those components and assembles
 the deployment.
 
 `persona` is not the home for router internals, terminal adapters, store
@@ -30,7 +30,7 @@ flowchart TB
         deployment["deployment wiring"]
     end
 
-    subgraph contract["persona-signal"]
+    subgraph contract["signal-persona"]
         frame["Frame"]
         handshake["handshake"]
         vocabulary["request/reply/event vocabulary"]
@@ -52,7 +52,7 @@ flowchart TB
 
 | Repository | Role |
 |---|---|
-| `persona-signal` | Shared length-prefixed rkyv signal contract. |
+| `signal-persona` | Shared length-prefixed rkyv signal contract. |
 | `persona-message` | Human and harness NOTA message boundary. |
 | `persona-router` | Delivery reducer and pending-delivery state. |
 | `persona-system` | OS/window/input observation boundary. |
@@ -63,7 +63,7 @@ flowchart TB
 
 ## 2 · Wire Vocabulary
 
-Rust components signal each other with `persona-signal::Frame`, encoded as
+Rust components signal each other with `signal-persona::Frame`, encoded as
 length-prefixed rkyv archives. NOTA is a projection format for humans, CLIs,
 harness prompts, and debug output.
 
@@ -71,7 +71,7 @@ harness prompts, and debug output.
 sequenceDiagram
     participant Human as human or harness
     participant Message as persona-message
-    participant Signal as persona-signal
+    participant Signal as signal-persona
     participant Router as persona-router
     participant Store as persona-store
     participant Harness as persona-harness
@@ -115,7 +115,7 @@ This repository owns:
 
 This repository does not own:
 
-- shared signal records (`persona-signal`);
+- shared signal records (`signal-persona`);
 - router policy (`persona-router`);
 - terminal transport (`persona-wezterm`);
 - harness lifecycle internals (`persona-harness`);
@@ -126,7 +126,7 @@ This repository does not own:
 ## 5 · Invariants
 
 - The meta repo composes; component repos implement.
-- Rust-to-Rust component traffic uses `persona-signal` rkyv frames.
+- Rust-to-Rust component traffic uses `signal-persona` rkyv frames.
 - NOTA appears only at human, harness, CLI, and audit projection boundaries.
 - Producers push; consumers subscribe. Polling is not a fallback.
 - Harnesses are first-class records, not hidden terminal sessions.
@@ -146,7 +146,7 @@ tests/           schema tests and multi-component end-to-end tests
 
 ## See Also
 
-- `../persona-signal/ARCHITECTURE.md`
+- `../signal-persona/ARCHITECTURE.md`
 - `../persona-message/ARCHITECTURE.md`
 - `../persona-router/ARCHITECTURE.md`
 - `../persona-system/ARCHITECTURE.md`

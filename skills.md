@@ -6,7 +6,7 @@ end-to-end tests.
 
 Component implementation belongs in the component repo that owns the behavior:
 
-- `persona-signal` owns the shared rkyv signal contract.
+- `signal-persona` owns the shared rkyv signal contract.
 - `persona-message` owns the NOTA message CLI and harness/human projection.
 - `persona-router` owns delivery routing and pending-delivery state.
 - `persona-system` owns OS/window/input observation abstractions.

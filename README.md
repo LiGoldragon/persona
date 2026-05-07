@@ -6,7 +6,7 @@ It wires the component repositories together through Nix and keeps the
 high-level architecture visible. Component implementation belongs in the
 component repos:
 
-- `persona-signal` for the shared rkyv frame contract;
+- `signal-persona` for the shared rkyv frame contract;
 - `persona-store` for the durable database and transaction boundary;
 - `persona-router` for delivery routing;
 - `persona-system` for OS and window-manager observations;
