@@ -1,86 +1,158 @@
-# Persona Architecture
+# persona — architecture
 
-Persona is the meta-repository for the multi-harness system. It coordinates the
-component repositories through architecture docs and Nix integration. The core
-runtime design is still a single reducer-owned state machine: all durable
-harness, message, delivery, interaction, and observation changes land as typed
-transitions, but the implementation of those transitions belongs to the
-component crates.
+*Apex integration repository for the Persona component ecosystem.*
 
-The initial deployable shape is a set of small daemons and tools with one typed
-message fabric. Harnesses are the operational unit: each harness has a durable
-identity, a live process when running, an inbound message path, an outbound
-observation path, and an explicit authorization context.
+> `persona` composes the system. Component implementation lives in the
+> component repositories; this repo wires them together through Nix, documents
+> the whole topology, and owns deployment-level verification.
 
-## Role
+---
 
-The Persona meta-repo owns:
+## 0 · TL;DR
 
-- the top-level architecture view;
-- component composition through Nix;
-- eventual NixOS module wiring for a full Persona deployment;
-- integration reports that explain how the component repositories fit together.
+Persona coordinates interactive AI harnesses as first-class participants in one
+inspectable system. The runtime shape is a set of typed components signaling
+through `persona-signal`; the meta repo imports those components and assembles
+the deployment.
 
-The component repositories own:
+`persona` is not the home for router internals, terminal adapters, store
+tables, or signal records. It is the apex: architecture, Nix composition,
+deployment wiring, and end-to-end tests.
 
-- `persona-signal`: shared rkyv frame contract;
-- `persona-store`: durable database and transition commits;
-- `persona-router`: delivery decisions and pending-delivery state;
-- `persona-system`: OS and window-manager observations;
-- `persona-harness`: harness actor lifecycle;
-- `persona-message`: human and harness NOTA projection.
+## 1 · Components
 
-Persona does not own:
+```mermaid
+flowchart TB
+    subgraph apex["persona"]
+        architecture["apex ARCHITECTURE.md"]
+        nix["Nix composition"]
+        tests["end-to-end tests"]
+        deployment["deployment wiring"]
+    end
 
-- model inference itself;
-- provider billing or account policy;
-- project-specific agent role prompts;
-- component-internal daemon code;
-- component-internal database tables;
-- terminal adapter implementations.
+    subgraph contract["persona-signal"]
+        frame["Frame"]
+        handshake["handshake"]
+        vocabulary["request/reply/event vocabulary"]
+    end
 
-## Starting Map
+    subgraph components["component repositories"]
+        message["persona-message"]
+        router["persona-router"]
+        system["persona-system"]
+        harness["persona-harness"]
+        wezterm["persona-wezterm"]
+        store["persona-store"]
+        orchestrate["persona-orchestrate"]
+    end
+
+    apex -->|"imports flakes"| components
+    components -->|"signals with rkyv"| contract
+```
+
+| Repository | Role |
+|---|---|
+| `persona-signal` | Shared length-prefixed rkyv signal contract. |
+| `persona-message` | Human and harness NOTA message boundary. |
+| `persona-router` | Delivery reducer and pending-delivery state. |
+| `persona-system` | OS/window/input observation boundary. |
+| `persona-harness` | Harness identity, lifecycle, transcripts, adapter contracts. |
+| `persona-wezterm` | Durable PTY and detachable WezTerm viewer transport. |
+| `persona-store` | Durable redb transaction boundary and schema guard. |
+| `persona-orchestrate` | Workspace coordination: roles, claims, handoffs. |
+
+## 2 · Wire Vocabulary
+
+Rust components signal each other with `persona-signal::Frame`, encoded as
+length-prefixed rkyv archives. NOTA is a projection format for humans, CLIs,
+harness prompts, and debug output.
+
+```mermaid
+sequenceDiagram
+    participant Human as human or harness
+    participant Message as persona-message
+    participant Signal as persona-signal
+    participant Router as persona-router
+    participant Store as persona-store
+    participant Harness as persona-harness
+
+    Human->>Message: NOTA input
+    Message->>Signal: typed Frame
+    Signal->>Router: length-prefixed rkyv
+    Router->>Store: transition Frame
+    Store-->>Router: commit reply
+    Router->>Harness: delivery request
+    Harness-->>Human: NOTA projection
+```
+
+## 3 · State and Ownership
+
+`persona-store` owns the assembled runtime's durable write boundary. During
+parallel development, component repos may keep local redb stores so their CLIs
+and tests are useful in isolation. At assembly time those stores become table
+views composed by `persona-store`.
 
 ```mermaid
 flowchart LR
-    "persona meta-repo" -->|"Nix composition"| "persona-signal"
-    "persona meta-repo" -->|"Nix composition"| "persona-store"
-    "persona meta-repo" -->|"Nix composition"| "persona-router"
-    "persona meta-repo" -->|"Nix composition"| "persona-system"
-    "persona meta-repo" -->|"Nix composition"| "persona-harness"
-    "persona meta-repo" -->|"Nix composition"| "persona-message"
-
-    "persona-message" -->|"typed frame"| "persona-signal"
-    "persona-router" -->|"commit transition"| "persona-store"
-    "persona-router" -->|"gate query"| "persona-system"
-    "persona-router" -->|"delivery request"| "persona-harness"
-    "persona-harness" -->|"projection boundary"| "persona-message"
+    "component CLI" -->|"typed request"| "component library"
+    "component library" -->|"local tests"| "component-local redb"
+    "component library" -->|"assembled runtime"| "persona-store table view"
+    "persona-store table view" -->|"write transaction"| "unified redb"
 ```
 
-## Invariants
+The component remains the schema authority for its own record shapes.
+`persona-store` owns ordering, transactions, schema-version checks, and durable
+commit visibility.
 
-- The meta-repo composes; component repos implement.
+## 4 · Boundaries
+
+This repository owns:
+
+- apex architecture;
+- Nix flake inputs and component composition;
+- end-to-end tests that prove component composition;
+- deployment wiring for a full Persona system.
+
+This repository does not own:
+
+- shared signal records (`persona-signal`);
+- router policy (`persona-router`);
+- terminal transport (`persona-wezterm`);
+- harness lifecycle internals (`persona-harness`);
+- OS/window-manager adapters (`persona-system`);
+- durable database internals (`persona-store`);
+- workspace coordination internals (`persona-orchestrate`).
+
+## 5 · Invariants
+
+- The meta repo composes; component repos implement.
+- Rust-to-Rust component traffic uses `persona-signal` rkyv frames.
+- NOTA appears only at human, harness, CLI, and audit projection boundaries.
+- Producers push; consumers subscribe. Polling is not a fallback.
 - Harnesses are first-class records, not hidden terminal sessions.
-- Producers push; consumers subscribe.
-- Durable state and live process state are separate records.
-- The message fabric is typed before it is clever.
-- A delivery attempt produces observable state whether it succeeds, waits, or
-  fails.
-- Authorization is part of the route, not an afterthought.
-- The core state machine is singular; extension state is peripheral and feeds
-  the core through typed commands or observations.
+- Durable writes in the assembled runtime pass through `persona-store`.
+- Every component remains testable in isolation through its library, CLI, and
+  tests.
 
 ## Code Map
 
 ```text
-flake.nix       top-level component composition
-README.md       repo orientation
-ARCHITECTURE.md high-level system map
-src/            temporary schema stub until component repos absorb the runtime
+ARCHITECTURE.md  apex system shape
+skills.md        how to work in the meta repo
+flake.nix        component flake composition
+src/             temporary schema stub while component repos absorb runtime
+tests/           schema tests and multi-component end-to-end tests
 ```
 
-## Status
+## See Also
 
-Implementation in this repo is a schema scaffold and integration wrapper. New
-runtime implementation should land in the component repositories first, then be
-composed here through Nix.
+- `../persona-signal/ARCHITECTURE.md`
+- `../persona-message/ARCHITECTURE.md`
+- `../persona-router/ARCHITECTURE.md`
+- `../persona-system/ARCHITECTURE.md`
+- `../persona-harness/ARCHITECTURE.md`
+- `../persona-wezterm/ARCHITECTURE.md`
+- `../persona-store/ARCHITECTURE.md`
+- `../persona-orchestrate/ARCHITECTURE.md`
+- `~/primary/reports/designer/19-persona-parallel-development.md`
+- `~/primary/reports/operator/10-persona-parallel-implementation.md`

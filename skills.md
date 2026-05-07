@@ -1,18 +1,25 @@
 # persona skill
 
-Persona is the high-level integration repository for the multi-harness system.
-Keep this repo focused on architectural integration, schema-facing stubs, and
-reports that explain how the component repositories fit together.
+This is the Persona apex repository. Work here only when the change concerns
+the whole system: architecture, flake composition, deployment wiring, or
+end-to-end tests.
 
-Current component boundaries:
+Component implementation belongs in the component repo that owns the behavior:
 
-- `persona-signal` owns the shared rkyv frame contract.
-- `persona-store` owns the durable database and transaction boundary.
-- `persona-router` owns delivery decisions and pending-delivery state.
-- `persona-system` owns OS and window-manager observations.
-- `persona-harness` owns harness actor lifecycle.
-- `persona-message` owns the human/harness NOTA CLI boundary.
+- `persona-signal` owns the shared rkyv signal contract.
+- `persona-message` owns the NOTA message CLI and harness/human projection.
+- `persona-router` owns delivery routing and pending-delivery state.
+- `persona-system` owns OS/window/input observation abstractions.
+- `persona-harness` owns harness identity, lifecycle, transcripts, and adapter
+  contracts.
+- `persona-wezterm` owns durable PTY and WezTerm viewer transport.
+- `persona-store` owns durable transactions and the assembled redb boundary.
+- `persona-orchestrate` owns workspace coordination state.
 
-Do not duplicate contract records here once they belong in `persona-signal`.
-Do not open Persona's main database directly once `persona-store` exists.
+When adding a component to the system, wire it through `flake.nix` from a
+GitHub input and expose its package/check under this repo's outputs. Do not use
+`git+file` inputs. Do not copy component source into this repo.
+
+End-to-end tests live here when they require multiple components. Unit and
+component integration tests live in the component repo.
 
