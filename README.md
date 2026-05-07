@@ -1,10 +1,17 @@
 # Persona
 
-Persona is a new coordination framework for multi-harness AI systems.
+Persona is the integration repository for the multi-harness AI system.
 
-The first design target is harness-to-harness messaging: durable messages,
-live subscriptions, direct harness delivery, observed output, and explicit
-authorization.
+It wires the component repositories together through Nix and keeps the
+high-level architecture visible. Component implementation belongs in the
+component repos:
+
+- `persona-signal` for the shared rkyv frame contract;
+- `persona-store` for the durable database and transaction boundary;
+- `persona-router` for delivery routing;
+- `persona-system` for OS and window-manager observations;
+- `persona-harness` for harness actors;
+- `persona-message` for the NOTA CLI boundary.
 
 The current binary is a NOTA schema stub. With no arguments it emits an example
 document:

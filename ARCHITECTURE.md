@@ -1,62 +1,65 @@
 # Persona Architecture
 
-Persona coordinates proprietary code harnesses as first-class participants in
-one inspectable AI system. The core is a single reducer-owned state machine:
-all durable harness, message, delivery, interaction, and observation changes
-land as typed transitions.
+Persona is the meta-repository for the multi-harness system. It coordinates the
+component repositories through architecture docs and Nix integration. The core
+runtime design is still a single reducer-owned state machine: all durable
+harness, message, delivery, interaction, and observation changes land as typed
+transitions, but the implementation of those transitions belongs to the
+component crates.
 
-The initial shape is a small daemon with a typed message fabric. Harnesses are
-the operational unit: each harness has a durable identity, a live process when
-running, an inbound message path, an outbound observation path, and an explicit
-authorization context.
+The initial deployable shape is a set of small daemons and tools with one typed
+message fabric. Harnesses are the operational unit: each harness has a durable
+identity, a live process when running, an inbound message path, an outbound
+observation path, and an explicit authorization context.
 
 ## Role
 
-Persona owns:
+The Persona meta-repo owns:
 
-- harness identity and lifecycle records;
-- durable harness-to-harness messages;
-- live subscriptions for message and lifecycle events;
-- direct delivery into running harnesses;
-- observed output and transcript projections;
-- authorization checks before cross-harness delivery.
+- the top-level architecture view;
+- component composition through Nix;
+- eventual NixOS module wiring for a full Persona deployment;
+- integration reports that explain how the component repositories fit together.
+
+The component repositories own:
+
+- `persona-signal`: shared rkyv frame contract;
+- `persona-store`: durable database and transition commits;
+- `persona-router`: delivery decisions and pending-delivery state;
+- `persona-system`: OS and window-manager observations;
+- `persona-harness`: harness actor lifecycle;
+- `persona-message`: human and harness NOTA projection.
 
 Persona does not own:
 
 - model inference itself;
 - provider billing or account policy;
 - project-specific agent role prompts;
-- sema's core database design;
-- external product UI.
+- component-internal daemon code;
+- component-internal database tables;
+- terminal adapter implementations.
 
 ## Starting Map
 
 ```mermaid
 flowchart LR
-    client[human or harness client]
-    daemon[persona-daemon]
-    reducer[core state reducer]
-    authorization[authorization gate]
-    messages[message fabric]
-    supervisor[harness supervisor]
-    harness[harness actor]
-    storage[(redb + rkyv records)]
-    subscriptions[subscription hub]
+    "persona meta-repo" -->|"Nix composition"| "persona-signal"
+    "persona meta-repo" -->|"Nix composition"| "persona-store"
+    "persona meta-repo" -->|"Nix composition"| "persona-router"
+    "persona meta-repo" -->|"Nix composition"| "persona-system"
+    "persona meta-repo" -->|"Nix composition"| "persona-harness"
+    "persona meta-repo" -->|"Nix composition"| "persona-message"
 
-    client --> daemon
-    daemon --> reducer
-    reducer --> authorization
-    authorization --> messages
-    messages --> storage
-    messages --> supervisor
-    supervisor --> harness
-    harness --> messages
-    messages --> subscriptions
-    subscriptions --> client
+    "persona-message" -->|"typed frame"| "persona-signal"
+    "persona-router" -->|"commit transition"| "persona-store"
+    "persona-router" -->|"gate query"| "persona-system"
+    "persona-router" -->|"delivery request"| "persona-harness"
+    "persona-harness" -->|"projection boundary"| "persona-message"
 ```
 
 ## Invariants
 
+- The meta-repo composes; component repos implement.
 - Harnesses are first-class records, not hidden terminal sessions.
 - Producers push; consumers subscribe.
 - Durable state and live process state are separate records.
@@ -70,17 +73,14 @@ flowchart LR
 ## Code Map
 
 ```text
-src/
-  lib.rs       public crate surface
-  schema.rs    NOTA-facing records for harnesses, messages, delivery,
-               authorization, events, transitions, and state snapshots
-  state.rs     minimal core-state holder for reducer-facing tests
-  request.rs   NOTA CLI request/output envelope and argument decoding
-  error.rs     crate error enum
-  main.rs      thin NOTA-in / NOTA-out binary
+flake.nix       top-level component composition
+README.md       repo orientation
+ARCHITECTURE.md high-level system map
+src/            temporary schema stub until component repos absorb the runtime
 ```
 
 ## Status
 
-Implementation is a schema scaffold. The first report is
-`reports/2026-05-06-gas-city-harness-design.md`.
+Implementation in this repo is a schema scaffold and integration wrapper. New
+runtime implementation should land in the component repositories first, then be
+composed here through Nix.
