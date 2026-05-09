@@ -28,13 +28,12 @@ rkyv                   = { version = "0.8", default-features = false, features =
 ] }
 signal-core            = { git = "https://github.com/LiGoldragon/signal-core.git" }
 signal-persona-message = { git = "https://github.com/LiGoldragon/signal-persona-message.git" }
-signal-persona-store   = { git = "https://github.com/LiGoldragon/signal-persona-store.git" }
 thiserror              = "2"
 tokio                  = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net"] }
 
 # ─── Wire-test shim binaries (for nix-chained tests) ──────
-# These exercise the signal-persona-message ↔ signal-persona-store
-# channel pair end-to-end through real bytes on stdout/stdin.
+# These exercise signal-persona-message end-to-end through
+# real bytes on stdout/stdin.
 
 [[bin]]
 name = "wire-emit-message"
@@ -43,14 +42,6 @@ path = "src/bin/wire_emit_message.rs"
 [[bin]]
 name = "wire-decode-message"
 path = "src/bin/wire_decode_message.rs"
-
-[[bin]]
-name = "wire-relay-message-to-store"
-path = "src/bin/wire_relay_message_to_store.rs"
-
-[[bin]]
-name = "wire-decode-store"
-path = "src/bin/wire_decode_store.rs"
 
 [dev-dependencies]
 tempfile = "3"

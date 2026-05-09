@@ -11,9 +11,9 @@ observed harness output, and explicit authorization.
 
 ## Current Phase
 
-This repo is in schema-stub phase. Implementation code is limited to the
-small Rust/Nix scaffold needed to express the first NOTA input and output
-objects from the design report.
+This repo is in apex integration phase. Implementation code here stays limited
+to schema stubs, wire-test shims, Nix composition, and end-to-end witnesses.
+Component behavior belongs in the component repo that owns the concern.
 
 ## Version Control
 

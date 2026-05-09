@@ -467,7 +467,6 @@ dependencies = [
  "rkyv",
  "signal-core",
  "signal-persona-message",
- "signal-persona-store",
  "tempfile",
  "thiserror",
  "tokio",
@@ -706,17 +705,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-message"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-message.git#051e3d5d433208d7b378d79fa646b62e65281e63"
-dependencies = [
- "rkyv",
- "signal-core",
- "thiserror",
-]
-
-[[package]]
-name = "signal-persona-store"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-store.git#544c9d18e893ee1d5102474ce12df033c7a7e40b"
+source = "git+https://github.com/LiGoldragon/signal-persona-message.git#f968b1eb1c048887193ee5ab1b04c635b30feace"
 dependencies = [
  "rkyv",
  "signal-core",

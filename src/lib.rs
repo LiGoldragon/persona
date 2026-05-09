@@ -1,7 +1,7 @@
 //! Persona - typed coordination for multi-harness AI systems.
 //!
 //! The current crate is a NOTA-facing schema scaffold. It defines the first
-//! records Persona needs before the daemon and durable store land.
+//! records Persona needs before the component daemons land.
 
 pub mod error;
 pub mod request;

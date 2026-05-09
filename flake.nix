@@ -94,41 +94,7 @@
           persona-system = inputs.persona-system.checks.${system}.default;
           persona-wezterm = inputs.persona-wezterm.checks.${system}.default;
 
-          # ─── Wire-test chain: message → relay → store ───
-          #
-          # Architectural-truth witness for the message +
-          # store channel pair. Each derivation is a separate
-          # Nix build, so the wire bytes ARE the only thing
-          # that travels between them. In-process memory
-          # fakery cannot succeed — if the writer doesn't
-          # actually emit bytes, the reader has nothing to
-          # read. See `~/primary/skills/architectural-truth-tests.md`
-          # §"Nix-chained tests — the strongest witness".
-          wire-step-1-emit-message = context.pkgs.runCommand "wire-step-1-emit-message" {} ''
-            ${personaShims}/bin/wire-emit-message \
-              --recipient designer \
-              --body 'wire test 2026-05-09' \
-              > $out
-            test -s $out
-          '';
-
-          wire-step-2-relay-message-to-store = context.pkgs.runCommand "wire-step-2-relay-message-to-store" {} ''
-            ${personaShims}/bin/wire-relay-message-to-store \
-              --sender operator \
-              < ${self.checks.${system}.wire-step-1-emit-message} \
-              > $out
-            test -s $out
-          '';
-
-          wire-step-3-decode-store = context.pkgs.runCommand "wire-step-3-decode-store" {} ''
-            ${personaShims}/bin/wire-decode-store \
-              --expect-recipient designer \
-              --expect-sender operator \
-              --expect-body 'wire test 2026-05-09' \
-              < ${self.checks.${system}.wire-step-2-relay-message-to-store}
-            touch $out
-          '';
-
+          # ─── Wire-test chain: signal-persona-message ───
           wire-message-channel-round-trip = context.pkgs.runCommand "wire-message-channel-round-trip" {} ''
             ${personaShims}/bin/wire-emit-message \
               --recipient designer \

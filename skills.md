@@ -13,8 +13,8 @@ Component implementation belongs in the component repo that owns the behavior:
 - `persona-harness` owns harness identity, lifecycle, transcripts, and adapter
   contracts.
 - `persona-wezterm` owns durable PTY and WezTerm viewer transport.
-- `persona-sema` owns typed storage tables and the schema guard; the store
-  actor owns durable transaction ordering.
+- `persona-sema` is the typed database library; each state-bearing component
+  owns its own redb handle and transaction-ordering actor for its own domain.
 - `persona-orchestrate` owns workspace coordination state.
 
 When adding a component to the system, wire it through `flake.nix` from a
