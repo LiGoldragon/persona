@@ -145,8 +145,8 @@ can satisfy the test.
 - It does NOT write a redb file through `persona-sema`.
 - It does NOT exercise delivery guards, harness adapters, or terminal
   adapters.
-- It does NOT exercise `persona-orchestrate`; orchestration has its
-  own state domain.
+- It does NOT exercise `persona-mind`; central mind state has its
+  own component tests.
 
 ---
 

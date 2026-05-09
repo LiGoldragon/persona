@@ -11,9 +11,10 @@
 
     persona-harness.url = "github:LiGoldragon/persona-harness";
     persona-message.url = "github:LiGoldragon/persona-message";
-    persona-orchestrate.url = "github:LiGoldragon/persona-orchestrate";
+    persona-mind.url = "github:LiGoldragon/persona-mind";
     persona-router.url = "github:LiGoldragon/persona-router";
     signal-persona.url = "github:LiGoldragon/signal-persona";
+    signal-persona-mind.url = "github:LiGoldragon/signal-persona-mind";
     signal-persona-system.url = "github:LiGoldragon/signal-persona-system";
     persona-sema.url = "github:LiGoldragon/persona-sema";
     persona-system.url = "github:LiGoldragon/persona-system";
@@ -64,9 +65,10 @@
           );
           persona-harness = inputs.persona-harness.packages.${system}.default;
           persona-message = inputs.persona-message.packages.${system}.default;
-          persona-orchestrate = inputs.persona-orchestrate.packages.${system}.default;
+          persona-mind = inputs.persona-mind.packages.${system}.default;
           persona-router = inputs.persona-router.packages.${system}.default;
           signal-persona = inputs.signal-persona.packages.${system}.default;
+          signal-persona-mind = inputs.signal-persona-mind.packages.${system}.default;
           signal-persona-system = inputs.signal-persona-system.packages.${system}.default;
           persona-sema = inputs.persona-sema.packages.${system}.default;
           persona-system = inputs.persona-system.packages.${system}.default;
@@ -89,9 +91,10 @@
           );
           persona-harness = inputs.persona-harness.checks.${system}.default;
           persona-message = inputs.persona-message.checks.${system}.default;
-          persona-orchestrate = inputs.persona-orchestrate.checks.${system}.default;
+          persona-mind = inputs.persona-mind.checks.${system}.default;
           persona-router = inputs.persona-router.checks.${system}.default;
           signal-persona = inputs.signal-persona.checks.${system}.default;
+          signal-persona-mind = inputs.signal-persona-mind.checks.${system}.test;
           signal-persona-system-build = inputs.signal-persona-system.checks.${system}.build;
           signal-persona-system-test = inputs.signal-persona-system.checks.${system}.test;
           signal-persona-system-round-trip = inputs.signal-persona-system.checks.${system}.test-round-trip;

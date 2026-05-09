@@ -15,7 +15,9 @@ Component implementation belongs in the component repo that owns the behavior:
 - `persona-wezterm` owns durable PTY and WezTerm viewer transport.
 - `persona-sema` is the typed database library; each state-bearing component
   owns its own redb handle and transaction-ordering actor for its own domain.
-- `persona-orchestrate` owns workspace coordination state.
+- `persona-mind` owns the central state: role coordination,
+  activity, memory/work items, dependencies, decisions, aliases,
+  and ready-work views.
 
 When adding a component to the system, wire it through `flake.nix` from a
 GitHub input and expose its package/check under this repo's outputs. Do not use

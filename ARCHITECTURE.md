@@ -44,7 +44,7 @@ flowchart TB
         system_contract["signal-persona-system"]
         harness_contract["signal-persona-harness"]
         terminal_contract["signal-persona-terminal"]
-        orchestrate_contract["signal-persona-orchestrate"]
+        mind_contract["signal-persona-mind"]
     end
 
     subgraph runtime["runtime components"]
@@ -54,7 +54,7 @@ flowchart TB
         system["persona-system"]
         harness["persona-harness"]
         wezterm["persona-wezterm"]
-        orchestrate["persona-orchestrate"]
+        mind["persona-mind"]
     end
 
     apex -->|imports flakes| runtime
@@ -64,7 +64,7 @@ flowchart TB
     umbrella --> system_contract
     umbrella --> harness_contract
     umbrella --> terminal_contract
-    umbrella --> orchestrate_contract
+    umbrella --> mind_contract
 
     message_contract --> message
     message_contract --> router
@@ -74,10 +74,10 @@ flowchart TB
     harness_contract --> harness
     terminal_contract --> harness
     terminal_contract --> wezterm
-    orchestrate_contract --> orchestrate
+    mind_contract --> mind
 
     router --> sema
-    orchestrate --> sema
+    mind --> sema
     harness --> sema
     system --> sema
 ```
@@ -89,14 +89,14 @@ flowchart TB
 | `signal-persona-system` | OS/window/input observation channel: `persona-system` → `persona-router`. |
 | `signal-persona-harness` | Harness delivery and observation channel: `persona-router` ↔ `persona-harness`. |
 | `signal-persona-terminal` | Terminal projection channel: `persona-harness` → `persona-wezterm`. |
-| `signal-persona-orchestrate` | Orchestration channel: `orchestrate` CLI ↔ `persona-orchestrate`. Records: `RoleClaim`, `RoleRelease`, `RoleHandoff`, `RoleObservation`, `ActivitySubmission`, `ActivityQuery`. Shipped per `~/primary/reports/designer/93-persona-orchestrate-rust-rewrite-and-activity-log.md`. |
+| `signal-persona-mind` | Central mind channel: `mind` CLI and `tools/orchestrate` compatibility shim ↔ `persona-mind`. Records include role claims/releases/handoffs, activity, and the memory/work graph vocabulary. Current rename plan: `~/primary/reports/operator/100-persona-mind-central-rename-plan.md`. |
 | `persona-message` | Human and harness message CLI/projection boundary. |
 | `persona-router` | Delivery reducer, gate reducer, message state, and pending-delivery state machine. |
 | `persona-sema` | Shared typed database library used by each state-bearing component. |
 | `persona-system` | System/window/input observation adapters. |
 | `persona-harness` | Harness identity, lifecycle, transcripts, and adapter contracts. |
 | `persona-wezterm` | Durable PTY and detachable WezTerm viewer transport. |
-| `persona-orchestrate` | Runtime orchestration actors and workspace coordination state. |
+| `persona-mind` | Central state machine for claims, handoffs, activity, tasks, notes, dependencies, decisions, aliases, and ready-work views. |
 
 ## 2 · Choreography Model
 
@@ -143,9 +143,9 @@ flowchart LR
     system["persona-system"] -->|signal-persona-system| router
     router -->|signal-persona-harness| harness["persona-harness"]
     harness -->|signal-persona-terminal| wezterm["persona-wezterm"]
-    agent_tools["agents / tools"] -->|signal-persona-orchestrate| orchestrate["persona-orchestrate"]
-    orchestrate -->|orchestrate-owned state| sema
-    sema --> orchestrate_database[("orchestrate.redb")]
+    agent_tools["agents / tools"] -->|signal-persona-mind| mind["persona-mind"]
+    mind -->|mind-owned state| sema
+    sema --> mind_database[("mind.redb")]
 ```
 
 Each channel contract owns only the records exchanged on that
@@ -174,11 +174,11 @@ flowchart TB
         router_actor --> router_state --> router_database
     end
 
-    subgraph orchestrate["persona-orchestrate"]
-        orchestrate_actor["OrchestrateActor"]
-        orchestrate_state["OrchestrateStateActor"]
-        orchestrate_database[("orchestrate.redb")]
-        orchestrate_actor --> orchestrate_state --> orchestrate_database
+    subgraph mind["persona-mind"]
+        mind_actor["MindActor"]
+        mind_state["MindStateActor"]
+        mind_database[("mind.redb")]
+        mind_actor --> mind_state --> mind_database
     end
 
     subgraph harness["persona-harness"]
@@ -208,12 +208,12 @@ This repository does not own:
 - shared Persona records (`signal-persona`);
 - per-channel wire contracts (`signal-persona-*`);
 - router policy (`persona-router`);
-- orchestration actors (`persona-orchestrate`);
+- central mind actors (`persona-mind`);
 - terminal transport (`persona-wezterm`);
 - harness lifecycle internals (`persona-harness`);
 - OS/window-manager adapters (`persona-system`);
 - typed table internals (`persona-sema`);
-- workspace coordination internals (`persona-orchestrate`).
+- central state internals (`persona-mind`).
 
 ## 6 · Invariants
 
@@ -222,6 +222,9 @@ This repository does not own:
 - Contract repos own types; runtime repos own behavior.
 - Stateful runtime behavior lives in ractor actors inside the
   component that owns the concern.
+- `persona-mind` is Persona's central state component: claims,
+  handoffs, activity, memory/work items, dependencies, decisions,
+  aliases, and ready-work views live there.
 - Each state-bearing component uses `persona-sema` (which uses
   `sema` underneath) as a library and owns its own redb file. No
   shared `Arc<Mutex<Database>>` across components; no storage-actor
@@ -271,6 +274,6 @@ tests/           schema tests and multi-component end-to-end tests
 - `../persona-harness/ARCHITECTURE.md`
 - `../persona-wezterm/ARCHITECTURE.md`
 - `../persona-sema/ARCHITECTURE.md`
-- `../persona-orchestrate/ARCHITECTURE.md`
+- `../persona-mind/ARCHITECTURE.md`
 - `~/primary/reports/designer/76-signal-channel-macro-implementation-and-parallel-plan.md`
 - `~/primary/reports/operator/77-first-stack-channel-boundary-audit.md`
