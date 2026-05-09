@@ -14,7 +14,7 @@
     persona-orchestrate.url = "github:LiGoldragon/persona-orchestrate";
     persona-router.url = "github:LiGoldragon/persona-router";
     signal-persona.url = "github:LiGoldragon/signal-persona";
-    persona-store.url = "github:LiGoldragon/persona-store";
+    persona-sema.url = "github:LiGoldragon/persona-sema";
     persona-system.url = "github:LiGoldragon/persona-system";
     persona-wezterm.url = "github:LiGoldragon/persona-wezterm";
   };
@@ -66,7 +66,7 @@
           persona-orchestrate = inputs.persona-orchestrate.packages.${system}.default;
           persona-router = inputs.persona-router.packages.${system}.default;
           signal-persona = inputs.signal-persona.packages.${system}.default;
-          persona-store = inputs.persona-store.packages.${system}.default;
+          persona-sema = inputs.persona-sema.packages.${system}.default;
           persona-system = inputs.persona-system.packages.${system}.default;
           persona-wezterm = inputs.persona-wezterm.packages.${system}.default;
         }
@@ -89,7 +89,7 @@
           persona-orchestrate = inputs.persona-orchestrate.checks.${system}.default;
           persona-router = inputs.persona-router.checks.${system}.default;
           signal-persona = inputs.signal-persona.checks.${system}.default;
-          persona-store = inputs.persona-store.checks.${system}.default;
+          persona-sema = inputs.persona-sema.checks.${system}.default;
           persona-system = inputs.persona-system.checks.${system}.default;
           persona-wezterm = inputs.persona-wezterm.checks.${system}.default;
         }

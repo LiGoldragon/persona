@@ -13,7 +13,8 @@ Component implementation belongs in the component repo that owns the behavior:
 - `persona-harness` owns harness identity, lifecycle, transcripts, and adapter
   contracts.
 - `persona-wezterm` owns durable PTY and WezTerm viewer transport.
-- `persona-store` owns durable transactions and the assembled redb boundary.
+- `persona-sema` owns typed storage tables and the schema guard; the store
+  actor owns durable transaction ordering.
 - `persona-orchestrate` owns workspace coordination state.
 
 When adding a component to the system, wire it through `flake.nix` from a
@@ -22,4 +23,3 @@ GitHub input and expose its package/check under this repo's outputs. Do not use
 
 End-to-end tests live here when they require multiple components. Unit and
 component integration tests live in the component repo.
-

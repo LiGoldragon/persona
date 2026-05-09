@@ -15,7 +15,7 @@ inspectable system. The runtime shape is a set of typed components signaling
 through `signal-persona`; the meta repo imports those components and assembles
 the deployment.
 
-`persona` is not the home for router internals, terminal adapters, store
+`persona` is not the home for router internals, terminal adapters, storage
 tables, or signal records. It is the apex: architecture, Nix composition,
 deployment wiring, and end-to-end tests.
 
@@ -42,7 +42,7 @@ flowchart TB
         system["persona-system"]
         harness["persona-harness"]
         wezterm["persona-wezterm"]
-        store["persona-store"]
+        store["persona-sema"]
         orchestrate["persona-orchestrate"]
     end
 
@@ -58,7 +58,7 @@ flowchart TB
 | `persona-system` | OS/window/input observation boundary. |
 | `persona-harness` | Harness identity, lifecycle, transcripts, adapter contracts. |
 | `persona-wezterm` | Durable PTY and detachable WezTerm viewer transport. |
-| `persona-store` | Durable redb transaction boundary and schema guard. |
+| `persona-sema` | Typed storage layer and schema guard over Sema. |
 | `persona-orchestrate` | Workspace coordination: roles, claims, handoffs. |
 
 ## 2 · Wire Vocabulary
@@ -73,7 +73,7 @@ sequenceDiagram
     participant Message as persona-message
     participant Signal as signal-persona
     participant Router as persona-router
-    participant Store as persona-store
+    participant Store as store actor
     participant Harness as persona-harness
 
     Human->>Message: NOTA input
@@ -87,22 +87,23 @@ sequenceDiagram
 
 ## 3 · State and Ownership
 
-`persona-store` owns the assembled runtime's durable write boundary. During
-parallel development, component repos may keep local redb stores so their CLIs
-and tests are useful in isolation. At assembly time those stores become table
-views composed by `persona-store`.
+`persona-sema` owns Persona's typed storage tables and schema version. During
+parallel development, component repos may keep local development state so their
+CLIs and tests are useful in isolation. At assembly time durable writes go
+through one store actor using `persona-sema`.
 
 ```mermaid
 flowchart LR
     "component CLI" -->|"typed request"| "component library"
-    "component library" -->|"local tests"| "component-local redb"
-    "component library" -->|"assembled runtime"| "persona-store table view"
-    "persona-store table view" -->|"write transaction"| "unified redb"
+    "component library" -->|"local tests"| "component-local state"
+    "component library" -->|"assembled runtime"| "store actor"
+    "store actor" -->|"write transaction"| "persona-sema"
+    "persona-sema" -->|"redb + rkyv"| "unified redb"
 ```
 
-The component remains the schema authority for its own record shapes.
-`persona-store` owns ordering, transactions, schema-version checks, and durable
-commit visibility.
+`signal-persona` remains the record-shape authority. `persona-sema` owns table
+identity. The store actor owns ordering, transactions, and durable commit
+visibility.
 
 ## 4 · Boundaries
 
@@ -120,7 +121,7 @@ This repository does not own:
 - terminal transport (`persona-wezterm`);
 - harness lifecycle internals (`persona-harness`);
 - OS/window-manager adapters (`persona-system`);
-- durable database internals (`persona-store`);
+- durable database internals (`persona-sema`);
 - workspace coordination internals (`persona-orchestrate`).
 
 ## 5 · Invariants
@@ -130,7 +131,8 @@ This repository does not own:
 - NOTA appears only at human, harness, CLI, and audit projection boundaries.
 - Producers push; consumers subscribe. Polling is not a fallback.
 - Harnesses are first-class records, not hidden terminal sessions.
-- Durable writes in the assembled runtime pass through `persona-store`.
+- Durable writes in the assembled runtime pass through one store actor using
+  `persona-sema`.
 - Every component remains testable in isolation through its library, CLI, and
   tests.
 
@@ -152,7 +154,7 @@ tests/           schema tests and multi-component end-to-end tests
 - `../persona-system/ARCHITECTURE.md`
 - `../persona-harness/ARCHITECTURE.md`
 - `../persona-wezterm/ARCHITECTURE.md`
-- `../persona-store/ARCHITECTURE.md`
+- `../persona-sema/ARCHITECTURE.md`
 - `../persona-orchestrate/ARCHITECTURE.md`
 - `~/primary/reports/designer/19-persona-parallel-development.md`
 - `~/primary/reports/operator/10-persona-parallel-implementation.md`

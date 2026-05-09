@@ -7,7 +7,7 @@ high-level architecture visible. Component implementation belongs in the
 component repos:
 
 - `signal-persona` for the shared rkyv frame contract;
-- `persona-store` for the durable database and transaction boundary;
+- `persona-sema` for typed storage and schema guard;
 - `persona-router` for delivery routing;
 - `persona-system` for OS and window-manager observations;
 - `persona-harness` for harness actors;
