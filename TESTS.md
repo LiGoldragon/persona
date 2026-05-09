@@ -23,6 +23,13 @@ contract's or component's own `tests/` directory, not here.
 
 ## The test surfaces
 
+### 0 · Component flake checks
+
+`persona` imports component and contract flakes, then exposes their
+checks under this meta repo. When a new `signal-persona-*` contract
+lands, the meta repo imports it so a single `nix flake check` sees
+the contract health alongside the runtime components.
+
 ### 1 · Cargo unit/integration tests (`tests/*.rs`)
 
 Standard `cargo test` paths. Each test file is one integration test.
@@ -132,6 +139,9 @@ can satisfy the test.
 ## What the current wire test does NOT do
 
 - It does NOT exercise the actual `persona-router` daemon.
+- It does NOT yet consume `signal-persona-system` in router code; the
+  meta repo currently verifies that contract through its own imported
+  flake checks.
 - It does NOT write a redb file through `persona-sema`.
 - It does NOT exercise delivery guards, harness adapters, or terminal
   adapters.
@@ -151,4 +161,6 @@ can satisfy the test.
   — operator counter-plan for the first-stack channel boundary.
 - `signal-persona-message/` — the message channel contract consumed
   here.
+- `signal-persona-system/` — the system observation contract imported
+  by the meta flake and consumed by the router next.
 - `signal-core/src/channel.rs` — the `signal_channel!` macro.

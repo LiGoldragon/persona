@@ -14,6 +14,7 @@
     persona-orchestrate.url = "github:LiGoldragon/persona-orchestrate";
     persona-router.url = "github:LiGoldragon/persona-router";
     signal-persona.url = "github:LiGoldragon/signal-persona";
+    signal-persona-system.url = "github:LiGoldragon/signal-persona-system";
     persona-sema.url = "github:LiGoldragon/persona-sema";
     persona-system.url = "github:LiGoldragon/persona-system";
     persona-wezterm.url = "github:LiGoldragon/persona-wezterm";
@@ -66,6 +67,7 @@
           persona-orchestrate = inputs.persona-orchestrate.packages.${system}.default;
           persona-router = inputs.persona-router.packages.${system}.default;
           signal-persona = inputs.signal-persona.packages.${system}.default;
+          signal-persona-system = inputs.signal-persona-system.packages.${system}.default;
           persona-sema = inputs.persona-sema.packages.${system}.default;
           persona-system = inputs.persona-system.packages.${system}.default;
           persona-wezterm = inputs.persona-wezterm.packages.${system}.default;
@@ -90,6 +92,13 @@
           persona-orchestrate = inputs.persona-orchestrate.checks.${system}.default;
           persona-router = inputs.persona-router.checks.${system}.default;
           signal-persona = inputs.signal-persona.checks.${system}.default;
+          signal-persona-system-build = inputs.signal-persona-system.checks.${system}.build;
+          signal-persona-system-test = inputs.signal-persona-system.checks.${system}.test;
+          signal-persona-system-round-trip = inputs.signal-persona-system.checks.${system}.test-round-trip;
+          signal-persona-system-test-doc = inputs.signal-persona-system.checks.${system}.test-doc;
+          signal-persona-system-doc = inputs.signal-persona-system.checks.${system}.doc;
+          signal-persona-system-fmt = inputs.signal-persona-system.checks.${system}.fmt;
+          signal-persona-system-clippy = inputs.signal-persona-system.checks.${system}.clippy;
           persona-sema = inputs.persona-sema.checks.${system}.default;
           persona-system = inputs.persona-system.checks.${system}.default;
           persona-wezterm = inputs.persona-wezterm.checks.${system}.default;
