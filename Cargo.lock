@@ -465,6 +465,9 @@ dependencies = [
  "ractor",
  "redb",
  "rkyv",
+ "signal-core",
+ "signal-persona-message",
+ "signal-persona-store",
  "tempfile",
  "thiserror",
  "tokio",
@@ -688,6 +691,36 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "signal-core"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-core.git#54f34e056d251ebf1604048dc8bf618478389a33"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "thiserror",
+]
+
+[[package]]
+name = "signal-persona-message"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-persona-message.git#051e3d5d433208d7b378d79fa646b62e65281e63"
+dependencies = [
+ "rkyv",
+ "signal-core",
+ "thiserror",
+]
+
+[[package]]
+name = "signal-persona-store"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-persona-store.git#544c9d18e893ee1d5102474ce12df033c7a7e40b"
+dependencies = [
+ "rkyv",
+ "signal-core",
+ "thiserror",
 ]
 
 [[package]]
