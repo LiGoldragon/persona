@@ -89,7 +89,7 @@ flowchart TB
 | `signal-persona-system` | OS/window/input observation channel: `persona-system` → `persona-router`. |
 | `signal-persona-harness` | Harness delivery and observation channel: `persona-router` ↔ `persona-harness`. |
 | `signal-persona-terminal` | Terminal projection channel: `persona-harness` → `persona-wezterm`. |
-| `signal-persona-orchestrate` | Orchestration channel: agents/tools → `persona-orchestrate`. |
+| `signal-persona-orchestrate` | Orchestration channel: `orchestrate` CLI ↔ `persona-orchestrate`. Records: `RoleClaim`, `RoleRelease`, `RoleHandoff`, `RoleObservation`, `ActivitySubmission`, `ActivityQuery`. Shipped per `~/primary/reports/designer/93-persona-orchestrate-rust-rewrite-and-activity-log.md`. |
 | `persona-message` | Human and harness message CLI/projection boundary. |
 | `persona-router` | Delivery reducer, gate reducer, message state, and pending-delivery state machine. |
 | `persona-sema` | Shared typed database library used by each state-bearing component. |
