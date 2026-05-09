@@ -11,9 +11,11 @@
 ## 0 · TL;DR
 
 Persona coordinates interactive AI harnesses as first-class
-participants in one inspectable system. Components communicate by
-typed signal frames; durable state flows through one store actor;
-human and harness text is a projection at the boundary.
+participants in one inspectable system. Components are ractor-based:
+each runtime component owns its own actors, and actors communicate by
+typed signal frames. Durable Persona state is owned by an
+orchestrator actor that holds the `persona-sema` database handle.
+Human and harness text is a projection at the boundary.
 
 The architecture is channel-first. Each pair of components that
 communicates over a wire shares a dedicated `signal-persona-*`
@@ -50,7 +52,6 @@ flowchart TB
     subgraph runtime["runtime components"]
         message["persona-message"]
         router["persona-router"]
-        store_actor["persona-store-actor"]
         sema["persona-sema"]
         system["persona-system"]
         harness["persona-harness"]
@@ -70,32 +71,31 @@ flowchart TB
     message_contract --> message
     message_contract --> router
     store_contract --> router
-    store_contract --> store_actor
+    store_contract --> orchestrate
     system_contract --> system
     system_contract --> router
     harness_contract --> router
     harness_contract --> harness
     terminal_contract --> harness
     terminal_contract --> wezterm
-    store_actor --> sema
+    orchestrate --> sema
 ```
 
 | Repository | Role |
 |---|---|
 | `signal-persona` | Umbrella Persona domain records shared across channels. |
 | `signal-persona-message` | CLI/text ingress channel: `persona-message` → `persona-router`. |
-| `signal-persona-store` | Durable commit channel: `persona-router` → `persona-store-actor`. |
+| `signal-persona-store` | Durable commit channel: `persona-router` → `persona-orchestrate`'s state actor. |
 | `signal-persona-system` | OS/window/input observation channel: `persona-system` → `persona-router`. |
 | `signal-persona-harness` | Harness delivery and observation channel: `persona-router` ↔ `persona-harness`. |
 | `signal-persona-terminal` | Terminal projection channel: `persona-harness` → `persona-wezterm`. |
 | `persona-message` | Human and harness message CLI/projection boundary. |
 | `persona-router` | Delivery reducer, gate reducer, and pending-delivery state machine. |
-| `persona-store-actor` | Sole runtime mailbox into Persona's database. |
 | `persona-sema` | Typed table layout and schema guard over the sema kernel. |
 | `persona-system` | System/window/input observation adapters. |
 | `persona-harness` | Harness identity, lifecycle, transcripts, and adapter contracts. |
 | `persona-wezterm` | Durable PTY and detachable WezTerm viewer transport. |
-| `persona-orchestrate` | Workspace coordination: roles, claims, handoffs. |
+| `persona-orchestrate` | Runtime orchestration actors, including the actor that owns the `PersonaSema` handle. |
 
 ## 2 · Choreography Model
 
@@ -127,15 +127,18 @@ memory: the contract crate is the stable typed agreement.
 
 Rust-to-Rust traffic uses signal-family frames: length-prefixed
 rkyv archives with channel-specific request and reply payloads.
-NOTA/Nexus text remains a human-facing and harness-facing
-projection, not the inter-component wire.
+Text is NOTA syntax. In practice, Persona request/message text is
+usually Nexus: a NOTA-based request surface. Convenience CLIs such
+as `message` construct the Nexus record shape in NOTA syntax for the
+user instead of asking them to type the full wrapper. None of this
+is the inter-component wire.
 
 ```mermaid
 flowchart LR
     human["human or harness"] -->|text projection| message["persona-message"]
     message -->|signal-persona-message| router["persona-router"]
-    router -->|signal-persona-store| store_actor["persona-store-actor"]
-    store_actor -->|typed tables| sema["persona-sema"]
+    router -->|signal-persona-store| orchestrate["persona-orchestrate"]
+    orchestrate -->|typed tables| sema["persona-sema"]
     system["persona-system"] -->|signal-persona-system| router
     router -->|signal-persona-harness| harness["persona-harness"]
     harness -->|signal-persona-terminal| wezterm["persona-wezterm"]
@@ -150,18 +153,18 @@ adapter logic.
 ## 4 · State and Ownership
 
 `persona-sema` owns Persona's typed storage tables and schema
-version. `persona-store-actor` owns runtime transaction ordering,
-the only mailbox into the database, and commit visibility. The
-router requests commits through `signal-persona-store`; it does not
-write redb directly.
+version. An actor inside `persona-orchestrate` owns the
+`PersonaSema` handle, runtime transaction ordering, the mailbox into
+the database, and commit visibility. The router requests commits
+through `signal-persona-store`; it does not write redb directly.
 
 ```mermaid
 flowchart LR
-    router["persona-router"] -->|CommitRequest| store_actor["persona-store-actor"]
-    store_actor -->|write transaction| sema["persona-sema"]
+    router["persona-router"] -->|CommitRequest| orchestrate["persona-orchestrate state actor"]
+    orchestrate -->|write transaction| sema["persona-sema"]
     sema -->|redb + rkyv| database[("persona.redb")]
     database -->|authoritative read| reader["persona-sema reader"]
-    store_actor -->|CommitOutcome| router
+    orchestrate -->|CommitOutcome| router
     router -->|after commit| harness["persona-harness"]
 ```
 
@@ -184,7 +187,7 @@ This repository does not own:
 - shared Persona records (`signal-persona`);
 - per-channel wire contracts (`signal-persona-*`);
 - router policy (`persona-router`);
-- store transaction ordering (`persona-store-actor`);
+- orchestrator state actors (`persona-orchestrate`);
 - terminal transport (`persona-wezterm`);
 - harness lifecycle internals (`persona-harness`);
 - OS/window-manager adapters (`persona-system`);
@@ -196,13 +199,16 @@ This repository does not own:
 - The meta repo composes; component repos implement.
 - Each wire between components has a signal contract repo.
 - Contract repos own types; runtime repos own behavior.
+- Stateful runtime behavior lives in ractor actors inside the
+  component that owns the concern.
 - Rust-to-Rust component traffic uses length-prefixed rkyv frames.
-- NOTA/Nexus appears only at human, harness, CLI, and audit
-  projection boundaries.
+- NOTA syntax appears only at human, harness, CLI, configuration,
+  and audit projection boundaries. Persona request/message text is
+  normally Nexus, which is a NOTA-based surface.
 - Producers push; consumers subscribe. Polling is not a fallback.
 - Harnesses are first-class records, not hidden terminal sessions.
 - Durable writes in the assembled runtime pass through
-  `persona-store-actor` and `persona-sema`.
+  `persona-orchestrate`'s state actor and `persona-sema`.
 - Delivery is downstream of durable commit.
 - Macro extraction follows observed repetition. `signal-derive` does
   not own channel behavior; channel boilerplate remains hand-written
@@ -218,7 +224,7 @@ behavior. The first messaging stack needs witnesses for:
 | Message CLI uses the message contract | CLI emits a `signal-persona-message` frame. |
 | Router commits before delivery | Event trace shows commit outcome before harness delivery. |
 | Router does not write redb directly | Router depends on store contract, not `persona-sema` internals. |
-| Store actor owns database writes | redb file is produced by the store actor and read by a separate `persona-sema` reader. |
+| Orchestrator actor owns database writes | redb file is produced through `persona-orchestrate` and read by a separate `persona-sema` reader. |
 | Delivery is push-based | No retry occurs without pushed system or harness observation. |
 | Terminal transport stays isolated | Router dependency graph excludes `persona-wezterm`. |
 
