@@ -156,9 +156,14 @@ adapter logic.
 
 ## 4 · State and Ownership
 
-`persona-sema` is a library for typed tables and schema guard logic.
-It is not a process boundary. Each state-bearing component owns the
-actor that orders its transactions and owns its redb handle.
+`persona-sema` is the typed-storage layer over the workspace's `sema`
+database library. Neither is a process boundary. Each state-bearing
+component owns the actor that orders its transactions and owns its
+own redb file. Per
+`~/primary/reports/designer/92-sema-as-database-library-architecture-revamp.md`,
+sema is the workspace's database library — it serves persona the
+same way it serves criome and other state-bearing components; no
+component "owns" sema.
 
 ```mermaid
 flowchart TB
@@ -217,8 +222,10 @@ This repository does not own:
 - Contract repos own types; runtime repos own behavior.
 - Stateful runtime behavior lives in ractor actors inside the
   component that owns the concern.
-- Each state-bearing component uses `persona-sema` as a library and
-  owns its own redb file.
+- Each state-bearing component uses `persona-sema` (which uses
+  `sema` underneath) as a library and owns its own redb file. No
+  shared `Arc<Mutex<Database>>` across components; no storage-actor
+  namespace; cross-component access is by signal frame.
 - Rust-to-Rust component traffic uses length-prefixed rkyv frames.
 - NOTA syntax appears only at human, harness, CLI, configuration,
   and audit projection boundaries. Persona request/message text is
