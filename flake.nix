@@ -16,7 +16,6 @@
     signal-persona.url = "github:LiGoldragon/signal-persona";
     signal-persona-mind.url = "github:LiGoldragon/signal-persona-mind";
     signal-persona-system.url = "github:LiGoldragon/signal-persona-system";
-    persona-sema.url = "github:LiGoldragon/persona-sema";
     persona-system.url = "github:LiGoldragon/persona-system";
     persona-wezterm.url = "github:LiGoldragon/persona-wezterm";
   };
@@ -70,7 +69,6 @@
           signal-persona = inputs.signal-persona.packages.${system}.default;
           signal-persona-mind = inputs.signal-persona-mind.packages.${system}.default;
           signal-persona-system = inputs.signal-persona-system.packages.${system}.default;
-          persona-sema = inputs.persona-sema.packages.${system}.default;
           persona-system = inputs.persona-system.packages.${system}.default;
           persona-wezterm = inputs.persona-wezterm.packages.${system}.default;
         }
@@ -102,7 +100,6 @@
           signal-persona-system-doc = inputs.signal-persona-system.checks.${system}.doc;
           signal-persona-system-fmt = inputs.signal-persona-system.checks.${system}.fmt;
           signal-persona-system-clippy = inputs.signal-persona-system.checks.${system}.clippy;
-          persona-sema = inputs.persona-sema.checks.${system}.default;
           persona-system = inputs.persona-system.checks.${system}.default;
           persona-wezterm = inputs.persona-wezterm.checks.${system}.default;
 

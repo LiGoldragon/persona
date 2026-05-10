@@ -212,7 +212,29 @@ Migration rules:
 - Persona does not grow a long-term BEADS bridge;
 - new work graph behavior belongs in `persona-mind`.
 
-## 7 · Invariants
+## 7 · Constraints
+
+- `persona` composes the stack; component repos implement behavior.
+- `persona` may wire Nix inputs, checks, deployment modules, and
+  cross-component witness tests.
+- `persona` does not own mind state transitions, router policy, harness
+  lifecycle, terminal transport, storage table internals, or Signal records.
+- Every runtime boundary in the stack has a dedicated Signal contract repo.
+- Cross-component tests prove boundaries by bytes, processes, dependency
+  graphs, or durable files; they do not share in-process memory as the witness.
+- State-bearing components own separate redb files and separate Sema table
+  declarations.
+- Components talk by Signal frames, not by opening another component's redb
+  file.
+- NOTA is the only text syntax; Nexus is semantic content written in NOTA.
+- The `mind` CLI is a daemon client: one NOTA request record in, one NOTA reply
+  record out.
+- Lock files and BEADS are temporary workspace surfaces, not Persona
+  implementation targets.
+- Existing transitional shims in this repo remain visibly marked as shims until
+  component-owned implementations replace them.
+
+## 8 · Invariants
 
 - The meta repo composes; component repos implement.
 - Each wire between components has a Signal contract repo.
@@ -233,7 +255,7 @@ Migration rules:
 - The `mind` CLI is a thin client. The long-lived `persona-mind` daemon owns
   `MindRoot` and `mind.redb`.
 
-## 8 · Architectural-Truth Tests
+## 9 · Architectural-Truth Tests
 
 The apex repo owns tests that prove cross-component shape:
 
