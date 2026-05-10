@@ -30,6 +30,7 @@ keep Git as the remote/storage compatibility layer.
 - Architecture docs describe the present direction at a high level.
 - When implementation begins, Rust follows lore's Rust style: methods on
   types, typed domain values, one object at each boundary, one crate error
-  enum, ractor for stateful daemons, redb/rkyv for durable typed storage.
+  enum, direct Kameo actors for runtime logic, redb/rkyv for durable typed
+  storage.
 - Persona CLI input and output are NOTA text unless a future command is
   explicitly binary.
