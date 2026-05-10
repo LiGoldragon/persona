@@ -1335,11 +1335,11 @@
         "nixpkgs": "nixpkgs_8"
       },
       "locked": {
-        "lastModified": 1778432575,
-        "narHash": "sha256-eJ3TNUCYJQb/xKM0346pLDOnGMQZKLvH/EmGgO8h7cQ=",
+        "lastModified": 1778433913,
+        "narHash": "sha256-YiZ91mqXMHcu8OfpyhPh3wt6KeHKu098FbIY2sKMJ98=",
         "owner": "LiGoldragon",
         "repo": "persona-mind",
-        "rev": "ba7c9c5e1b11053ef1cc92fa898d04c7214dee27",
+        "rev": "c539e8584f2e02ba2bbeaefbb560de844227bc22",
         "type": "github"
       },
       "original": {
