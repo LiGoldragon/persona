@@ -43,7 +43,6 @@ flowchart TB
         message_contract["signal-persona-message"]
         system_contract["signal-persona-system"]
         harness_contract["signal-persona-harness"]
-        terminal_contract["signal-persona-terminal"]
         mind_contract["signal-persona-mind"]
     end
 
@@ -63,7 +62,6 @@ flowchart TB
     umbrella --> message_contract
     umbrella --> system_contract
     umbrella --> harness_contract
-    umbrella --> terminal_contract
     umbrella --> mind_contract
 
     message_contract --> message
@@ -72,8 +70,6 @@ flowchart TB
     system_contract --> router
     harness_contract --> router
     harness_contract --> harness
-    terminal_contract --> harness
-    terminal_contract --> wezterm
     mind_contract --> mind
 
     router --> sema
@@ -88,14 +84,13 @@ flowchart TB
 | `signal-persona-message` | Message ingress channel: `persona-message` → `persona-router`. |
 | `signal-persona-system` | OS/window/input observation channel: `persona-system` → `persona-router`. |
 | `signal-persona-harness` | Harness delivery and observation channel: `persona-router` ↔ `persona-harness`. |
-| `signal-persona-terminal` | Terminal projection channel: `persona-harness` → `persona-wezterm`. |
 | `signal-persona-mind` | Central mind channel: `mind` CLI and `tools/orchestrate` compatibility shim ↔ `persona-mind`. Records include role claims/releases/handoffs, activity, and the memory/work graph vocabulary. Current rename plan: `~/primary/reports/operator/100-persona-mind-central-rename-plan.md`. |
 | `persona-message` | Human and harness message CLI/projection boundary. |
 | `persona-router` | Delivery reducer, gate reducer, message state, and pending-delivery state machine. |
 | `persona-sema` | Shared typed database library used by each state-bearing component. |
 | `persona-system` | System/window/input observation adapters. |
 | `persona-harness` | Harness identity, lifecycle, transcripts, and adapter contracts. |
-| `persona-wezterm` | Durable PTY and detachable WezTerm viewer transport. |
+| `persona-wezterm` | Durable PTY and detachable WezTerm viewer transport. Current integration is through harness/router code; a dedicated terminal contract can be added once the boundary is concrete. |
 | `persona-mind` | Central state machine for claims, handoffs, activity, tasks, notes, dependencies, decisions, aliases, and ready-work views. |
 
 ## 2 · Choreography Model
@@ -142,7 +137,7 @@ flowchart LR
     sema --> router_database[("router.redb")]
     system["persona-system"] -->|signal-persona-system| router
     router -->|signal-persona-harness| harness["persona-harness"]
-    harness -->|signal-persona-terminal| wezterm["persona-wezterm"]
+    harness -->|terminal boundary, not yet a signal contract| wezterm["persona-wezterm"]
     agent_tools["agents / tools"] -->|signal-persona-mind| mind["persona-mind"]
     mind -->|mind-owned state| sema
     sema --> mind_database[("mind.redb")]
@@ -252,7 +247,7 @@ behavior. The first messaging stack needs witnesses for:
 | Router uses sema for durable state | A separate reader opens the router redb through `persona-sema` and sees the message. |
 | Router does not import terminal adapters | Router dependency graph excludes `persona-wezterm`. |
 | Delivery is push-based | No retry occurs without pushed system or harness observation. |
-| Terminal transport stays isolated | Harness-to-terminal traffic crosses `signal-persona-terminal`. |
+| Terminal transport stays isolated | Router dependency graph excludes `persona-wezterm`; harness/terminal traffic stays behind the harness boundary until a dedicated contract exists. |
 
 ## Code Map
 
