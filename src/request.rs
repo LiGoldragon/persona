@@ -104,6 +104,24 @@ pub enum PersonaOutput {
     ValidatedDocument(ValidatedDocument),
 }
 
+impl kameo::reply::Reply for PersonaOutput {
+    type Ok = Self;
+    type Error = kameo::error::Infallible;
+    type Value = Self;
+
+    fn to_result(self) -> std::result::Result<Self::Ok, Self::Error> {
+        Ok(self)
+    }
+
+    fn into_any_err(self) -> Option<Box<dyn kameo::reply::ReplyError>> {
+        None
+    }
+
+    fn into_value(self) -> Self::Value {
+        self
+    }
+}
+
 impl PersonaOutput {
     pub fn to_nota(&self) -> Result<String> {
         let mut encoder = Encoder::nota();

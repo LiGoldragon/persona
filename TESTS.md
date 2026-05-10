@@ -38,6 +38,8 @@ Currently:
 - `tests/request.rs` — request shapes.
 - `tests/schema.rs` — schema declarations.
 - `tests/state.rs` — state engine.
+- `tests/kameo_actor_path.rs` — Kameo actor-path constraints for the
+  meta CLI request handler.
 
 ### 2 · Wire-test shim binaries (`src/bin/wire_*.rs`)
 

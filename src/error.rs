@@ -18,6 +18,21 @@ pub enum Error {
 
     #[error("no Persona request supplied and no default config file exists; searched {searched:?}")]
     NoRequestConfig { searched: Vec<PathBuf> },
+
+    #[error("persona actor failed during {operation}: {detail}")]
+    Actor {
+        operation: &'static str,
+        detail: String,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl Error {
+    pub fn actor(operation: &'static str, error: impl std::fmt::Debug) -> Self {
+        Self::Actor {
+            operation,
+            detail: format!("{error:?}"),
+        }
+    }
+}

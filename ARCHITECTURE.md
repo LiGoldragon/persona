@@ -11,8 +11,8 @@
 ## 0 · TL;DR
 
 Persona coordinates interactive AI harnesses as first-class
-participants in one inspectable system. Runtime components are
-ractor-based daemons. Each state-bearing component owns the actors
+participants in one inspectable system. Runtime components are moving
+to direct Kameo actors. Each state-bearing component owns the actors
 and redb file for its own domain, using `persona-sema` as a library.
 
 The architecture is channel-first. Each pair of components that
@@ -215,7 +215,7 @@ This repository does not own:
 - The meta repo composes; component repos implement.
 - Each wire between components has a signal contract repo.
 - Contract repos own types; runtime repos own behavior.
-- Stateful runtime behavior lives in ractor actors inside the
+- Stateful runtime behavior lives in Kameo actors inside the
   component that owns the concern.
 - `persona-mind` is Persona's central state component: claims,
   handoffs, activity, memory/work items, dependencies, decisions,

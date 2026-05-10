@@ -2,7 +2,7 @@
 name         = "persona"
 version      = "0.1.0"
 edition      = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 license      = "MIT OR Apache-2.0"
 repository   = "https://github.com/LiGoldragon/persona"
 description  = "Typed coordination framework for multi-harness AI systems."
@@ -16,8 +16,8 @@ name = "persona"
 path = "src/main.rs"
 
 [dependencies]
+kameo                  = { version = "0.20", default-features = false }
 nota-codec             = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }
-ractor                 = { version = "0.15", features = ["async-trait"] }
 redb                   = "2"
 rkyv                   = { version = "0.8", default-features = false, features = [
     "std",

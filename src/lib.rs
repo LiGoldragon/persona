@@ -3,6 +3,7 @@
 //! The current crate is a NOTA-facing schema scaffold. It defines the first
 //! records Persona needs before the component daemons land.
 
+pub mod actor;
 pub mod error;
 pub mod request;
 pub mod schema;
