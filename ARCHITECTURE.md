@@ -27,8 +27,16 @@ deployment wiring, and cross-component tests. It does not own router policy,
 mind state transitions, terminal adapters, storage table internals, actor
 logic, or signal records.
 
+`persona` is a meta project today, not a state-bearing component. There is no
+shared `persona-sema` layer in the current architecture. Sema belongs to the
+component that owns the state: `persona-mind` has mind Sema / `mind.redb`,
+`persona-router` has router Sema / `router.redb`, and so on. If a future
+`persona` supervisor daemon exists to keep the whole stack running, that daemon
+may own its own Sema database for supervisor state. That is undecided and not
+part of the current implementation target.
+
 ```mermaid
-flowchart TB
+graph TB
     user[human or harness] --> text[NOTA text]
     text --> message[persona message]
     message --> router[persona router]
@@ -53,7 +61,6 @@ flowchart TB
 | `persona-system` | System/window/input observation adapters. |
 | `persona-harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
 | `persona-wezterm` | Durable PTY and detachable visible terminal transport. |
-| `persona-sema` | Persona-facing storage helper library over `sema`. |
 | `sema` | Typed database kernel library over redb/rkyv. |
 | `signal-core` | Signal wire kernel: frames, channel macro, shared wire primitives. |
 | `signal-persona` | Persona-wide umbrella vocabulary. |
@@ -64,7 +71,7 @@ flowchart TB
 | `nota` / `nota-codec` / `nota-derive` | NOTA language, parser/codec, and derive support. |
 
 ```mermaid
-flowchart LR
+graph LR
     signal_core[signal core] --> mind_contract[signal persona mind]
     signal_core --> message_contract[signal persona message]
     signal_core --> system_contract[signal persona system]
@@ -84,7 +91,7 @@ The first foundational implementation target is the command-line mind backed
 by a long-lived `persona-mind` daemon.
 
 ```mermaid
-flowchart LR
+graph LR
     orchestrate[tools orchestrate shim] --> mind_cli[mind CLI]
     direct_agent[agent direct call] --> mind_cli
     mind_cli --> contract[signal persona mind]
@@ -105,10 +112,10 @@ Output:
 '<one NOTA reply record>'
 ```
 
-`tools/orchestrate` remains a compatibility shim while agents transition. It
-should lower ergonomic commands into the same `signal-persona-mind` request
-records, send them through the `mind` client path, and stop treating lock files
-as authoritative state.
+`tools/orchestrate` may remain as external cutover glue while agents
+transition. It should lower ergonomic commands into the same
+`signal-persona-mind` request records, send them through the `mind` client
+path, and stop treating lock files as authoritative state.
 
 ## 3 · Wire Vocabulary
 
@@ -120,7 +127,7 @@ second parser or alternate text format. Convenience CLIs may hide wrapper
 records, but their output must still lower into typed Signal records.
 
 ```mermaid
-flowchart TB
+graph TB
     human_text[NOTA text] --> cli[CLI projection]
     cli --> typed[typed Signal records]
     typed --> frame[rkyv Signal frame]
@@ -134,8 +141,10 @@ policy, or terminal adapter logic.
 
 ## 4 · State and Ownership
 
-`sema` is the database kernel library. `persona-sema` is a Persona-facing
-helper library. Neither is a process boundary.
+`sema` is the database kernel library. There is no shared Persona storage
+layer. Every state-bearing component owns its own Sema layer or table module
+inside that component's implementation. Neither `persona` nor `sema` is a
+process boundary for another component's state.
 
 Each state-bearing component owns:
 
@@ -145,7 +154,7 @@ Each state-bearing component owns:
 - its post-commit subscription behavior.
 
 ```mermaid
-flowchart TB
+graph TB
     router_actor[router actor tree] --> router_db[router redb]
     mind_actor[mind actor tree] --> mind_db[mind redb]
     harness_actor[harness actor tree] --> harness_db[harness redb]
@@ -178,10 +187,15 @@ other.
 Lock files and BEADS are transitional coordination surfaces in the primary
 workspace. They are not the destination architecture.
 
+Do not implement lock-file projections in Persona. The current lock files are
+part of the temporary operator workflow and will be retired when agents switch
+to the command-line mind. `persona-mind` stores typed role state; it does not
+write lock files as a compatibility feature.
+
 Destination:
 
 ```mermaid
-flowchart LR
+graph LR
     claim[RoleClaim] --> mind[persona mind]
     mind --> db[mind redb]
     db --> role_view[RoleSnapshot]
@@ -190,8 +204,9 @@ flowchart LR
 
 Migration rules:
 
-- lock files may be read or projected only for compatibility;
-- lock files are not durable truth;
+- lock files are not part of Persona implementation work;
+- lock files are not durable truth and do not get projections from
+  `persona-mind`;
 - BEADS entries may be imported once as items, aliases, or external
   references;
 - Persona does not grow a long-term BEADS bridge;
@@ -205,6 +220,8 @@ Migration rules:
 - Runtime behavior lives in direct Kameo actors inside the owning component.
 - `persona-mind` is Persona's central daemon-backed state component.
 - Each state-bearing component owns its own redb file.
+- Each state-bearing component owns its own Sema layer/table declarations.
+  There is no shared `persona-sema` component in the current architecture.
 - Cross-component access is by Signal frame, not database peeking.
 - Rust-to-Rust component traffic uses rkyv Signal frames.
 - NOTA is the only text syntax.
@@ -223,8 +240,8 @@ The apex repo owns tests that prove cross-component shape:
 | Invariant | Witness |
 |---|---|
 | `mind` uses the mind contract | CLI decodes into `signal-persona-mind::MindRequest`. |
-| `tools/orchestrate` is a shim | shim output reaches the same `mind` path. |
-| mind owns role state | deleting lock projections does not delete role claims. |
+| `tools/orchestrate` is external cutover glue | wrapper output reaches the same `mind` path; it is not a Persona component. |
+| mind owns role state | lock files are absent and role claims still work. |
 | router commits before delivery | delivery trace follows durable router commit. |
 | router does not own terminal transport | router dependency graph excludes `persona-wezterm`. |
 | component databases are separate | router/mind/harness open distinct redb files. |
@@ -247,4 +264,3 @@ tests/           schema tests and multi-component end-to-end tests
 - `~/primary/reports/operator/105-command-line-mind-architecture-survey.md`
 - `../persona-mind/ARCHITECTURE.md`
 - `../signal-persona-mind/ARCHITECTURE.md`
-- `../persona-sema/ARCHITECTURE.md`
