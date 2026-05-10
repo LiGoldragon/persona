@@ -1839,11 +1839,11 @@
         "nixpkgs": "nixpkgs_22"
       },
       "locked": {
-        "lastModified": 1778421770,
-        "narHash": "sha256-gSZfVWCrhWK/GtpTFB2aTZ27AzEM/hByuoQfXdZOx9M=",
+        "lastModified": 1778424434,
+        "narHash": "sha256-Z/GH4B3RNLWiuBFQiL8xiFJzHMK/4CCg/OPGmjcueVM=",
         "owner": "LiGoldragon",
         "repo": "signal-persona-mind",
-        "rev": "721dd198910c9a639042393815314aa73c5e3e8c",
+        "rev": "46db5cac48286a3807c0a082d6d562c6811cf54a",
         "type": "github"
       },
       "original": {
