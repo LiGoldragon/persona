@@ -2,252 +2,233 @@
 
 *Apex integration repository for the Persona component ecosystem.*
 
-> `persona` composes the system. Component implementation lives in
-> component repositories; this repo wires them together through Nix,
-> documents the whole topology, and owns deployment-level verification.
+> `persona` composes the system. Component implementations live in component
+> repositories. This repo wires them through Nix, documents the whole topology,
+> and owns deployment-level verification.
 
 ---
 
 ## 0 · TL;DR
 
-Persona coordinates interactive AI harnesses as first-class
-participants in one inspectable system. Runtime components are moving
-to direct Kameo actors. Each state-bearing component owns the actors
-and redb file for its own domain, using `persona-sema` as a library.
+Persona coordinates interactive AI harnesses as first-class participants in one
+inspectable system. The center is `persona-mind`: the daemon-backed state
+component for role coordination, activity, work memory, decisions, aliases, and
+ready/blocked views. The command-line surface for that state is the `mind`
+binary: one NOTA request record in, one NOTA reply record out, with the CLI
+acting as a thin client to the daemon.
 
-The architecture is channel-first. Each pair of components that
-communicates over a wire shares a dedicated `signal-persona-*`
-contract repo. That contract repo is the synchronization point for
-parallel development: settle the channel vocabulary first, then let
-producer and consumer implementations move independently against the
-same types.
+The architecture is contract-first. A wire boundary is defined in a dedicated
+`signal-persona-*` repository before producer and consumer implementations
+move against it. Contract crates own typed records and rkyv frame behavior;
+runtime crates own actors, policy, storage, and side effects.
 
-`persona` is not the home for router internals, terminal adapters,
-storage tables, actor logic, or signal records. It is the apex:
-architecture, Nix composition, deployment wiring, and end-to-end
-tests.
+`persona` is the apex repo. It owns architecture, flake composition,
+deployment wiring, and cross-component tests. It does not own router policy,
+mind state transitions, terminal adapters, storage table internals, actor
+logic, or signal records.
+
+```mermaid
+flowchart TB
+    user[human or harness] --> text[NOTA text]
+    text --> message[persona message]
+    message --> router[persona router]
+    system[persona system] --> router
+    router --> harness[persona harness]
+    harness --> terminal[persona wezterm]
+    agent[agent] --> mind_cli[mind CLI]
+    mind_cli --> mind_daemon[persona mind daemon]
+    mind_daemon --> mind_db[mind redb]
+    router --> router_db[router redb]
+```
 
 ## 1 · Component Map
 
-```mermaid
-flowchart TB
-    subgraph apex["persona"]
-        architecture["apex architecture"]
-        nix["Nix composition"]
-        tests["end-to-end tests"]
-        deployment["deployment wiring"]
-    end
-
-    subgraph contracts["signal contracts"]
-        umbrella["signal-persona"]
-        message_contract["signal-persona-message"]
-        system_contract["signal-persona-system"]
-        harness_contract["signal-persona-harness"]
-        mind_contract["signal-persona-mind"]
-    end
-
-    subgraph runtime["runtime components"]
-        message["persona-message"]
-        router["persona-router"]
-        sema["persona-sema"]
-        system["persona-system"]
-        harness["persona-harness"]
-        wezterm["persona-wezterm"]
-        mind["persona-mind"]
-    end
-
-    apex -->|imports flakes| runtime
-    apex -->|imports flakes| contracts
-
-    umbrella --> message_contract
-    umbrella --> system_contract
-    umbrella --> harness_contract
-    umbrella --> mind_contract
-
-    message_contract --> message
-    message_contract --> router
-    system_contract --> system
-    system_contract --> router
-    harness_contract --> router
-    harness_contract --> harness
-    mind_contract --> mind
-
-    router --> sema
-    mind --> sema
-    harness --> sema
-    system --> sema
-```
-
 | Repository | Role |
 |---|---|
-| `signal-persona` | Umbrella Persona domain records shared across channels. |
-| `signal-persona-message` | Message ingress channel: `persona-message` → `persona-router`. |
-| `signal-persona-system` | OS/window/input observation channel: `persona-system` → `persona-router`. |
-| `signal-persona-harness` | Harness delivery and observation channel: `persona-router` ↔ `persona-harness`. |
-| `signal-persona-mind` | Central mind channel: `mind` CLI and `tools/orchestrate` compatibility shim ↔ `persona-mind`. Records include role claims/releases/handoffs, activity, and the memory/work graph vocabulary. Current rename plan: `~/primary/reports/operator/100-persona-mind-central-rename-plan.md`. |
-| `persona-message` | Human and harness message CLI/projection boundary. |
-| `persona-router` | Delivery reducer, gate reducer, message state, and pending-delivery state machine. |
-| `persona-sema` | Shared typed database library used by each state-bearing component. |
+| `persona` | Apex Nix/deployment/test composition and meta architecture. |
+| `persona-mind` | Central state component and command-line mind runtime. |
+| `signal-persona-mind` | Typed contract for role coordination, activity, and work graph operations. |
+| `persona-router` | Message routing, delivery state, gate state, and pending-delivery decisions. |
+| `persona-message` | Message CLI/projection experiments; transitional as router/mind contracts settle. |
 | `persona-system` | System/window/input observation adapters. |
-| `persona-harness` | Harness identity, lifecycle, transcripts, and adapter contracts. |
-| `persona-wezterm` | Durable PTY and detachable WezTerm viewer transport. Current integration is through harness/router code; a dedicated terminal contract can be added once the boundary is concrete. |
-| `persona-mind` | Central state machine for claims, handoffs, activity, tasks, notes, dependencies, decisions, aliases, and ready-work views. |
-
-## 2 · Choreography Model
-
-The contract repo lands before the runtime behavior that uses it.
-Producer and consumer repos do not invent local duplicate message
-types while waiting for a channel change. A channel change starts in
-the relevant `signal-persona-*` repo; after it is pushed, the
-producer and consumer implementation repos update against it.
-
-```mermaid
-sequenceDiagram
-    participant Contract as signal-persona-* contract
-    participant Producer as producer component
-    participant Consumer as consumer component
-    participant Tests as architectural-truth tests
-
-    Contract->>Contract: define closed request/reply/event records
-    Producer->>Contract: depend on shared channel types
-    Consumer->>Contract: depend on shared channel types
-    Producer->>Consumer: send length-prefixed rkyv frame
-    Consumer->>Tests: leave observable witness
-    Tests->>Tests: prove the intended component path was used
-```
-
-This lets multiple agents work in parallel without relying on chat
-memory: the contract crate is the stable typed agreement.
-
-## 3 · Wire Vocabulary
-
-Rust-to-Rust traffic uses signal-family frames: length-prefixed
-rkyv archives with channel-specific request and reply payloads. Text
-is NOTA syntax. In practice, Persona request/message text is usually
-Nexus: a NOTA-based request surface. Convenience CLIs such as
-`message` construct the Nexus record shape in NOTA syntax for the
-user instead of asking them to type the full wrapper. None of this is
-the inter-component wire.
+| `persona-harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
+| `persona-wezterm` | Durable PTY and detachable visible terminal transport. |
+| `persona-sema` | Persona-facing storage helper library over `sema`. |
+| `sema` | Typed database kernel library over redb/rkyv. |
+| `signal-core` | Signal wire kernel: frames, channel macro, shared wire primitives. |
+| `signal-persona` | Persona-wide umbrella vocabulary. |
+| `signal-persona-message` | Message ingress contract. |
+| `signal-persona-system` | System observation contract. |
+| `signal-persona-harness` | Router/harness delivery and observation contract. |
+| `nexus` | Semantic text vocabulary written in NOTA syntax. |
+| `nota` / `nota-codec` / `nota-derive` | NOTA language, parser/codec, and derive support. |
 
 ```mermaid
 flowchart LR
-    human["human or harness"] -->|text projection| message["persona-message"]
-    message -->|signal-persona-message| router["persona-router"]
-    router -->|router-owned state| sema["persona-sema"]
-    sema --> router_database[("router.redb")]
-    system["persona-system"] -->|signal-persona-system| router
-    router -->|signal-persona-harness| harness["persona-harness"]
-    harness -->|terminal boundary, not yet a signal contract| wezterm["persona-wezterm"]
-    agent_tools["agents / tools"] -->|signal-persona-mind| mind["persona-mind"]
-    mind -->|mind-owned state| sema
-    sema --> mind_database[("mind.redb")]
+    signal_core[signal core] --> mind_contract[signal persona mind]
+    signal_core --> message_contract[signal persona message]
+    signal_core --> system_contract[signal persona system]
+    signal_core --> harness_contract[signal persona harness]
+    mind_contract --> mind[persona mind]
+    message_contract --> message[persona message]
+    message_contract --> router[persona router]
+    system_contract --> system[persona system]
+    system_contract --> router
+    harness_contract --> router
+    harness_contract --> harness[persona harness]
 ```
 
-Each channel contract owns only the records exchanged on that
-channel: closed request/reply/event enums, rkyv round trips, text
-projection examples where useful, and version expectations. It owns
-no daemon code, actors, routing policy, storage policy, or terminal
-adapter logic.
+## 2 · Command-line Mind
 
-## 4 · State and Ownership
+The first foundational implementation target is the command-line mind backed
+by a long-lived `persona-mind` daemon.
 
-`persona-sema` is the typed-storage layer over the workspace's `sema`
-database library. Neither is a process boundary. Each state-bearing
-component owns the actor that orders its transactions and owns its
-own redb file. Per
-`~/primary/reports/designer/92-sema-as-database-library-architecture-revamp.md`,
-sema is the workspace's database library — it serves persona the
-same way it serves criome and other state-bearing components; no
-component "owns" sema.
+```mermaid
+flowchart LR
+    orchestrate[tools orchestrate shim] --> mind_cli[mind CLI]
+    direct_agent[agent direct call] --> mind_cli
+    mind_cli --> contract[signal persona mind]
+    contract --> daemon[persona mind daemon]
+    daemon --> runtime[persona mind runtime]
+    runtime --> store[mind redb]
+```
+
+The target surface:
+
+```sh
+mind '<one NOTA request record>'
+```
+
+Output:
+
+```sh
+'<one NOTA reply record>'
+```
+
+`tools/orchestrate` remains a compatibility shim while agents transition. It
+should lower ergonomic commands into the same `signal-persona-mind` request
+records, send them through the `mind` client path, and stop treating lock files
+as authoritative state.
+
+## 3 · Wire Vocabulary
+
+Rust-to-Rust traffic uses Signal frames: length-prefixed rkyv archives with
+channel-specific request/reply payloads.
+
+Text uses NOTA syntax. Nexus is semantic content written in NOTA syntax, not a
+second parser or alternate text format. Convenience CLIs may hide wrapper
+records, but their output must still lower into typed Signal records.
 
 ```mermaid
 flowchart TB
-    subgraph router["persona-router"]
-        router_actor["router root"]
-        router_state["router state owner"]
-        router_database[("router.redb")]
-        router_actor --> router_state --> router_database
-    end
-
-    subgraph mind["persona-mind"]
-        mind_actor["mind root"]
-        mind_state["mind state owner"]
-        mind_database[("mind.redb")]
-        mind_actor --> mind_state --> mind_database
-    end
-
-    subgraph harness["persona-harness"]
-        harness_actor["Harness"]
-        harness_database[("harness.redb")]
-        harness_actor --> harness_database
-    end
+    human_text[NOTA text] --> cli[CLI projection]
+    cli --> typed[typed Signal records]
+    typed --> frame[rkyv Signal frame]
+    frame --> runtime[component runtime]
 ```
 
-For the first messaging stack, the load-bearing safety rule is
-commit-before-deliver: no harness delivery happens without a durable
-router-owned message commit that can be read back through
-`persona-sema`.
+Each contract repo owns only its channel vocabulary: closed request/reply/event
+enums, validation newtypes, rkyv round trips, and text projection examples
+where useful. It owns no daemon code, Kameo actors, routing policy, storage
+policy, or terminal adapter logic.
 
-## 5 · Boundaries
+## 4 · State and Ownership
 
-This repository owns:
+`sema` is the database kernel library. `persona-sema` is a Persona-facing
+helper library. Neither is a process boundary.
 
-- apex architecture;
-- Nix flake inputs and component composition;
-- end-to-end tests that prove component composition;
-- deployment wiring for a full Persona system;
-- architectural-truth tests that need multiple components.
+Each state-bearing component owns:
 
-This repository does not own:
+- its Kameo actor tree;
+- its durable redb file;
+- its write-order actor;
+- its post-commit subscription behavior.
 
-- shared Persona records (`signal-persona`);
-- per-channel wire contracts (`signal-persona-*`);
-- router policy (`persona-router`);
-- central mind actors (`persona-mind`);
-- terminal transport (`persona-wezterm`);
-- harness lifecycle internals (`persona-harness`);
-- OS/window-manager adapters (`persona-system`);
-- typed table internals (`persona-sema`);
-- central state internals (`persona-mind`).
+```mermaid
+flowchart TB
+    router_actor[router actor tree] --> router_db[router redb]
+    mind_actor[mind actor tree] --> mind_db[mind redb]
+    harness_actor[harness actor tree] --> harness_db[harness redb]
+    router_db --> sema[sema library]
+    mind_db --> sema
+    harness_db --> sema
+```
 
-## 6 · Invariants
+Component boundaries are crossed with Signal contracts, not by opening another
+component's database file.
+
+## 5 · Mind, Router, Harness, System
+
+The central split:
+
+| Component | Owns | Does not own |
+|---|---|---|
+| `persona-mind` | role state, activity, work graph, decisions, aliases, ready/blocked views. | message delivery, terminal sessions, system focus facts. |
+| `persona-router` | message routing, delivery queue, delivery gate state, message durability. | role claims, work graph, harness process lifecycle. |
+| `persona-system` | OS/window/input observations. | router decisions, mind state, harness delivery. |
+| `persona-harness` | harness identity, lifecycle, injection/observation adapter boundary. | router policy, central work graph. |
+| `persona-wezterm` | durable PTY and visible terminal transport. | Persona delivery policy or role state. |
+
+`persona-mind` is not a router. `persona-router` is not the central project
+memory. The two communicate through explicit contracts when they need each
+other.
+
+## 6 · Lock Files and BEADS
+
+Lock files and BEADS are transitional coordination surfaces in the primary
+workspace. They are not the destination architecture.
+
+Destination:
+
+```mermaid
+flowchart LR
+    claim[RoleClaim] --> mind[persona mind]
+    mind --> db[mind redb]
+    db --> role_view[RoleSnapshot]
+    db --> work_view[Ready work view]
+```
+
+Migration rules:
+
+- lock files may be read or projected only for compatibility;
+- lock files are not durable truth;
+- BEADS entries may be imported once as items, aliases, or external
+  references;
+- Persona does not grow a long-term BEADS bridge;
+- new work graph behavior belongs in `persona-mind`.
+
+## 7 · Invariants
 
 - The meta repo composes; component repos implement.
-- Each wire between components has a signal contract repo.
+- Each wire between components has a Signal contract repo.
 - Contract repos own types; runtime repos own behavior.
-- Stateful runtime behavior lives in Kameo actors inside the
-  component that owns the concern.
-- `persona-mind` is Persona's central state component: claims,
-  handoffs, activity, memory/work items, dependencies, decisions,
-  aliases, and ready-work views live there.
-- Each state-bearing component uses `persona-sema` (which uses
-  `sema` underneath) as a library and owns its own redb file. No
-  shared `Arc<Mutex<Database>>` across components; no storage-actor
-  namespace; cross-component access is by signal frame.
-- Rust-to-Rust component traffic uses length-prefixed rkyv frames.
-- NOTA syntax appears only at human, harness, CLI, configuration,
-  and audit projection boundaries. Persona request/message text is
-  normally Nexus, which is a NOTA-based surface.
+- Runtime behavior lives in direct Kameo actors inside the owning component.
+- `persona-mind` is Persona's central daemon-backed state component.
+- Each state-bearing component owns its own redb file.
+- Cross-component access is by Signal frame, not database peeking.
+- Rust-to-Rust component traffic uses rkyv Signal frames.
+- NOTA is the only text syntax.
 - Producers push; consumers subscribe. Polling is not a fallback.
 - Harnesses are first-class records, not hidden terminal sessions.
-- Delivery is downstream of durable router-owned message commit.
-- Macro extraction follows observed repetition. `signal-derive` does
-  not own channel behavior; channel boilerplate is expressed through
-  `signal_channel!` until several channels reveal a stronger shape.
+- Message delivery is downstream of durable router-owned message commit.
+- Command-line mind input is one NOTA request record; output is one NOTA reply
+  record.
+- The `mind` CLI is a thin client. The long-lived `persona-mind` daemon owns
+  `MindRoot` and `mind.redb`.
 
-## 7 · Architectural-Truth Tests
+## 8 · Architectural-Truth Tests
 
-The end-to-end test suite proves the architecture, not only visible
-behavior. The first messaging stack needs witnesses for:
+The apex repo owns tests that prove cross-component shape:
 
 | Invariant | Witness |
 |---|---|
-| Message CLI uses the message contract | CLI emits a `signal-persona-message` frame. |
-| Router commits before delivery | Event trace shows router-owned commit outcome before harness delivery. |
-| Router uses sema for durable state | A separate reader opens the router redb through `persona-sema` and sees the message. |
-| Router does not import terminal adapters | Router dependency graph excludes `persona-wezterm`. |
-| Delivery is push-based | No retry occurs without pushed system or harness observation. |
-| Terminal transport stays isolated | Router dependency graph excludes `persona-wezterm`; harness/terminal traffic stays behind the harness boundary until a dedicated contract exists. |
+| `mind` uses the mind contract | CLI decodes into `signal-persona-mind::MindRequest`. |
+| `tools/orchestrate` is a shim | shim output reaches the same `mind` path. |
+| mind owns role state | deleting lock projections does not delete role claims. |
+| router commits before delivery | delivery trace follows durable router commit. |
+| router does not own terminal transport | router dependency graph excludes `persona-wezterm`. |
+| component databases are separate | router/mind/harness open distinct redb files. |
+| NOTA is the only text syntax | no CLI-only parser accepts non-NOTA command records. |
 
 ## Code Map
 
@@ -262,13 +243,8 @@ tests/           schema tests and multi-component end-to-end tests
 
 ## See Also
 
-- `../signal-persona/ARCHITECTURE.md`
-- `../persona-message/ARCHITECTURE.md`
-- `../persona-router/ARCHITECTURE.md`
-- `../persona-system/ARCHITECTURE.md`
-- `../persona-harness/ARCHITECTURE.md`
-- `../persona-wezterm/ARCHITECTURE.md`
-- `../persona-sema/ARCHITECTURE.md`
+- `~/primary/protocols/active-repositories.md`
+- `~/primary/reports/operator/105-command-line-mind-architecture-survey.md`
 - `../persona-mind/ARCHITECTURE.md`
-- `~/primary/reports/designer/76-signal-channel-macro-implementation-and-parallel-plan.md`
-- `~/primary/reports/operator/77-first-stack-channel-boundary-audit.md`
+- `../signal-persona-mind/ARCHITECTURE.md`
+- `../persona-sema/ARCHITECTURE.md`
