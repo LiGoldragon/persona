@@ -163,21 +163,21 @@ component "owns" sema.
 ```mermaid
 flowchart TB
     subgraph router["persona-router"]
-        router_actor["RouterActor"]
-        router_state["RouterStateActor"]
+        router_actor["router root"]
+        router_state["router state owner"]
         router_database[("router.redb")]
         router_actor --> router_state --> router_database
     end
 
     subgraph mind["persona-mind"]
-        mind_actor["MindActor"]
-        mind_state["MindStateActor"]
+        mind_actor["mind root"]
+        mind_state["mind state owner"]
         mind_database[("mind.redb")]
         mind_actor --> mind_state --> mind_database
     end
 
     subgraph harness["persona-harness"]
-        harness_actor["HarnessActor"]
+        harness_actor["Harness"]
         harness_database[("harness.redb")]
         harness_actor --> harness_database
     end

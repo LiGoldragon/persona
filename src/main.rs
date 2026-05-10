@@ -1,6 +1,7 @@
 use std::process::ExitCode;
 
-use persona::actor::PersonaActorRuntime;
+use persona::actor::{HandlePersonaRequest, PersonaRuntime};
+use persona::error::Error;
 use persona::request::CommandLine;
 
 #[tokio::main]
@@ -13,20 +14,21 @@ async fn main() -> ExitCode {
         }
     };
 
-    let runtime = PersonaActorRuntime::start();
+    let runtime = PersonaRuntime::start().await;
     let output = match runtime
-        .handle(request)
+        .ask(HandlePersonaRequest::new(request))
         .await
+        .map_err(|error| Error::actor("handle persona request", error))
         .and_then(|output| output.to_nota())
     {
         Ok(output) => output,
         Err(error) => {
             eprintln!("error: {error}");
-            let _ = runtime.stop().await;
+            let _ = PersonaRuntime::stop(runtime).await;
             return ExitCode::from(2);
         }
     };
-    if let Err(error) = runtime.stop().await {
+    if let Err(error) = PersonaRuntime::stop(runtime).await {
         eprintln!("error: {error}");
         return ExitCode::from(2);
     }

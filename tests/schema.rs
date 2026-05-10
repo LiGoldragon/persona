@@ -1,10 +1,18 @@
 use persona::schema::{HarnessName, PersonaDocument};
 
-struct SchemaFixture;
+struct SchemaFixture {
+    document: PersonaDocument,
+}
 
 impl SchemaFixture {
-    fn encoded_example_document() -> String {
-        PersonaDocument::example().to_nota().unwrap()
+    fn example() -> Self {
+        Self {
+            document: PersonaDocument::example(),
+        }
+    }
+
+    fn encoded_document(&self) -> String {
+        self.document.to_nota().unwrap()
     }
 }
 
@@ -27,7 +35,7 @@ fn harness_name_is_a_transparent_nota_value() {
 
 #[test]
 fn example_document_contains_initial_message_object() {
-    let encoded = SchemaFixture::encoded_example_document();
+    let encoded = SchemaFixture::example().encoded_document();
 
     assert!(encoded.contains("(MessageRecord \"message-1\" \"operator\" \"designer\""));
     assert!(encoded.contains("(AuthorizationRecord \"delivery-1\" \"message-1\" Allow"));

@@ -6,7 +6,7 @@ use crate::error::{Error, Result};
 use crate::request::{PersonaOutput, PersonaRequest};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PersonaActorEvent {
+pub enum RuntimeEvent {
     Started,
     RequestAccepted,
     OutputCreated,
@@ -15,37 +15,53 @@ pub enum PersonaActorEvent {
 }
 
 #[derive(Debug)]
-pub struct PersonaRequestActor {
-    events: Vec<PersonaActorEvent>,
+pub struct PersonaRuntime {
+    events: Vec<RuntimeEvent>,
 }
 
-impl PersonaRequestActor {
+impl PersonaRuntime {
     pub fn new() -> Self {
         Self {
-            events: vec![PersonaActorEvent::Started],
+            events: vec![RuntimeEvent::Started],
         }
     }
 
+    pub async fn start() -> ActorRef<Self> {
+        let reference = Self::spawn(Self::new());
+        reference.wait_for_startup().await;
+        reference
+    }
+
+    pub async fn stop(reference: ActorRef<Self>) -> Result<()> {
+        reference
+            .stop_gracefully()
+            .await
+            .map_err(|error| Error::actor("stop persona runtime", error))?;
+        reference.wait_for_shutdown().await;
+        Ok(())
+    }
+
     fn handle_request(&mut self, request: PersonaRequest) -> PersonaOutput {
-        self.events.push(PersonaActorEvent::RequestAccepted);
+        self.events.push(RuntimeEvent::RequestAccepted);
         let output = request.into_output();
-        self.events.push(PersonaActorEvent::OutputCreated);
+        self.events.push(RuntimeEvent::OutputCreated);
         output
     }
 
-    fn read_events(&mut self) -> Vec<PersonaActorEvent> {
-        self.events.push(PersonaActorEvent::TraceRead);
+    fn read_events(&mut self, probe: TraceProbe) -> Vec<RuntimeEvent> {
+        let _satisfied = self.events.len() >= probe.minimum_events;
+        self.events.push(RuntimeEvent::TraceRead);
         self.events.clone()
     }
 }
 
-impl Default for PersonaRequestActor {
+impl Default for PersonaRuntime {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Actor for PersonaRequestActor {
+impl Actor for PersonaRuntime {
     type Args = Self;
     type Error = Infallible;
 
@@ -61,7 +77,7 @@ impl Actor for PersonaRequestActor {
         _actor_reference: kameo::actor::WeakActorRef<Self>,
         _reason: kameo::error::ActorStopReason,
     ) -> std::result::Result<(), Self::Error> {
-        self.events.push(PersonaActorEvent::Stopping);
+        self.events.push(RuntimeEvent::Stopping);
         Ok(())
     }
 }
@@ -77,7 +93,7 @@ impl HandlePersonaRequest {
     }
 }
 
-impl Message<HandlePersonaRequest> for PersonaRequestActor {
+impl Message<HandlePersonaRequest> for PersonaRuntime {
     type Reply = PersonaOutput;
 
     async fn handle(
@@ -90,51 +106,31 @@ impl Message<HandlePersonaRequest> for PersonaRequestActor {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct ReadPersonaActorTrace;
+pub struct ReadTrace {
+    pub probe: TraceProbe,
+}
 
-impl Message<ReadPersonaActorTrace> for PersonaRequestActor {
-    type Reply = Vec<PersonaActorEvent>;
+impl ReadTrace {
+    pub fn expecting_at_least(minimum_events: usize) -> Self {
+        Self {
+            probe: TraceProbe { minimum_events },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TraceProbe {
+    minimum_events: usize,
+}
+
+impl Message<ReadTrace> for PersonaRuntime {
+    type Reply = Vec<RuntimeEvent>;
 
     async fn handle(
         &mut self,
-        _message: ReadPersonaActorTrace,
+        message: ReadTrace,
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.read_events()
-    }
-}
-
-pub struct PersonaActorRuntime {
-    actor: ActorRef<PersonaRequestActor>,
-}
-
-impl PersonaActorRuntime {
-    pub fn start() -> Self {
-        Self {
-            actor: PersonaRequestActor::spawn(PersonaRequestActor::new()),
-        }
-    }
-
-    pub async fn handle(&self, request: PersonaRequest) -> Result<PersonaOutput> {
-        self.actor
-            .ask(HandlePersonaRequest::new(request))
-            .await
-            .map_err(|error| Error::actor("handle persona request", error))
-    }
-
-    pub async fn trace(&self) -> Result<Vec<PersonaActorEvent>> {
-        self.actor
-            .ask(ReadPersonaActorTrace)
-            .await
-            .map_err(|error| Error::actor("read persona actor trace", error))
-    }
-
-    pub async fn stop(self) -> Result<()> {
-        self.actor
-            .stop_gracefully()
-            .await
-            .map_err(|error| Error::actor("stop persona actor", error))?;
-        self.actor.wait_for_shutdown().await;
-        Ok(())
+        self.read_events(message.probe)
     }
 }

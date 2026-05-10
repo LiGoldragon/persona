@@ -1,17 +1,25 @@
 use persona::request::{CommandLine, DescribeSchema, PersonaOutput, PersonaRequest};
 
-struct RequestFixture;
+struct RequestFixture {
+    arguments: [&'static str; 6],
+}
 
 impl RequestFixture {
-    fn inline_validate_object() -> CommandLine {
-        CommandLine::from_arguments([
-            "(ValidateObject",
-            "(HarnessRecord",
-            "operator",
-            "Operator",
-            "Terminal",
-            "\"codex\"))",
-        ])
+    fn inline_validate_object() -> Self {
+        Self {
+            arguments: [
+                "(ValidateObject",
+                "(HarnessRecord",
+                "operator",
+                "Operator",
+                "Terminal",
+                "\"codex\"))",
+            ],
+        }
+    }
+
+    fn command_line(&self) -> CommandLine {
+        CommandLine::from_arguments(self.arguments)
     }
 }
 
@@ -27,6 +35,7 @@ fn empty_command_line_describes_schema() {
 #[test]
 fn inline_nota_request_decodes_after_shell_token_join() {
     let request = RequestFixture::inline_validate_object()
+        .command_line()
         .decode_request()
         .unwrap();
 
