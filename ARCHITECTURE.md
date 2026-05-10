@@ -67,21 +67,9 @@ controllers.
 This positioning is upstream of every individual persona-* component.
 It is the criterion that decides what belongs in the persona ecosystem:
 durable-agent work belongs here; one-shot operator actions (deploy CLIs)
-and declarative cluster data (proposals) live in other ecosystems
-(`lojix-cli`, `goldragon`, `criome-*`).
-
-The cluster-trust runtime (`persona-trust`) is the latest application of
-this criterion. It consumes per-host `clavifaber` publications and
-distributes trust observations to host subscribers — durable-agent work,
-not deploy-time action or declarative state. See
-`~/primary/reports/designer/110-cluster-trust-runtime-is-persona.md`.
-
-```mermaid
-graph LR
-    host_clavifaber[host clavifaber] -->|"PublicKeyPublication"| trust[persona trust]
-    trust -->|"TrustUpdate subscription"| subscriber_host[host subscriber]
-    trust --> trust_db[cluster-trust redb]
-```
+live in `lojix-cli` / `CriomOS`; declarative cluster data lives in
+`goldragon`; auth/security/identity infrastructure (host trust, cluster
+identity) lives in the criome ecosystem.
 
 ## 1 · Component Map
 
@@ -95,14 +83,12 @@ graph LR
 | `persona-system` | System/window/input observation adapters. |
 | `persona-harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
 | `persona-wezterm` | Durable PTY and detachable visible terminal transport. |
-| `persona-trust` | Cluster-trust state component (in design): consumes per-host clavifaber publications, distributes trust observations to host subscribers. |
 | `sema` | Typed database kernel library over redb/rkyv. |
 | `signal-core` | Signal wire kernel: frames, channel macro, shared wire primitives. |
 | `signal-persona` | Persona-wide umbrella vocabulary. |
 | `signal-persona-message` | Message ingress contract. |
 | `signal-persona-system` | System observation contract. |
 | `signal-persona-harness` | Router/harness delivery and observation contract. |
-| `signal-clavifaber` | Per-host clavifaber to persona-trust publication channel; persona-trust to host trust-distribution subscription channel. |
 | `nexus` | Semantic text vocabulary written in NOTA syntax. |
 | `nota` / `nota-codec` / `nota-derive` | NOTA language, parser/codec, and derive support. |
 
@@ -119,9 +105,6 @@ graph LR
     system_contract --> router
     harness_contract --> router
     harness_contract --> harness[persona harness]
-    signal_core --> clavifaber_contract[signal clavifaber]
-    clavifaber_contract --> trust[persona trust]
-    clavifaber_contract --> host_clavifaber[host clavifaber]
 ```
 
 ## 2 · Command-line Mind
@@ -205,7 +188,7 @@ graph TB
 Component boundaries are crossed with Signal contracts, not by opening another
 component's database file.
 
-## 5 · Mind, Router, Trust, Harness, System
+## 5 · Mind, Router, Harness, System
 
 The central split:
 
@@ -213,7 +196,6 @@ The central split:
 |---|---|---|
 | `persona-mind` | role state, activity, work graph, decisions, aliases, ready/blocked views. | message delivery, terminal sessions, system focus facts. |
 | `persona-router` | message routing, delivery queue, delivery gate state, message durability. | role claims, work graph, harness process lifecycle. |
-| `persona-trust` | cluster-host public material, ClusterRegistryActor, TrustDistributionActor. | per-host private key material, cluster configuration (declarative), deploy-time activation. |
 | `persona-system` | OS/window/input observations. | router decisions, mind state, harness delivery. |
 | `persona-harness` | harness identity, lifecycle, injection/observation adapter boundary. | router policy, central work graph. |
 | `persona-wezterm` | durable PTY and visible terminal transport. | Persona delivery policy or role state. |
@@ -273,9 +255,10 @@ Migration rules:
   implementation targets.
 - Existing transitional shims in this repo remain visibly marked as shims until
   component-owned implementations replace them.
-- The Persona ecosystem owns durable-agent work. Cluster-trust runtime is
-  persona-shaped (`persona-trust`); one-shot deploy actions live in
-  `lojix-cli`/`CriomOS`; declarative cluster proposals live in `goldragon`.
+- The Persona ecosystem owns durable-agent runtime work. Auth/security/identity
+  infrastructure (host trust, cluster identity) is criome-shaped, not
+  persona-shaped. One-shot deploy actions live in `lojix-cli` / `CriomOS`.
+  Declarative cluster proposals live in `goldragon`.
 
 ## 8 · Invariants
 
@@ -299,6 +282,7 @@ Migration rules:
   `MindRoot` and `mind.redb`.
 - Persona is the durable agent — long-lived, persistent, inspectable.
   One-shot agent CLIs and reconciliation-stack controllers are not
+  persona-shaped. Auth/security/identity is criome-shaped, not
   persona-shaped.
 
 ## 9 · Architectural-Truth Tests
@@ -312,10 +296,8 @@ The apex repo owns tests that prove cross-component shape:
 | mind owns role state | lock files are absent and role claims still work. |
 | router commits before delivery | delivery trace follows durable router commit. |
 | router does not own terminal transport | router dependency graph excludes `persona-wezterm`. |
-| component databases are separate | router/mind/harness/trust open distinct redb files. |
+| component databases are separate | router/mind/harness open distinct redb files. |
 | NOTA is the only text syntax | no CLI-only parser accepts non-NOTA command records. |
-| persona-trust holds per-host publications by NodeName | persona-trust opens `cluster-trust.redb` and reads back the publication record clavifaber wrote in a separate process. |
-| trust subscribers receive updates without polling | `TrustDistribution` emits typed events; tokio-test paused-clock witness shows zero work during paused time. |
 
 ## Code Map
 
@@ -332,7 +314,6 @@ tests/           schema tests and multi-component end-to-end tests
 
 - `~/primary/protocols/active-repositories.md`
 - `~/primary/reports/operator/105-command-line-mind-architecture-survey.md`
-- `~/primary/reports/designer/110-cluster-trust-runtime-is-persona.md`
 - `~/primary/reports/1-gas-city-fiasco.md` — failure mode persona is contrasting against
 - `../persona-mind/ARCHITECTURE.md`
 - `../signal-persona-mind/ARCHITECTURE.md`
