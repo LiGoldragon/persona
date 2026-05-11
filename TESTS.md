@@ -82,6 +82,7 @@ What the check proves:
 | `persona-engine-sandbox-documents-dedicated-auth` | Dry-run credential policy artifacts say prompt-bearing Claude/Codex runs need dedicated sandbox credentials and do not copy live host auth. |
 | `persona-engine-sandbox-bootstrap-auth-dry-run` | Bootstrap dry-run emits the real dedicated auth surfaces: `codex login --device-auth`, separate `CLAUDE_CONFIG_DIR` login or token-file credential, and isolated Pi config/session directories. |
 | `persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs` | Live Pi bootstrap creates isolated config/session directories without touching paid-provider auth. |
+| `persona-engine-sandbox-auth-isolation-witness` | Runs the actual sandbox runner against fake host Codex/Claude/Pi auth/session files and proves they are not copied, modified, or leaked into artifacts. |
 
 Run all checks:
 
@@ -149,6 +150,12 @@ Claude uses `PERSONA_CLAUDE_OAUTH_TOKEN_FILE` when present, otherwise a
 separate `CLAUDE_CONFIG_DIR` login. Pi creates isolated config/session
 directories and records the package path used for the local Prometheus-backed
 model path.
+
+The auth isolation witness is artificial in the intended architectural-truth
+style: it creates fake host `~/.codex`, `~/.claude`, and Pi session files, runs
+the real runner, and proves those files are unchanged while generated harness
+env files use sandbox or dedicated paths. This catches accidental regressions
+back toward live host auth/home usage.
 
 ---
 

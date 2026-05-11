@@ -443,6 +443,9 @@ Migration rules:
   outputs, not raw home snapshots.
 - Dedicated auth bootstrap is an explicit runner mode; prompt-bearing Codex
   and Claude tests never bootstrap by copying live host OAuth files.
+- Auth-isolation witnesses run the actual sandbox runner against fake host
+  auth/session files and fail if host paths leak into artifacts, host files
+  change, or credential files are copied into the sandbox.
 - Development runners push socket paths to components through environment and
   argv, never by filesystem discovery.
 - Production startup is systemd/NixOS-shaped; Rust systemd control is an
@@ -547,6 +550,7 @@ The apex repo owns tests that prove cross-component shape:
 | sandbox runner documents dedicated auth | `nix flake check .#persona-engine-sandbox-documents-dedicated-auth` |
 | sandbox auth bootstrap emits real dedicated login surfaces | `nix flake check .#persona-engine-sandbox-bootstrap-auth-dry-run` |
 | Pi bootstrap creates isolated config/session directories | `nix flake check .#persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs` |
+| auth isolation witness protects host credential/session files | `nix flake check .#persona-engine-sandbox-auth-isolation-witness` |
 | engine resources are scoped | `nix flake check .#persona-engine-layout-uses-engine-id-scoped-paths` |
 | socket policy is boundary-specific | `nix flake check .#persona-engine-layout-assigns-socket-modes-by-component-boundary` |
 | spawn envelopes carry manager-supplied peers | `nix flake check .#persona-spawn-envelope-carries-component-paths-and-peer-sockets` |
@@ -560,6 +564,7 @@ skills.md        how to work in the meta repo
 flake.nix        component flake composition
 TESTS.md         cross-component test architecture
 scripts/persona-engine-sandbox  systemd-run sandbox scaffold for full-engine witnesses
+scripts/persona-engine-sandbox-auth-isolation-witness  Nix witness for host auth/session isolation
 src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
 src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records

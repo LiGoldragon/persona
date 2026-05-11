@@ -269,6 +269,17 @@
                 test -d "$out/credentials/pi/session"
                 grep -Fq "PI_PACKAGE_DIR='$out/pi-package'" "$out/sandbox/artifacts/auth-bootstrap-env.sh"
               '';
+          persona-engine-sandbox-auth-isolation-witness =
+            context.pkgs.runCommand "persona-engine-sandbox-auth-isolation-witness" { }
+              ''
+                mkdir -p "$out"
+                PERSONA_ENGINE_SANDBOX_BIN=${
+                  self.packages.${system}.persona-engine-sandbox
+                }/bin/persona-engine-sandbox \
+                  ${context.pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox-auth-isolation-witness} "$out"
+                test -f "$out/auth-isolation-witness.nota"
+                grep -Fq '(AuthIsolationWitness Passed)' "$out/auth-isolation-witness.nota"
+              '';
           persona-engine-layout-uses-engine-id-scoped-paths = context.craneLib.cargoTest (
             context.commonArgs
             // {

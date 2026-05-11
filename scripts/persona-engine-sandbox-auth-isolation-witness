@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${PERSONA_ENGINE_SANDBOX_BIN:?PERSONA_ENGINE_SANDBOX_BIN must point at persona-engine-sandbox}"
+
+if [ "$#" -ne 1 ]; then
+  printf '%s\n' 'usage: persona-engine-sandbox-auth-isolation-witness OUT_DIR' >&2
+  exit 2
+fi
+
+out_dir="$1"
+host_home="$out_dir/host-home"
+host_state="$out_dir/host-state"
+
+mkdir -p "$host_home/.codex" "$host_home/.claude" "$host_home/.pi/agent/sessions" "$host_state"
+printf '%s\n' 'host-codex-auth-must-not-move' >"$host_home/.codex/auth.json"
+printf '%s\n' 'host-claude-credential-must-not-move' >"$host_home/.claude/.credentials.json"
+printf '%s\n' 'host-pi-session-must-not-move' >"$host_home/.pi/agent/sessions/session.jsonl"
+
+host_digest() {
+  sha256sum \
+    "$host_home/.codex/auth.json" \
+    "$host_home/.claude/.credentials.json" \
+    "$host_home/.pi/agent/sessions/session.jsonl"
+}
+
+before_digest="$out_dir/host-before.sha256"
+after_digest="$out_dir/host-after.sha256"
+host_digest >"$before_digest"
+
+run_runner() {
+  local harness="$1"
+  local sandbox="$out_dir/$harness-sandbox"
+  local credential_root="$out_dir/$harness-credentials"
+
+  HOME="$host_home" \
+    XDG_STATE_HOME="$host_state" \
+    PI_PACKAGE_DIR="$out_dir/pi-package" \
+    "$PERSONA_ENGINE_SANDBOX_BIN" \
+    --dry-run \
+    --harness "$harness" \
+    --sandbox-dir "$sandbox" \
+    --credential-root "$credential_root"
+
+  test -f "$sandbox/artifacts/sandbox-manifest.nota"
+  test -f "$sandbox/artifacts/credential-policy.nota"
+  test -f "$sandbox/artifacts/auth-bootstrap.nota"
+  test -f "$sandbox/artifacts/harness-env.sh"
+  test -f "$sandbox/artifacts/systemd-command.txt"
+
+  find "$sandbox" -name auth.json -o -name .credentials.json | grep -q . && {
+    printf 'host credential file copied into sandbox for %s\n' "$harness" >&2
+    exit 1
+  }
+
+  if grep -R -Fq "$host_home" "$sandbox/artifacts"; then
+    printf 'host home path leaked into artifacts for %s\n' "$harness" >&2
+    exit 1
+  fi
+}
+
+run_runner codex
+grep -Fq "CODEX_HOME='$out_dir/codex-credentials/codex-home'" \
+  "$out_dir/codex-sandbox/artifacts/harness-env.sh"
+grep -Fq 'codex login --device-auth' \
+  "$out_dir/codex-sandbox/artifacts/auth-bootstrap.nota"
+test ! -e "$out_dir/codex-credentials"
+
+run_runner claude
+grep -Fq "CLAUDE_CONFIG_DIR='$out_dir/claude-credentials/claude-config'" \
+  "$out_dir/claude-sandbox/artifacts/harness-env.sh"
+grep -Fq 'claude auth login --claudeai' \
+  "$out_dir/claude-sandbox/artifacts/auth-bootstrap.nota"
+test ! -e "$out_dir/claude-credentials"
+
+claude_token="$out_dir/claude-oauth-token"
+printf '%s\n' 'dedicated-token-placeholder' >"$claude_token"
+HOME="$host_home" \
+  XDG_STATE_HOME="$host_state" \
+  PERSONA_CLAUDE_OAUTH_TOKEN_FILE="$claude_token" \
+  "$PERSONA_ENGINE_SANDBOX_BIN" \
+  --dry-run \
+  --harness claude \
+  --sandbox-dir "$out_dir/claude-token-sandbox" \
+  --credential-root "$out_dir/claude-token-credentials"
+grep -Fq 'IssuedSandboxCredential' \
+  "$out_dir/claude-token-sandbox/artifacts/credential-policy.nota"
+grep -Fq 'LoadCredential=claude-oauth-token' \
+  "$out_dir/claude-token-sandbox/artifacts/systemd-command.txt"
+grep -Fq 'CLAUDE_CODE_OAUTH_TOKEN=' \
+  "$out_dir/claude-token-sandbox/artifacts/harness-env.sh"
+
+run_runner pi
+grep -Fq "PI_CODING_AGENT_DIR='$out_dir/pi-sandbox/home/pi'" \
+  "$out_dir/pi-sandbox/artifacts/harness-env.sh"
+grep -Fq "PI_CODING_AGENT_SESSION_DIR='$out_dir/pi-sandbox/home/pi-session'" \
+  "$out_dir/pi-sandbox/artifacts/harness-env.sh"
+
+host_digest >"$after_digest"
+diff -u "$before_digest" "$after_digest"
+
+find "$out_dir" -type d -name '*home-snapshot*' | grep -q . && {
+  printf '%s\n' 'raw home snapshot artifact found' >&2
+  exit 1
+}
+
+printf '%s\n' '(AuthIsolationWitness Passed)' >"$out_dir/auth-isolation-witness.nota"
