@@ -94,6 +94,7 @@ policy_file="$artifact_dir/credential-policy.nota"
 systemd_command_file="$artifact_dir/systemd-command.txt"
 bootstrap_file="$artifact_dir/auth-bootstrap.nota"
 bootstrap_env_file="$artifact_dir/auth-bootstrap-env.sh"
+bwrap_profile_file="$artifact_dir/bwrap-profile.nota"
 
 prepare_layout() {
   mkdir -p "$state_dir" "$run_dir" "$home_dir" "$work_dir" "$artifact_dir"
@@ -235,6 +236,25 @@ EOF
   esac
 }
 
+write_bwrap_profile() {
+  {
+    printf '%s\n' '(OptionalBwrapStrictProfile'
+    printf '  (ReadOnlyBind "/nix")\n'
+    printf '  (ReadOnlyBind "/run/current-system")\n'
+    printf '  (ReadOnlyBind "/etc")\n'
+    printf '  (ReadOnlyBind "/etc/static")\n'
+    printf '  (ReadWriteBind "%s")\n' "$sandbox_dir"
+    if [ -d "$credential_root" ]; then
+      printf '  (ReadWriteBind "%s")\n' "$credential_root"
+    fi
+    printf '  (Proc "/proc")\n'
+    printf '  (Dev "/dev")\n'
+    printf '  (WaylandSocketIntoSandbox false)\n'
+    printf '  (Status DocumentedNotEnabled)\n'
+    printf ')\n'
+  } >"$bwrap_profile_file"
+}
+
 prepare_bootstrap_dirs() {
   local dedicated_dir
   dedicated_dir="$(dedicated_credential_dir)"
@@ -278,6 +298,7 @@ write_manifest() {
   } >"$manifest_file"
   credential_policy >"$policy_file"
   write_bootstrap_artifacts
+  write_bwrap_profile
 }
 
 write_harness_environment() {

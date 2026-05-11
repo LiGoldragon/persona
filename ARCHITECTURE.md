@@ -270,6 +270,14 @@ Ghostty with host `terminal-cell-view`. The helper writes
 exact view command is inspectable. It does not pass a Wayland socket into the
 sandbox; only the terminal-cell socket path crosses the boundary.
 
+The sandbox runner also writes `artifacts/bwrap-profile.nota`, an optional
+strict-mount profile plan. It is intentionally marked `DocumentedNotEnabled`:
+today's runner is systemd-run first, while the bwrap layer remains a later
+hardening step. The profile limits read-only binds to `/nix`,
+`/run/current-system`, `/etc`, and `/etc/static`, gives write access to the
+sandbox directory and any existing dedicated credential root, and records that
+Wayland stays on the host for the Ghostty attach path.
+
 The first daemon-first apex slice is present: `persona-daemon` binds a Unix socket,
 starts the Kameo `EngineManager`, accepts one Signal frame per connection,
 dispatches through `HandleEngineRequest`, writes one Signal reply frame, and
@@ -456,6 +464,9 @@ Migration rules:
 - Host attach uses `persona-engine-sandbox-attach`: Ghostty and
   `terminal-cell-view` run on the host and attach to the sandbox cell socket.
   Wayland is not passed into the sandbox for viewing.
+- The optional bwrap strict profile is a generated NOTA artifact before it is
+  executable policy; it must stay tiny and must not add Wayland passthrough for
+  host viewing.
 - Development runners push socket paths to components through environment and
   argv, never by filesystem discovery.
 - Production startup is systemd/NixOS-shaped; Rust systemd control is an
@@ -563,6 +574,7 @@ The apex repo owns tests that prove cross-component shape:
 | auth isolation witness protects host credential/session files | `nix flake check .#persona-engine-sandbox-auth-isolation-witness` |
 | host attach helper is a Nix-owned app | `nix flake check .#persona-engine-sandbox-attach-script-builds` |
 | host attach helper plans Ghostty without Wayland-in-sandbox | `nix flake check .#persona-engine-sandbox-attach-plans-host-ghostty` |
+| optional bwrap strict profile is documented as a tiny bind set | `nix flake check .#persona-engine-sandbox-documents-bwrap-strict-profile` |
 | engine resources are scoped | `nix flake check .#persona-engine-layout-uses-engine-id-scoped-paths` |
 | socket policy is boundary-specific | `nix flake check .#persona-engine-layout-assigns-socket-modes-by-component-boundary` |
 | spawn envelopes carry manager-supplied peers | `nix flake check .#persona-spawn-envelope-carries-component-paths-and-peer-sockets` |

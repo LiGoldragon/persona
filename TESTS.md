@@ -85,6 +85,7 @@ What the check proves:
 | `persona-engine-sandbox-auth-isolation-witness` | Runs the actual sandbox runner against fake host Codex/Claude/Pi auth/session files and proves they are not copied, modified, or leaked into artifacts. |
 | `persona-engine-sandbox-attach-script-builds` | The Nix-created host attach helper is executable. |
 | `persona-engine-sandbox-attach-plans-host-ghostty` | Dry-run host attach emits a Ghostty + `terminal-cell-view` command against the sandbox `run/cell.sock` and records that Wayland is not passed into the sandbox. |
+| `persona-engine-sandbox-documents-bwrap-strict-profile` | Dry-run writes the optional bwrap strict-mount plan as a NOTA artifact with a tiny read-only/read-write bind set and no Wayland passthrough. |
 
 Run all checks:
 
@@ -170,6 +171,10 @@ It expects a terminal-cell socket at `$sandbox_dir/run/cell.sock`, opens host
 Ghostty with the packaged `terminal-cell-view`, and writes the planned command
 under `$sandbox_dir/artifacts/`. The viewer stays on the host side, so Wayland
 does not need to enter the sandbox.
+
+The bwrap profile is currently a generated plan, not active policy. The runner
+writes `bwrap-profile.nota` so the hardening boundary is reviewable while the
+systemd-run path remains the executable scaffold.
 
 ---
 

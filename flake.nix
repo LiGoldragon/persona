@@ -209,6 +209,7 @@
                   test -f "$root/artifacts/sandbox-manifest.nota"
                   test -f "$root/artifacts/credential-policy.nota"
                   test -f "$root/artifacts/systemd-command.txt"
+                  test -f "$root/artifacts/bwrap-profile.nota"
                 done
                 grep -Fq '(Harness Pi)' "$out/pi/artifacts/sandbox-manifest.nota"
                 grep -Fq '(Harness Claude)' "$out/claude/artifacts/sandbox-manifest.nota"
@@ -315,6 +316,22 @@
                 if grep -R -Fq 'WAYLAND_DISPLAY' "$out/artifacts"; then
                   exit 1
                 fi
+              '';
+          persona-engine-sandbox-documents-bwrap-strict-profile =
+            context.pkgs.runCommand "persona-engine-sandbox-documents-bwrap-strict-profile" { }
+              ''
+                mkdir -p "$out"
+                ${self.packages.${system}.persona-engine-sandbox}/bin/persona-engine-sandbox \
+                  --dry-run \
+                  --harness pi \
+                  --sandbox-dir "$out/sandbox" \
+                  > "$out/dry-run.stdout"
+                profile="$out/sandbox/artifacts/bwrap-profile.nota"
+                grep -Fq '(ReadOnlyBind "/nix")' "$profile"
+                grep -Fq '(ReadOnlyBind "/run/current-system")' "$profile"
+                grep -Fq "(ReadWriteBind \"$out/sandbox\")" "$profile"
+                grep -Fq '(WaylandSocketIntoSandbox false)' "$profile"
+                grep -Fq '(Status DocumentedNotEnabled)' "$profile"
               '';
           persona-engine-layout-uses-engine-id-scoped-paths = context.craneLib.cargoTest (
             context.commonArgs
