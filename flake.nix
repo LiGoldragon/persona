@@ -186,6 +186,27 @@
               cargoTestExtraArgs = "--test engine constraint_engine_layout_prepares_only_engine_scoped_directories -- --exact";
             }
           );
+          persona-manager-store-writes-engine-status-through-writer-actor = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test manager_store constraint_manager_store_writes_engine_status_through_writer_actor -- --exact";
+            }
+          );
+          persona-engine-manager-persists-component-mutation-through-manager-store = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test manager_store constraint_engine_manager_persists_component_mutation_through_manager_store -- --exact";
+            }
+          );
+          persona-daemon-persists-cli-mutation-to-manager-store = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test daemon constraint_persona_daemon_persists_cli_mutation_to_manager_store -- --exact";
+            }
+          );
         }
       );
 

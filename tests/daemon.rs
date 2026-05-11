@@ -5,17 +5,20 @@ use std::process::{Child, Command, Stdio};
 struct DaemonFixture {
     root: PathBuf,
     socket: PathBuf,
+    manager_store: PathBuf,
     daemon: Child,
 }
 
 impl DaemonFixture {
     fn start() -> Self {
-        let root = std::env::temp_dir().join(format!("persona-daemon-test-{}", std::process::id()));
+        let root = Self::unique_root();
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("test root created");
         let socket = root.join("persona.sock");
+        let manager_store = root.join("manager.redb");
         let mut daemon = Command::new(env!("CARGO_BIN_EXE_persona-daemon"))
             .arg(&socket)
+            .env("PERSONA_MANAGER_STORE", &manager_store)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -36,8 +39,25 @@ impl DaemonFixture {
         Self {
             root,
             socket,
+            manager_store,
             daemon,
         }
+    }
+
+    fn unique_root() -> PathBuf {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "persona-daemon-test-{}-{unique}",
+            std::process::id()
+        ))
+    }
+
+    fn stop_daemon(&mut self) {
+        let _ = self.daemon.kill();
+        let _ = self.daemon.wait();
     }
 
     fn persona(&self, request: &str) -> String {
@@ -75,6 +95,41 @@ fn constraint_persona_cli_talks_to_persona_daemon_over_socket() {
     let status = fixture.persona("(ComponentStatusQuery persona-terminal)");
     assert!(status.contains("(ComponentStatusReport "));
     assert!(status.contains("(ComponentStatusRecord persona-terminal Terminal Stopped Stopped)"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_persona_daemon_persists_cli_mutation_to_manager_store() {
+    let mut fixture = DaemonFixture::start();
+
+    let shutdown = fixture.persona("(ComponentShutdown persona-terminal)");
+    assert!(shutdown.contains("(SupervisorActionAcceptedReport persona-terminal Stopped)"));
+
+    fixture.stop_daemon();
+
+    let store = persona::manager_store::ManagerStore::start(
+        persona::manager_store::ManagerStoreLocation::new(&fixture.manager_store),
+    )
+    .expect("manager store starts for inspection");
+    let record = store
+        .ask(persona::manager_store::ReadEngineRecord::new(
+            signal_persona_auth::EngineId::new("default"),
+        ))
+        .await
+        .expect("stored record read through manager store actor")
+        .expect("default engine record exists");
+    let terminal = record
+        .status()
+        .components
+        .iter()
+        .find(|component| component.name.as_str() == "persona-terminal")
+        .expect("terminal component stored");
+    assert_eq!(
+        terminal.desired_state,
+        signal_persona::ComponentDesiredState::Stopped
+    );
+
+    store.stop_gracefully().await.expect("manager store stops");
+    store.wait_for_shutdown().await;
 }
 
 #[test]

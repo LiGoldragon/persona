@@ -5,8 +5,10 @@ use signal_persona::{
     ComponentShutdown, ComponentStartup, ComponentStatusQuery, EngineReply, EngineRequest,
     EngineStatusQuery,
 };
+use signal_persona_auth::EngineId;
 
 use crate::error::{Error, Result};
+use crate::manager_store::{ManagerStore, PersistEngineRecord};
 use crate::state::EngineState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,14 +22,27 @@ pub enum ManagerEvent {
 
 #[derive(Debug)]
 pub struct EngineManager {
+    engine: EngineId,
     state: EngineState,
+    store: Option<ActorRef<ManagerStore>>,
     events: Vec<ManagerEvent>,
 }
 
 impl EngineManager {
     pub fn new(state: EngineState) -> Self {
         Self {
+            engine: EngineId::new("default"),
             state,
+            store: None,
+            events: vec![ManagerEvent::Started],
+        }
+    }
+
+    pub fn with_store(engine: EngineId, state: EngineState, store: ActorRef<ManagerStore>) -> Self {
+        Self {
+            engine,
+            state,
+            store: Some(store),
             events: vec![ManagerEvent::Started],
         }
     }
@@ -36,6 +51,23 @@ impl EngineManager {
         let reference = Self::spawn(Self::new(EngineState::default_catalog()));
         reference.wait_for_startup().await;
         reference
+    }
+
+    pub async fn start_with_store(
+        engine: EngineId,
+        store: ActorRef<ManagerStore>,
+    ) -> Result<ActorRef<Self>> {
+        let reference = Self::spawn(Self::with_store(
+            engine,
+            EngineState::default_catalog(),
+            store,
+        ));
+        reference.wait_for_startup().await;
+        reference
+            .ask(SynchronizeManagerState)
+            .await
+            .map_err(|error| Error::actor("synchronize manager state", error))?;
+        Ok(reference)
     }
 
     pub async fn stop(reference: ActorRef<Self>) -> Result<()> {
@@ -47,8 +79,12 @@ impl EngineManager {
         Ok(())
     }
 
-    fn handle_request(&mut self, request: EngineRequest) -> EngineReply {
+    async fn handle_request(&mut self, request: EngineRequest) -> Result<EngineReply> {
         self.events.push(ManagerEvent::EngineRequestAccepted);
+        let should_persist = matches!(
+            request,
+            EngineRequest::ComponentStartup(_) | EngineRequest::ComponentShutdown(_)
+        );
         let reply = match request {
             EngineRequest::EngineStatusQuery(EngineStatusQuery { .. }) => {
                 self.state.engine_status()
@@ -57,8 +93,25 @@ impl EngineManager {
             EngineRequest::ComponentStartup(startup) => self.state.start_component(startup),
             EngineRequest::ComponentShutdown(shutdown) => self.state.stop_component(shutdown),
         };
+        if should_persist && matches!(reply, EngineReply::SupervisorActionAccepted(_)) {
+            self.persist_state().await?;
+        }
         self.events.push(ManagerEvent::EngineReplyCreated);
-        reply
+        Ok(reply)
+    }
+
+    async fn persist_state(&self) -> Result<()> {
+        let Some(store) = &self.store else {
+            return Ok(());
+        };
+        store
+            .ask(PersistEngineRecord::new(
+                self.engine.clone(),
+                self.state.snapshot().clone(),
+            ))
+            .await
+            .map_err(|error| Error::actor("persist manager engine record", error))?;
+        Ok(())
     }
 
     fn read_events(&mut self, probe: TraceProbe) -> Vec<ManagerEvent> {
@@ -107,14 +160,28 @@ impl HandleEngineRequest {
 }
 
 impl Message<HandleEngineRequest> for EngineManager {
-    type Reply = std::result::Result<EngineReply, Infallible>;
+    type Reply = Result<EngineReply>;
 
     async fn handle(
         &mut self,
         message: HandleEngineRequest,
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        Ok(self.handle_request(message.request))
+        self.handle_request(message.request).await
+    }
+}
+
+pub struct SynchronizeManagerState;
+
+impl Message<SynchronizeManagerState> for EngineManager {
+    type Reply = Result<()>;
+
+    async fn handle(
+        &mut self,
+        _message: SynchronizeManagerState,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.persist_state().await
     }
 }
 

@@ -10,6 +10,9 @@ pub enum Error {
     #[error("nota: {0}")]
     Nota(#[from] nota_codec::Error),
 
+    #[error("sema: {0}")]
+    Sema(#[from] sema::Error),
+
     #[error("inline Nota argument must be UTF-8: {got:?}")]
     InvalidInlineNotaArgument { got: String },
 
@@ -36,6 +39,9 @@ pub enum Error {
 
     #[error("unexpected Signal frame: {got}")]
     UnexpectedSignalFrame { got: String },
+
+    #[error("manager store path is missing a parent directory: {path}")]
+    ManagerStorePathMissingParent { path: PathBuf },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

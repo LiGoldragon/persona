@@ -7,6 +7,7 @@
 pub mod engine;
 pub mod error;
 pub mod manager;
+pub mod manager_store;
 pub mod request;
 pub mod schema;
 pub mod state;

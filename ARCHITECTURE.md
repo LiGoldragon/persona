@@ -244,8 +244,11 @@ registration/control surface has not landed yet.
 The first daemon-first apex slice is present: `persona-daemon` binds a Unix socket,
 starts the Kameo `EngineManager`, accepts one Signal frame per connection,
 dispatches through `HandleEngineRequest`, writes one Signal reply frame, and
-keeps manager state across CLI invocations. The full multi-engine catalog,
-spawn supervisor, connection-class minting, and manager redb are the next
+keeps manager state across CLI invocations. The manager redb path is present
+through a dedicated `ManagerStore` Kameo actor backed by Sema; manager
+mutations persist by sending typed messages to that actor. The full
+multi-engine catalog, spawn supervisor, connection-class minting, socket ACL
+application, and privileged-user deployment witnesses are the next
 engine-manager layers.
 
 ## 2 · Command-line Mind
@@ -437,6 +440,8 @@ Migration rules:
   not scan the filesystem to discover peers.
 - Components talk by Signal frames, not by opening another component's redb
   file.
+- The manager catalog is written through the `ManagerStore` actor; request
+  handling does not open `manager.redb` directly.
 - NOTA is the only text syntax; Nexus is semantic content written in NOTA.
 - The `mind` CLI is a daemon client: one NOTA request record in, one NOTA reply
   record out.
@@ -467,6 +472,9 @@ Migration rules:
 - Each state-bearing component owns its own redb file.
 - Each state-bearing component owns its own Sema layer/table declarations.
   There is no shared `persona-sema` component in the current architecture.
+- The engine manager owns `manager.redb` through its own Sema table layer.
+  The write path is a data-bearing Kameo `ManagerStore` actor, not a CLI
+  helper or direct redb call in request decoding.
 - Cross-component access is by Signal frame, not database peeking.
 - Rust-to-Rust component traffic uses rkyv Signal frames.
 - NOTA is the only text syntax.
@@ -501,6 +509,9 @@ The apex repo owns tests that prove cross-component shape:
 | connection class is manager-minted | request decoding rejects agent-supplied class fields. |
 | persona CLI is daemon client | CLI accepts exactly one NOTA request and prints one NOTA reply. |
 | persona-daemon preserves unrelated files | daemon startup refuses a non-socket endpoint path instead of deleting it. |
+| manager catalog writes go through the writer actor | `nix flake check .#persona-manager-store-writes-engine-status-through-writer-actor` |
+| engine manager persists accepted mutations | `nix flake check .#persona-engine-manager-persists-component-mutation-through-manager-store` |
+| persona CLI mutation reaches manager.redb via daemon path | `nix flake check .#persona-daemon-persists-cli-mutation-to-manager-store` |
 | engine resources are scoped | `nix flake check .#persona-engine-layout-uses-engine-id-scoped-paths` |
 | socket policy is boundary-specific | `nix flake check .#persona-engine-layout-assigns-socket-modes-by-component-boundary` |
 | spawn envelopes carry manager-supplied peers | `nix flake check .#persona-spawn-envelope-carries-component-paths-and-peer-sockets` |
@@ -518,6 +529,7 @@ src/bin/persona_daemon.rs  long-lived daemon entry
 src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records
 src/transport.rs Unix-socket Signal codec, client, daemon, endpoint, caller
 src/manager.rs   Kameo EngineManager actor scaffold and trace witness
+src/manager_store.rs  Kameo ManagerStore actor and manager.redb Sema tables
 src/request.rs   NOTA projection into signal-persona requests and replies
 src/state.rs     in-memory engine-state reducer
 src/bin/wire_*   signal-persona-message wire-test shims

@@ -22,6 +22,8 @@ path = "src/bin/persona_daemon.rs"
 [dependencies]
 kameo                  = { version = "0.20", default-features = false }
 nota-codec             = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }
+rkyv                   = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
+sema                   = { git = "https://github.com/LiGoldragon/sema.git" }
 signal-core            = { git = "https://github.com/LiGoldragon/signal-core.git" }
 signal-persona         = { git = "https://github.com/LiGoldragon/signal-persona.git" }
 signal-persona-auth    = { git = "https://github.com/LiGoldragon/signal-persona-auth.git" }

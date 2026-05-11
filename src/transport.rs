@@ -5,11 +5,14 @@ use std::os::unix::fs::FileTypeExt;
 use kameo::actor::ActorRef;
 use signal_core::{FrameBody, Reply, Request};
 use signal_persona::{EngineReply, EngineRequest, Frame};
+use signal_persona_auth::EngineId;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 
+use crate::engine::PersonaDaemonPaths;
 use crate::error::{Error, Result};
 use crate::manager::{EngineManager, HandleEngineRequest};
+use crate::manager_store::{ManagerStore, ManagerStoreLocation};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaEndpoint {
@@ -20,7 +23,7 @@ impl PersonaEndpoint {
     pub fn from_environment() -> Self {
         match std::env::var_os("PERSONA_SOCKET") {
             Some(path) => Self::from_path(path),
-            None => Self::from_path("/tmp/persona.sock"),
+            None => Self::from_path(PersonaDaemonPaths::production().manager_socket()),
         }
     }
 
@@ -152,13 +155,24 @@ impl PersonaClient {
 #[derive(Debug, Clone)]
 pub struct PersonaDaemon {
     endpoint: PersonaEndpoint,
+    manager_store: ManagerStoreLocation,
     codec: PersonaFrameCodec,
 }
 
 impl PersonaDaemon {
     pub fn new(endpoint: PersonaEndpoint) -> Self {
+        let manager_store = ManagerStoreLocation::from_endpoint(endpoint.as_path())
+            .unwrap_or_else(|_| ManagerStoreLocation::new("manager.redb"));
+        Self::with_manager_store(endpoint, manager_store)
+    }
+
+    pub fn with_manager_store(
+        endpoint: PersonaEndpoint,
+        manager_store: ManagerStoreLocation,
+    ) -> Self {
         Self {
             endpoint,
+            manager_store,
             codec: PersonaFrameCodec::default(),
         }
     }
@@ -166,7 +180,8 @@ impl PersonaDaemon {
     pub async fn serve(self) -> Result<()> {
         self.endpoint.unlink_existing_socket()?;
         let listener = UnixListener::bind(self.endpoint.as_path())?;
-        let manager = EngineManager::start().await;
+        let store = ManagerStore::start(self.manager_store.clone())?;
+        let manager = EngineManager::start_with_store(EngineId::new("default"), store).await?;
 
         println!(
             "persona-daemon socket={}",
@@ -200,15 +215,25 @@ impl PersonaDaemon {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaDaemonCommand {
     endpoint: PersonaEndpoint,
+    manager_store: ManagerStoreLocation,
 }
 
 impl PersonaDaemonCommand {
     pub fn from_environment() -> Self {
         let endpoint = PersonaEndpoint::from_argument_or_environment(std::env::args_os().nth(1));
-        Self { endpoint }
+        let manager_store = ManagerStoreLocation::from_environment().unwrap_or_else(|| {
+            ManagerStoreLocation::from_endpoint(endpoint.as_path())
+                .unwrap_or_else(|_| ManagerStoreLocation::new("manager.redb"))
+        });
+        Self {
+            endpoint,
+            manager_store,
+        }
     }
 
     pub async fn run(self) -> Result<()> {
-        PersonaDaemon::new(self.endpoint).serve().await
+        PersonaDaemon::with_manager_store(self.endpoint, self.manager_store)
+            .serve()
+            .await
     }
 }
