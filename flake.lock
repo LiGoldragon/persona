@@ -375,7 +375,7 @@
     "fenix_14": {
       "inputs": {
         "nixpkgs": [
-          "persona-wezterm",
+          "persona-terminal",
           "nixpkgs"
         ],
         "rust-analyzer-src": "rust-analyzer-src_14"
@@ -1500,6 +1500,26 @@
         "type": "github"
       }
     },
+    "persona-terminal": {
+      "inputs": {
+        "crane": "crane_14",
+        "fenix": "fenix_14",
+        "nixpkgs": "nixpkgs_20"
+      },
+      "locked": {
+        "lastModified": 1778494629,
+        "narHash": "sha256-s9sAdnUBFumpiUAXtCrVAx+afOpcbvOV5tLcICLAA9o=",
+        "owner": "LiGoldragon",
+        "repo": "persona-terminal",
+        "rev": "c80a01899c5a92bc66a8f697abf1d933a4beb634",
+        "type": "github"
+      },
+      "original": {
+        "owner": "LiGoldragon",
+        "repo": "persona-terminal",
+        "type": "github"
+      }
+    },
     "persona-wezterm": {
       "inputs": {
         "crane": "crane_5",
@@ -1560,26 +1580,6 @@
         "type": "github"
       }
     },
-    "persona-wezterm_4": {
-      "inputs": {
-        "crane": "crane_14",
-        "fenix": "fenix_14",
-        "nixpkgs": "nixpkgs_20"
-      },
-      "locked": {
-        "lastModified": 1778147413,
-        "narHash": "sha256-aDSLmLkCvPPrIRm61KXQMOPpQlJPJubtRC3sSOQO94o=",
-        "owner": "LiGoldragon",
-        "repo": "persona-wezterm",
-        "rev": "daee0cde0e190a5a4280c22dbb26414ba9ab9799",
-        "type": "github"
-      },
-      "original": {
-        "owner": "LiGoldragon",
-        "repo": "persona-wezterm",
-        "type": "github"
-      }
-    },
     "root": {
       "inputs": {
         "crane": "crane",
@@ -1590,7 +1590,7 @@
         "persona-mind": "persona-mind",
         "persona-router": "persona-router",
         "persona-system": "persona-system_4",
-        "persona-wezterm": "persona-wezterm_4",
+        "persona-terminal": "persona-terminal",
         "signal-persona": "signal-persona",
         "signal-persona-mind": "signal-persona-mind",
         "signal-persona-system": "signal-persona-system"

@@ -2,21 +2,23 @@
 
 *Engine manager and apex integration repository for the Persona component ecosystem.*
 
-> `persona` is the engine manager for the Persona component ecosystem. It
-> supervises the whole engine, keeps the component daemons visible and
-> coordinated, wires them through Nix, documents the whole topology, and owns
-> deployment-level verification. Component implementations live in component
-> repositories.
+> `persona` is the host-level engine manager for the Persona component
+> ecosystem. One privileged `persona` daemon supervises multiple engine
+> instances, keeps component daemons visible and coordinated, allocates their
+> per-engine sockets and state directories, wires them through Nix, documents
+> the whole topology, and owns deployment-level verification. Component
+> implementations live in component repositories.
 
 ---
 
 ## 0 · TL;DR
 
-Persona coordinates interactive AI harnesses as first-class participants in one
-inspectable engine. The top-level `persona` daemon is the engine manager: it
-supervises component daemons, exposes engine status, and gives operators and
-harnesses one place to ask whether the total system is up, healthy, and
-coherent.
+Persona coordinates interactive AI harnesses as first-class participants in
+durable, inspectable engines. The top-level `persona` daemon is the
+host-level engine manager: it runs as the dedicated `persona` system user,
+supervises multiple engine instances, exposes engine status, classifies
+connections, and gives operators and harnesses one place to ask whether the
+total system is up, healthy, and coherent.
 
 `signal-persona` is the management contract for the `persona` engine manager.
 It is the contract a client uses to ask for engine status, component health,
@@ -40,10 +42,11 @@ cross-component tests. Component repositories own router policy, mind state
 transitions, terminal adapters, storage table internals, actor logic, and
 relation-specific signal records.
 
-Sema belongs to the component that owns the state: `persona-mind` has mind Sema
-/ `mind.redb`, `persona-router` has router Sema / `router.redb`, and so on.
-The `persona` engine manager owns only supervisor state: component desired
-state, health, lifecycle observations, startup/shutdown activity, and
+Sema belongs to the component that owns the state inside an engine:
+`persona-mind` has mind Sema / `mind.redb`, `persona-router` has router Sema /
+`router.redb`, and so on. The `persona` engine manager owns manager-level
+state: the engine catalog, component desired state, health, lifecycle
+observations, startup/shutdown activity, inter-engine routes, and
 engine-level status.
 
 ```mermaid
@@ -51,11 +54,13 @@ graph TB
     operator[human or harness] --> persona_cli[persona CLI]
     persona_cli --> persona_contract[signal persona]
     persona_contract --> manager[persona engine manager]
-    manager --> mind_daemon[persona mind daemon]
-    manager --> router[persona router]
-    manager --> system[persona system]
-    manager --> harness[persona harness]
-    manager --> terminal[persona terminal]
+    manager --> engine_a[engine A federation]
+    manager --> engine_b[engine B federation]
+    engine_a --> mind_daemon[persona mind daemon]
+    engine_a --> router[persona router]
+    engine_a --> system[persona system]
+    engine_a --> harness[persona harness]
+    engine_a --> terminal[persona terminal]
     agent[agent] --> mind_cli[mind CLI]
     mind_cli --> mind_daemon
     mind_daemon --> mind_db[mind redb]
@@ -103,7 +108,8 @@ identity) lives in the criome ecosystem.
 | `persona-message` | Message CLI/projection experiments; transitional as router/mind contracts settle. |
 | `persona-system` | System/window/input observation adapters. |
 | `persona-harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
-| `persona-wezterm` | Durable PTY and detachable visible terminal transport. |
+| `persona-terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. |
+| `terminal-cell` | Low-level daemon-owned PTY/transcript primitive consumed by `persona-terminal`. |
 | `sema` | Typed database kernel library over redb/rkyv. |
 | `signal-core` | Signal wire kernel: frames, channel macro, shared wire primitives. |
 | `signal-persona` | Management contract for the `persona` engine manager. |
@@ -127,6 +133,65 @@ graph LR
     harness_contract --> router
     harness_contract --> harness[persona harness]
 ```
+
+## 1.5 · Engine Manager Model
+
+One host has one `persona` daemon. That daemon can supervise N engine
+instances. Each engine owns its own full component federation:
+`persona-mind`, `persona-router`, `persona-system`, `persona-harness`,
+`persona-terminal`, and the transitional `persona-message` proxy.
+
+The daemon runs as the dedicated `persona` system user, not as `root` and not
+as the operator's user. The elevated position is for scoped OS authority:
+force-focus during prompt injection, system-owned engines, peer credential
+inspection, cross-engine auth proofs, and component restart after
+operator-user crashes. Components also run under the Persona authority
+baseline, but the manager owns cross-engine authority.
+
+Per-engine resources are always scoped by engine id:
+
+| Resource | Shape |
+|---|---|
+| State directory | `/var/lib/persona/<engine-id>/` |
+| Component redb files | `/var/lib/persona/<engine-id>/{mind,router,harness,terminal}.redb` |
+| Socket directory | `/var/run/persona/<engine-id>/` |
+| Component sockets | `/var/run/persona/<engine-id>/{mind,router,system,harness,terminal,message-proxy}.sock` |
+| Manager redb | `/var/lib/persona/manager.redb` |
+| Manager socket | `/var/run/persona/persona.sock` |
+
+Exact host paths are deployment-owned, but the `<engine-id>` scoping is
+architectural. Components do not discover peers by scanning the filesystem;
+the manager passes peer sockets at spawn time.
+
+The manager redb owns the engine catalog: engine identities, owners,
+component desired state, lifecycle observations, and inter-engine route
+declarations. Every transition appends a typed event and reduces into the
+manager tables.
+
+## 1.6 · Connection Class and Routes
+
+Every connection into a manager-owned engine carries a `ConnectionClass`
+minted by the engine boundary, never supplied by the agent:
+
+```text
+ConnectionClass =
+  Owner
+  | NonOwnerUser(Uid)
+  | System(SystemPrincipal)
+  | OtherPersona { engine_id, host }
+```
+
+The manager reads peer credentials, compares them with the engine owner,
+verifies cross-engine auth proofs when needed, and stamps the class onto the
+connection's Signal auth context. Components use the class as a policy axis:
+router quarantines non-owner messages, system gates privileged focus actions,
+harness redacts non-owner identity views, terminal gates programmatic input,
+and mind records non-owner work-graph mutations as suggestions until adopted.
+
+Inter-engine traffic requires an `EngineRoute`: a typed, manager-owned route
+record from one engine to another with allowed message kinds and an approval
+state. Human-owned engines require explicit owner approval on both sides;
+system-owned engines may use explicit `SystemApproved` policy records.
 
 ## 2 · Command-line Mind
 
@@ -168,6 +233,11 @@ channel-specific request/reply payloads.
 `signal-persona` is the contract for talking to the top-level `persona` engine
 manager. A client uses it to ask the engine manager for engine status,
 component health, engine-visible projections, and supervisor actions.
+It is also the home for engine catalog and route records: `EngineId`,
+`OwnerIdentity`, `ConnectionClass`, `EngineRoute`, `ComponentName`,
+`ComponentSet`, `DesiredState`, and shutdown/restart requests. If a second
+contract domain needs `ConnectionClass`, it may move down into `signal-core`;
+until then it remains part of the engine-manager contract.
 
 The `signal-persona-*` repos are relation-specific contracts between concrete
 components: mind, message, router, system, harness, terminal, and their
@@ -228,11 +298,21 @@ The central split:
 | `persona-router` | message routing, delivery queue, delivery gate state, message durability. | role claims, work graph, harness process lifecycle. |
 | `persona-system` | OS/window/input observations. | router decisions, mind state, harness delivery. |
 | `persona-harness` | harness identity, lifecycle, injection/observation adapter boundary. | router policy, central work graph. |
-| `persona-wezterm` | durable PTY and visible terminal transport. | Persona delivery policy or role state. |
+| `persona-terminal` | durable PTY/session ownership, visible viewer adapters, and raw terminal byte transport. | Persona delivery policy or role state. |
 
 `persona-mind` is not a router. `persona-router` is not the central project
 memory. The two communicate through explicit contracts when they need each
 other.
+
+Connection-class policy is component-owned:
+
+| Component | Class-aware behavior |
+|---|---|
+| `persona-router` | `Owner` messages deliver through normal gates; `NonOwnerUser` messages land in an owner-approval inbox; `OtherPersona` requires an approved engine route. |
+| `persona-system` | Read observations are subscribable; privileged focus actions require `System(persona)`. |
+| `persona-harness` | Full harness identity is owner/system visible; non-owner views are redacted. |
+| `persona-terminal` | Programmatic input uses `ConnectionClass` at the gate; non-owner injections are dropped unless owner-approved. |
+| `persona-mind` | Non-owner work-graph mutations are third-party suggestions until the owner adopts them. |
 
 ## 6 · Lock Files and BEADS
 
@@ -267,6 +347,10 @@ Migration rules:
 ## 7 · Constraints
 
 - `persona` composes the stack; component repos implement behavior.
+- One host has one privileged `persona` daemon supervising multiple engine
+  instances.
+- The daemon runs as the dedicated `persona` system user, not as root and not
+  as the operator's user.
 - `persona` may wire Nix inputs, checks, deployment modules, and
   cross-component witness tests.
 - `persona` does not own mind state transitions, router policy, harness
@@ -276,11 +360,21 @@ Migration rules:
   graphs, or durable files; they do not share in-process memory as the witness.
 - State-bearing components own separate redb files and separate Sema table
   declarations.
+- Per-engine state and socket paths include the engine id; cross-engine state
+  lives only in the manager catalog.
+- The manager mints `ConnectionClass` at the engine boundary; agents cannot
+  supply their own class.
+- Inter-engine routes are typed, manager-owned records and require owner or
+  system approval before traffic flows.
+- Component spawn receives peer socket paths from the manager; components do
+  not scan the filesystem to discover peers.
 - Components talk by Signal frames, not by opening another component's redb
   file.
 - NOTA is the only text syntax; Nexus is semantic content written in NOTA.
 - The `mind` CLI is a daemon client: one NOTA request record in, one NOTA reply
   record out.
+- The `persona` CLI is also a daemon client: one NOTA request record in, one
+  NOTA reply record out.
 - Lock files and BEADS are temporary workspace surfaces, not Persona
   implementation targets.
 - Existing transitional shims in this repo remain visibly marked as shims until
@@ -295,6 +389,10 @@ Migration rules:
 - The meta repo composes; component repos implement.
 - The `persona` runtime owns the top-level engine-manager actor and supervisor
   status surface.
+- The `persona` runtime owns the manager catalog and supervises multiple
+  per-engine component federations.
+- `ConnectionClass` is minted by the manager boundary and carried as auth
+  context through downstream Signal traffic.
 - Each wire between components has a Signal contract repo.
 - Contract repos own types; runtime repos own behavior.
 - Runtime behavior lives in direct Kameo actors inside the owning component.
@@ -310,6 +408,8 @@ Migration rules:
 - Message delivery is downstream of durable router-owned message commit.
 - Command-line mind input is one NOTA request record; output is one NOTA reply
   record.
+- Command-line persona input is one NOTA request record; output is one NOTA
+  reply record.
 - The `mind` CLI is a thin client. The long-lived `persona-mind` daemon owns
   `MindRoot` and `mind.redb`.
 - Persona is the durable agent — long-lived, persistent, inspectable.
@@ -327,9 +427,12 @@ The apex repo owns tests that prove cross-component shape:
 | `tools/orchestrate` is external cutover glue | wrapper output reaches the same `mind` path; it is not a Persona component. |
 | mind owns role state | lock files are absent and role claims still work. |
 | router commits before delivery | delivery trace follows durable router commit. |
-| router does not own terminal transport | router dependency graph excludes `persona-wezterm`. |
+| router does not own terminal transport | router dependency graph excludes `persona-terminal` and `terminal-cell`. |
 | component databases are separate | router/mind/harness open distinct redb files. |
 | NOTA is the only text syntax | no CLI-only parser accepts non-NOTA command records. |
+| engine resources are scoped | generated state/socket paths include `EngineId`. |
+| connection class is manager-minted | request decoding rejects agent-supplied class fields. |
+| persona CLI is daemon client | CLI accepts exactly one NOTA request and prints one NOTA reply. |
 
 ## Code Map
 
@@ -346,6 +449,7 @@ tests/           manager, request, projection, and multi-component tests
 
 - `~/primary/protocols/active-repositories.md`
 - `~/primary/reports/operator/105-command-line-mind-architecture-survey.md`
+- `~/primary/reports/designer/115-persona-engine-manager-architecture.md`
 - `~/primary/reports/1-gas-city-fiasco.md` — failure mode persona is contrasting against
 - `../persona-mind/ARCHITECTURE.md`
 - `../signal-persona-mind/ARCHITECTURE.md`

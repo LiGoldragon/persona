@@ -17,7 +17,7 @@
     signal-persona-mind.url = "github:LiGoldragon/signal-persona-mind";
     signal-persona-system.url = "github:LiGoldragon/signal-persona-system";
     persona-system.url = "github:LiGoldragon/persona-system";
-    persona-wezterm.url = "github:LiGoldragon/persona-wezterm";
+    persona-terminal.url = "github:LiGoldragon/persona-terminal";
   };
 
   outputs =
@@ -70,7 +70,7 @@
           signal-persona-mind = inputs.signal-persona-mind.packages.${system}.default;
           signal-persona-system = inputs.signal-persona-system.packages.${system}.default;
           persona-system = inputs.persona-system.packages.${system}.default;
-          persona-wezterm = inputs.persona-wezterm.packages.${system}.default;
+          persona-terminal = inputs.persona-terminal.packages.${system}.default;
         }
       );
 
@@ -107,7 +107,7 @@
           signal-persona-system-fmt = inputs.signal-persona-system.checks.${system}.fmt;
           signal-persona-system-clippy = inputs.signal-persona-system.checks.${system}.clippy;
           persona-system = inputs.persona-system.checks.${system}.default;
-          persona-wezterm = inputs.persona-wezterm.checks.${system}.default;
+          persona-terminal = inputs.persona-terminal.checks.${system}.default;
 
           # ─── Wire-test chain: signal-persona-message ───
           wire-message-channel-round-trip = context.pkgs.runCommand "wire-message-channel-round-trip" {} ''
