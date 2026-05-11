@@ -363,7 +363,7 @@ Connection-class policy is component-owned:
 
 | Component | Class-aware behavior |
 |---|---|
-| `persona-router` | `Owner` messages deliver through normal gates; `NonOwnerUser` messages land in an owner-approval inbox; `OtherPersona` requires an approved engine route. |
+| `persona-router` | Applies router-owned authorized-channel state. Unknown or inactive channels park and ask `persona-mind` for adjudication. |
 | `persona-system` | Read observations are subscribable; privileged focus actions require `System(persona)`. |
 | `persona-harness` | Full harness identity is owner/system visible; non-owner views are redacted. |
 | `persona-terminal` | Programmatic input uses `ConnectionClass` at the gate; non-owner injections are dropped unless owner-approved. |
@@ -423,6 +423,12 @@ Migration rules:
   declarations.
 - Per-engine state and socket paths include the engine id; cross-engine state
   lives only in the manager catalog.
+- Engine layout planning names every first-stack component socket and state
+  file before a component is spawned.
+- Internal component sockets are private to the Persona authority boundary;
+  the message-proxy socket is group-writable for owner ingress.
+- Spawn envelopes carry the component's own state/socket paths and every peer
+  socket path; components do not derive peers by scanning directories.
 - The manager mints `ConnectionClass` at the engine boundary; agents cannot
   supply their own class.
 - Inter-engine routes are typed, manager-owned records and require owner or
@@ -495,6 +501,10 @@ The apex repo owns tests that prove cross-component shape:
 | connection class is manager-minted | request decoding rejects agent-supplied class fields. |
 | persona CLI is daemon client | CLI accepts exactly one NOTA request and prints one NOTA reply. |
 | persona-daemon preserves unrelated files | daemon startup refuses a non-socket endpoint path instead of deleting it. |
+| engine resources are scoped | `nix flake check .#persona-engine-layout-uses-engine-id-scoped-paths` |
+| socket policy is boundary-specific | `nix flake check .#persona-engine-layout-assigns-socket-modes-by-component-boundary` |
+| spawn envelopes carry manager-supplied peers | `nix flake check .#persona-spawn-envelope-carries-component-paths-and-peer-sockets` |
+| engine preparation does not write global manager state as a side effect | `nix flake check .#persona-engine-layout-prepares-only-engine-scoped-directories` |
 
 ## Code Map
 
@@ -505,6 +515,7 @@ flake.nix        component flake composition
 TESTS.md         cross-component test architecture
 src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
+src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records
 src/transport.rs Unix-socket Signal codec, client, daemon, endpoint, caller
 src/manager.rs   Kameo EngineManager actor scaffold and trace witness
 src/request.rs   NOTA projection into signal-persona requests and replies

@@ -24,6 +24,7 @@ kameo                  = { version = "0.20", default-features = false }
 nota-codec             = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }
 signal-core            = { git = "https://github.com/LiGoldragon/signal-core.git" }
 signal-persona         = { git = "https://github.com/LiGoldragon/signal-persona.git" }
+signal-persona-auth    = { git = "https://github.com/LiGoldragon/signal-persona-auth.git" }
 signal-persona-message = { git = "https://github.com/LiGoldragon/signal-persona-message.git" }
 thiserror              = "2"
 tokio                  = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net"] }

@@ -158,6 +158,34 @@
             test -x ${self.packages.${system}.persona-dev-stack-smoke}/bin/persona-dev-stack-smoke
             touch $out
           '';
+          persona-engine-layout-uses-engine-id-scoped-paths = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test engine constraint_engine_layout_uses_engine_id_scoped_paths -- --exact";
+            }
+          );
+          persona-engine-layout-assigns-socket-modes-by-component-boundary = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test engine constraint_engine_layout_assigns_socket_modes_by_component_boundary -- --exact";
+            }
+          );
+          persona-spawn-envelope-carries-component-paths-and-peer-sockets = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test engine constraint_spawn_envelope_carries_component_paths_and_peer_sockets -- --exact";
+            }
+          );
+          persona-engine-layout-prepares-only-engine-scoped-directories = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test engine constraint_engine_layout_prepares_only_engine_scoped_directories -- --exact";
+            }
+          );
         }
       );
 

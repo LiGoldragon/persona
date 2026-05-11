@@ -4,6 +4,7 @@
 //! manager actor that accepts `signal-persona` management requests and renders
 //! NOTA projections for the command-line surface.
 
+pub mod engine;
 pub mod error;
 pub mod manager;
 pub mod request;
