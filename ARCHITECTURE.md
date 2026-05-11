@@ -71,6 +71,14 @@ live in `lojix-cli` / `CriomOS`; declarative cluster data lives in
 `goldragon`; auth/security/identity infrastructure (host trust, cluster
 identity) lives in the criome ecosystem.
 
+> **Scope.** Today's Persona sits on today's stack — Rust on Linux,
+> direct Kameo, `sema-db` storage, signal-* wire. The
+> eventually-self-hosting stack is one Sema-on-Sema substrate that
+> subsumes these pieces; today's Persona is a realization step
+> toward it, built rightly for the scope it serves now. See
+> `~/primary/ESSENCE.md` §"Today and eventually — different things,
+> different names".
+
 ## 1 · Component Map
 
 | Repository | Role |
