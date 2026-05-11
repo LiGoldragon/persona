@@ -74,6 +74,7 @@ What the check proves:
 | Check | Witnesses |
 |---|---|
 | `wire-message-channel-round-trip` | `signal-persona-message` constructs a `Submit` request frame, emits real length-prefixed bytes, decodes those bytes through a separate binary, and preserves the recipient + body. |
+| `persona-dev-stack-script-builds` | The Nix-created dev-stack runners are executable. It does not start PTY daemons inside a pure Nix builder. |
 
 Run all checks:
 
@@ -83,6 +84,37 @@ nix flake check
 
 The output names each derivation; failures point at the specific
 step that broke.
+
+### 4 · Stateful Nix apps
+
+The meta repo exposes the current integration runner as Nix apps:
+
+```sh
+nix run .#dev-stack
+nix run .#dev-stack-smoke
+```
+
+`dev-stack` starts the current runnable halves and keeps them alive:
+
+```mermaid
+flowchart LR
+    dev["dev-stack"]
+    router["persona-router-daemon"]
+    terminal["persona-terminal-daemon"]
+    message["message CLI"]
+    terminal_signal["persona-terminal-signal"]
+
+    dev --> router
+    dev --> terminal
+    message --> router
+    terminal_signal --> terminal
+```
+
+`dev-stack-smoke` starts the same daemons, proves router ingress through the
+`message` CLI, proves terminal Signal connect/input/capture, and exits with
+artifact paths. It is intentionally explicit that it does not yet prove
+router-to-harness-to-terminal delivery. It is a stateful app, not a pure
+`checks` derivation, because the terminal daemon owns a live PTY.
 
 ---
 
@@ -146,6 +178,8 @@ can satisfy the test.
 - It does NOT write a redb file through a router-owned Sema layer.
 - It does NOT exercise delivery guards, harness adapters, or terminal
   adapters.
+- `persona-dev-stack-smoke` does NOT register router recipients with terminal
+  endpoints because that control surface is not exposed yet.
 - It does NOT exercise `persona-mind`; central mind state has its
   own component tests.
 

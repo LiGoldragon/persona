@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${PERSONA_MESSAGE_PACKAGE:?PERSONA_MESSAGE_PACKAGE must point at the built persona-message package}"
+: "${PERSONA_ROUTER_PACKAGE:?PERSONA_ROUTER_PACKAGE must point at the built persona-router package}"
+: "${PERSONA_TERMINAL_PACKAGE:?PERSONA_TERMINAL_PACKAGE must point at the built persona-terminal package}"
+: "${PERSONA_BASH:?PERSONA_BASH must point at bash}"
+
+mode="${1:-run}"
+if [ "$mode" = "run" ] || [ "$mode" = "smoke" ]; then
+  shift || true
+else
+  printf 'usage: persona-dev-stack [run|smoke]\n' >&2
+  exit 2
+fi
+
+root="${PERSONA_STACK_ROOT:-$(mktemp -d -t persona-dev-stack.XXXXXX)}"
+mkdir -p "$root"
+
+router_socket="$root/router.sock"
+terminal_socket="$root/responder.terminal.sock"
+terminal_store="$root/terminal.redb"
+message_store="$root/message-store"
+router_stdout="$root/router.stdout"
+router_stderr="$root/router.stderr"
+terminal_stdout="$root/terminal.stdout"
+terminal_stderr="$root/terminal.stderr"
+environment_file="$root/env.sh"
+
+message_bin="$PERSONA_MESSAGE_PACKAGE/bin/message"
+router_bin="$PERSONA_ROUTER_PACKAGE/bin/persona-router-daemon"
+terminal_daemon="$PERSONA_TERMINAL_PACKAGE/bin/persona-terminal-daemon"
+terminal_signal="$PERSONA_TERMINAL_PACKAGE/bin/persona-terminal-signal"
+
+cleanup() {
+  if [ -n "${terminal_pid:-}" ]; then
+    kill "$terminal_pid" 2>/dev/null || true
+    wait "$terminal_pid" 2>/dev/null || true
+  fi
+  if [ -n "${router_pid:-}" ]; then
+    kill "$router_pid" 2>/dev/null || true
+    wait "$router_pid" 2>/dev/null || true
+  fi
+
+  if [ "${PERSONA_STACK_KEEP_ARTIFACTS:-1}" = "1" ]; then
+    printf 'persona dev stack artifacts=%s\n' "$root"
+  else
+    rm -rf "$root"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+read_ready_line() {
+  local name="$1"
+  local fd="$2"
+  local output_file="$3"
+  local expected="$4"
+  local line
+
+  if ! IFS= read -r -t 10 -u "$fd" line; then
+    printf '%s did not report readiness\n' "$name" >&2
+    return 1
+  fi
+  printf '%s\n' "$line" >"$output_file"
+  if [ "$line" != "$expected" ]; then
+    printf '%s reported unexpected readiness line: %s\n' "$name" "$line" >&2
+    return 1
+  fi
+}
+
+start_router() {
+  coproc PERSONA_ROUTER_PROCESS { "$router_bin" "$router_socket" 2>&1; }
+  router_pid="$PERSONA_ROUTER_PROCESS_PID"
+  read_ready_line "persona-router" "${PERSONA_ROUTER_PROCESS[0]}" "$router_stdout" "persona-router-daemon socket=$router_socket"
+}
+
+start_terminal() {
+  coproc PERSONA_TERMINAL_PROCESS {
+    "$terminal_daemon" \
+      --store "$terminal_store" \
+      --name responder \
+      --socket "$terminal_socket" \
+      -- "$PERSONA_BASH" -lc 'printf "terminal-ready\n"; while IFS= read -r line; do printf "terminal-echo:%s\n" "$line"; done' \
+      2>"$terminal_stderr"
+  }
+  terminal_pid="$PERSONA_TERMINAL_PROCESS_PID"
+  read_ready_line "persona-terminal" "${PERSONA_TERMINAL_PROCESS[0]}" "$terminal_stdout" "persona-terminal-daemon socket=$terminal_socket"
+}
+
+write_environment_file() {
+  cat >"$environment_file" <<EOF
+export PERSONA_MESSAGE_ROUTER_SOCKET='$router_socket'
+export PERSONA_MESSAGE_STORE='$message_store'
+export PERSONA_TERMINAL_SOCKET='$terminal_socket'
+export PERSONA_TERMINAL_STORE='$terminal_store'
+export PATH='$PERSONA_MESSAGE_PACKAGE/bin:$PERSONA_ROUTER_PACKAGE/bin:$PERSONA_TERMINAL_PACKAGE/bin:'"\$PATH"
+EOF
+}
+
+run_smoke() {
+  local register_output="$root/message-register.nota"
+  local send_output="$root/message-send.nota"
+  local send_error="$root/message-send.stderr"
+  local inbox_output="$root/message-inbox.nota"
+  local inbox_error="$root/message-inbox.stderr"
+  local terminal_connect="$root/terminal-connect.tsv"
+  local terminal_input="$root/terminal-input.tsv"
+  local terminal_capture="$root/terminal-capture.tsv"
+
+  PERSONA_MESSAGE_STORE="$message_store" \
+    "$message_bin" '(Register operator None)' \
+    >"$register_output"
+  grep -Fq "(Registered " "$register_output"
+
+  PERSONA_MESSAGE_ROUTER_SOCKET="$router_socket" \
+    PERSONA_MESSAGE_STORE="$message_store" \
+    "$message_bin" '(Send responder "hello from persona meta")' \
+    >"$send_output" 2>"$send_error"
+  grep -Fq "(SubmissionAccepted " "$send_output"
+
+  PERSONA_MESSAGE_ROUTER_SOCKET="$router_socket" \
+    PERSONA_MESSAGE_STORE="$message_store" \
+    "$message_bin" '(Inbox responder)' \
+    >"$inbox_output" 2>"$inbox_error"
+  grep -Fq "hello from persona meta" "$inbox_output"
+
+  "$terminal_signal" --socket "$terminal_socket" --terminal responder connect >"$terminal_connect"
+  grep -Fq $'TerminalReady\tresponder\t1' "$terminal_connect"
+
+  "$terminal_signal" --socket "$terminal_socket" --terminal responder prompt terminal-side-input >"$terminal_input"
+  grep -Fq $'TerminalInputAccepted\tresponder\t1' "$terminal_input"
+
+  "$terminal_signal" --socket "$terminal_socket" --terminal responder capture >"$terminal_capture"
+  grep -Fq $'TerminalCaptured\tresponder\t1' "$terminal_capture"
+
+  printf 'persona dev stack smoke=passed\n'
+  printf 'router send=%s\n' "$send_output"
+  printf 'router inbox=%s\n' "$inbox_output"
+  printf 'terminal capture=%s\n' "$terminal_capture"
+}
+
+start_router
+start_terminal
+write_environment_file
+
+case "$mode" in
+  smoke)
+    run_smoke
+    ;;
+  run)
+    printf 'persona dev stack root=%s\n' "$root"
+    printf 'environment=%s\n' "$environment_file"
+    printf 'router socket=%s\n' "$router_socket"
+    printf 'terminal socket=%s\n' "$terminal_socket"
+    printf 'try: source %s\n' "$environment_file"
+    printf 'try: message '\''(Register operator None)'\''\n'
+    printf 'try: message '\''(Send responder "hello")'\''\n'
+    printf 'try: persona-terminal-signal --socket "$PERSONA_TERMINAL_SOCKET" --terminal responder capture\n'
+    wait -n "$router_pid" "$terminal_pid"
+    ;;
+esac

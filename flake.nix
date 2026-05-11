@@ -21,9 +21,18 @@
   };
 
   outputs =
-    inputs@{ self, nixpkgs, fenix, crane, ... }:
+    inputs@{
+      self,
+      nixpkgs,
+      fenix,
+      crane,
+      ...
+    }:
     let
-      systems = [ "x86_64-linux" "aarch64-linux" ];
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
       forSystems = function: nixpkgs.lib.genAttrs systems (system: function system);
 
       mkContext =
@@ -42,9 +51,32 @@
             strictDeps = true;
           };
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+          personaDevStack =
+            mode:
+            pkgs.writeShellApplication {
+              name = if mode == "smoke" then "persona-dev-stack-smoke" else "persona-dev-stack";
+              runtimeInputs = [
+                pkgs.coreutils
+                pkgs.gnugrep
+              ];
+              text = ''
+                export PERSONA_MESSAGE_PACKAGE=${inputs.persona-message.packages.${system}.default}
+                export PERSONA_ROUTER_PACKAGE=${inputs.persona-router.packages.${system}.default}
+                export PERSONA_TERMINAL_PACKAGE=${inputs.persona-terminal.packages.${system}.default}
+                export PERSONA_BASH=${pkgs.bash}/bin/bash
+                exec ${pkgs.bash}/bin/bash ${./scripts/persona-dev-stack} ${mode} "$@"
+              '';
+            };
         in
         {
-          inherit pkgs toolchain craneLib commonArgs cargoArtifacts;
+          inherit
+            pkgs
+            toolchain
+            craneLib
+            commonArgs
+            cargoArtifacts
+            personaDevStack
+            ;
         };
     in
     {
@@ -71,6 +103,8 @@
           signal-persona-system = inputs.signal-persona-system.packages.${system}.default;
           persona-system = inputs.persona-system.packages.${system}.default;
           persona-terminal = inputs.persona-terminal.packages.${system}.default;
+          persona-dev-stack = context.personaDevStack "run";
+          persona-dev-stack-smoke = context.personaDevStack "smoke";
         }
       );
 
@@ -110,7 +144,7 @@
           persona-terminal = inputs.persona-terminal.checks.${system}.default;
 
           # ─── Wire-test chain: signal-persona-message ───
-          wire-message-channel-round-trip = context.pkgs.runCommand "wire-message-channel-round-trip" {} ''
+          wire-message-channel-round-trip = context.pkgs.runCommand "wire-message-channel-round-trip" { } ''
             ${personaShims}/bin/wire-emit-message \
               --recipient designer \
               --body 'message-only round-trip' \
@@ -119,8 +153,28 @@
               --expect-body 'message-only round-trip'
             touch $out
           '';
+          persona-dev-stack-script-builds = context.pkgs.runCommand "persona-dev-stack-script-builds" { } ''
+            test -x ${self.packages.${system}.persona-dev-stack}/bin/persona-dev-stack
+            test -x ${self.packages.${system}.persona-dev-stack-smoke}/bin/persona-dev-stack-smoke
+            touch $out
+          '';
         }
       );
+
+      apps = forSystems (system: {
+        default = {
+          type = "app";
+          program = "${self.packages.${system}.default}/bin/persona";
+        };
+        dev-stack = {
+          type = "app";
+          program = "${self.packages.${system}.persona-dev-stack}/bin/persona-dev-stack";
+        };
+        dev-stack-smoke = {
+          type = "app";
+          program = "${self.packages.${system}.persona-dev-stack-smoke}/bin/persona-dev-stack-smoke";
+        };
+      });
 
       devShells = forSystems (
         system:

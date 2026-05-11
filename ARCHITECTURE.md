@@ -193,6 +193,48 @@ record from one engine to another with allowed message kinds and an approval
 state. Human-owned engines require explicit owner approval on both sides;
 system-owned engines may use explicit `SystemApproved` policy records.
 
+## 1.7 · Startup Strategy
+
+Startup has two layers.
+
+Development and integration tests start component binaries directly through
+Nix-owned scripts in this meta repo. The scripts allocate a temporary runtime
+directory, start the current runnable daemons, push socket paths through
+environment variables, and leave inspectable artifacts. This is the
+`persona-dev-stack` surface; it exists so integration work can happen before
+host-level service installation is settled.
+
+Host deployment is systemd-shaped. The production `persona` daemon is the
+host-level manager and should be started by a NixOS module as a systemd
+service. Component daemons may become systemd units or manager-spawned child
+processes, but the manager is still the component that allocates per-engine
+state directories and pushes peer sockets to children. Daemons may use
+systemd readiness/watchdog notification once they run under systemd; direct
+systemd D-Bus control from Rust is only needed if the `persona` daemon later
+creates or manipulates transient units itself.
+
+The first meta-repo runner starts only the executable halves that exist today:
+
+```mermaid
+graph LR
+    dev["persona-dev-stack"]
+    router["persona-router daemon"]
+    terminal["persona-terminal daemon"]
+    message["message CLI"]
+    terminal_signal["persona-terminal-signal"]
+    pty["terminal-cell child PTY"]
+
+    dev --> router
+    dev --> terminal
+    message -->|"Signal message frame"| router
+    terminal_signal -->|"Signal terminal frame"| terminal
+    terminal --> pty
+```
+
+That runner proves router ingress and terminal transport independently. It is
+not the final delivery witness because the external router-to-harness
+registration/control surface has not landed yet.
+
 ## 2 · Command-line Mind
 
 The first foundational implementation target is the command-line mind backed
@@ -353,6 +395,12 @@ Migration rules:
   as the operator's user.
 - `persona` may wire Nix inputs, checks, deployment modules, and
   cross-component witness tests.
+- The meta repo exposes Nix apps for stateful integration runners; recurring
+  daemon startup commands are not left as ad hoc shell history.
+- Development runners push socket paths to components through environment and
+  argv, never by filesystem discovery.
+- Production startup is systemd/NixOS-shaped; Rust systemd control is an
+  implementation detail, not the first required integration boundary.
 - `persona` does not own mind state transitions, router policy, harness
   lifecycle, terminal transport, storage table internals, or Signal records.
 - Every runtime boundary in the stack has a dedicated Signal contract repo.
