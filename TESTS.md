@@ -75,6 +75,8 @@ What the check proves:
 |---|---|
 | `wire-message-channel-round-trip` | `signal-persona-message` constructs a `Submit` request frame, emits real length-prefixed bytes, decodes those bytes through a separate binary, and preserves the recipient + body. |
 | `persona-dev-stack-script-builds` | The Nix-created dev-stack runners are executable. It does not start PTY daemons inside a pure Nix builder. |
+| `constraint_persona_cli_talks_to_personad_over_socket` | Spawns `personad`, sends two separate `persona` CLI requests through `PERSONA_SOCKET`, and proves the daemon-owned manager state survives between invocations. |
+| `constraint_personad_does_not_delete_non_socket_endpoint_path` | Starts `personad` on an occupied regular-file path and proves daemon startup rejects it without deleting the file. |
 
 Run all checks:
 
@@ -90,9 +92,13 @@ step that broke.
 The meta repo exposes the current integration runner as Nix apps:
 
 ```sh
+nix run .#personad
 nix run .#dev-stack
 nix run .#dev-stack-smoke
 ```
+
+`personad` starts the daemon-first apex slice. It accepts an optional socket
+path argument, otherwise it uses `PERSONA_SOCKET` or `/tmp/persona.sock`.
 
 `dev-stack` starts the current runnable halves and keeps them alive:
 

@@ -24,6 +24,21 @@ pub enum Error {
         operation: &'static str,
         detail: String,
     },
+
+    #[error("signal frame: {0}")]
+    SignalFrame(#[from] signal_core::FrameError),
+
+    #[error("daemon frame is too large: {bytes} bytes")]
+    DaemonFrameTooLarge { bytes: usize },
+
+    #[error("socket path is occupied by a non-socket file: {path}")]
+    SocketPathOccupied { path: PathBuf },
+
+    #[error("persona daemon request is missing authentication proof")]
+    MissingAuthProof,
+
+    #[error("unexpected Signal frame: {got}")]
+    UnexpectedSignalFrame { got: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

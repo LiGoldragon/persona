@@ -15,6 +15,10 @@ path = "src/lib.rs"
 name = "persona"
 path = "src/main.rs"
 
+[[bin]]
+name = "personad"
+path = "src/bin/personad.rs"
+
 [dependencies]
 kameo                  = { version = "0.20", default-features = false }
 nota-codec             = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }

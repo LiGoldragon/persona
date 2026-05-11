@@ -174,6 +174,10 @@
           type = "app";
           program = "${self.packages.${system}.persona-dev-stack-smoke}/bin/persona-dev-stack-smoke";
         };
+        personad = {
+          type = "app";
+          program = "${self.packages.${system}.default}/bin/personad";
+        };
       });
 
       devShells = forSystems (

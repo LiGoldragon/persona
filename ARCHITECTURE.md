@@ -14,7 +14,7 @@
 ## 0 · TL;DR
 
 Persona coordinates interactive AI harnesses as first-class participants in
-durable, inspectable engines. The top-level `persona` daemon is the
+durable, inspectable engines. The top-level `personad` daemon is the
 host-level engine manager: it runs as the dedicated `persona` system user,
 supervises multiple engine instances, exposes engine status, classifies
 connections, and gives operators and harnesses one place to ask whether the
@@ -24,6 +24,11 @@ total system is up, healthy, and coherent.
 It is the contract a client uses to ask for engine status, component health,
 engine-visible projections, and supervisor actions. Component-to-component
 behavior uses the relation-specific `signal-persona-*` contracts.
+
+The `persona` CLI is a thin daemon client. It decodes one NOTA request record,
+sends one length-prefixed `signal-persona` frame to `personad`, waits for one
+typed reply frame, renders one NOTA reply record, and exits. `personad` owns
+the live Kameo `EngineManager` actor for the daemon lifetime.
 
 The center of agent state is `persona-mind`: the daemon-backed state component
 for role coordination, activity, work memory, decisions, aliases, and
@@ -53,7 +58,8 @@ engine-level status.
 graph TB
     operator[human or harness] --> persona_cli[persona CLI]
     persona_cli --> persona_contract[signal persona]
-    persona_contract --> manager[persona engine manager]
+    persona_contract --> personad[personad daemon]
+    personad --> manager[persona engine manager]
     manager --> engine_a[engine A federation]
     manager --> engine_b[engine B federation]
     engine_a --> mind_daemon[persona mind daemon]
@@ -101,11 +107,11 @@ identity) lives in the criome ecosystem.
 
 | Repository | Role |
 |---|---|
-| `persona` | Engine manager, supervisor daemon home, apex Nix/deployment/test composition, and meta architecture. |
+| `persona` | Engine manager, `personad` daemon home, apex Nix/deployment/test composition, and meta architecture. |
 | `persona-mind` | Central state component and command-line mind runtime. |
 | `signal-persona-mind` | Typed contract for role coordination, activity, and work graph operations. |
 | `persona-router` | Message routing, delivery state, gate state, and pending-delivery decisions. |
-| `persona-message` | Message CLI/projection experiments; transitional as router/mind contracts settle. |
+| `persona-message` | Stateless message proxy: NOTA/Nexus CLI surface to router Signal frames and router replies back to NOTA. |
 | `persona-system` | System/window/input observation adapters. |
 | `persona-harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
 | `persona-terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. |
@@ -234,6 +240,13 @@ graph LR
 That runner proves router ingress and terminal transport independently. It is
 not the final delivery witness because the external router-to-harness
 registration/control surface has not landed yet.
+
+The first daemon-first apex slice is present: `personad` binds a Unix socket,
+starts the Kameo `EngineManager`, accepts one Signal frame per connection,
+dispatches through `HandleEngineRequest`, writes one Signal reply frame, and
+keeps manager state across CLI invocations. The full multi-engine catalog,
+spawn supervisor, connection-class minting, and manager redb are the next
+engine-manager layers.
 
 ## 2 · Command-line Mind
 
@@ -481,6 +494,7 @@ The apex repo owns tests that prove cross-component shape:
 | engine resources are scoped | generated state/socket paths include `EngineId`. |
 | connection class is manager-minted | request decoding rejects agent-supplied class fields. |
 | persona CLI is daemon client | CLI accepts exactly one NOTA request and prints one NOTA reply. |
+| personad preserves unrelated files | daemon startup refuses a non-socket endpoint path instead of deleting it. |
 
 ## Code Map
 
@@ -489,8 +503,14 @@ ARCHITECTURE.md  apex system shape
 skills.md        how to work in the meta repo
 flake.nix        component flake composition
 TESTS.md         cross-component test architecture
-src/             engine-manager runtime stub, NOTA projection, wire-test shims
-tests/           manager, request, projection, and multi-component tests
+src/main.rs      thin CLI client for personad
+src/bin/personad.rs  long-lived daemon entry
+src/transport.rs Unix-socket Signal codec, client, daemon, endpoint, caller
+src/manager.rs   Kameo EngineManager actor scaffold and trace witness
+src/request.rs   NOTA projection into signal-persona requests and replies
+src/state.rs     in-memory engine-state reducer
+src/bin/wire_*   signal-persona-message wire-test shims
+tests/           daemon, manager, request, projection, and state tests
 ```
 
 ## See Also

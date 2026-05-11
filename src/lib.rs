@@ -9,5 +9,6 @@ pub mod manager;
 pub mod request;
 pub mod schema;
 pub mod state;
+pub mod transport;
 
 pub use error::{Error, Result};
