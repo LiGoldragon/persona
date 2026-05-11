@@ -4,16 +4,16 @@ You MUST read lore's `AGENTS.md` - the workspace-wide contract.
 
 ## Repo Role
 
-Persona is the framework for coordinating multiple AI harnesses as one
-inspectable system. The first project surface is harness-to-harness
-messaging: durable messages, live subscriptions, direct harness input,
-observed harness output, and explicit authorization.
+Persona is the engine manager for coordinating multiple AI harnesses and
+component daemons as one inspectable system. The manager surface reports engine
+status, component health, and supervisor actions through `signal-persona`.
 
 ## Current Phase
 
 This repo is in apex integration phase. Implementation code here stays limited
-to schema stubs, wire-test shims, Nix composition, and end-to-end witnesses.
-Component behavior belongs in the component repo that owns the concern.
+to the top-level engine-manager runtime stub, wire-test shims, Nix
+composition, and end-to-end witnesses. Component behavior belongs in the
+component repo that owns the concern.
 
 ## Version Control
 

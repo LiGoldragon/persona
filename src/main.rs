@@ -1,8 +1,8 @@
 use std::process::ExitCode;
 
-use persona::actor::{HandlePersonaRequest, PersonaRuntime};
 use persona::error::Error;
-use persona::request::CommandLine;
+use persona::manager::{EngineManager, HandleEngineRequest};
+use persona::request::{CommandLine, PersonaOutput};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -13,22 +13,30 @@ async fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    let engine_request = request.into_engine_request();
 
-    let runtime = PersonaRuntime::start().await;
-    let output = match runtime
-        .ask(HandlePersonaRequest::new(request))
+    let manager = EngineManager::start().await;
+    let reply = match manager
+        .ask(HandleEngineRequest::new(engine_request))
         .await
-        .map_err(|error| Error::actor("handle persona request", error))
-        .and_then(|output| output.to_nota())
+        .map_err(|error| Error::actor("handle engine request", error))
     {
-        Ok(output) => output,
+        Ok(reply) => reply,
         Err(error) => {
             eprintln!("error: {error}");
-            let _ = PersonaRuntime::stop(runtime).await;
+            let _ = EngineManager::stop(manager).await;
             return ExitCode::from(2);
         }
     };
-    if let Err(error) = PersonaRuntime::stop(runtime).await {
+    let output = match PersonaOutput::from_engine_reply(reply).to_nota() {
+        Ok(output) => output,
+        Err(error) => {
+            eprintln!("error: {error}");
+            let _ = EngineManager::stop(manager).await;
+            return ExitCode::from(2);
+        }
+    };
+    if let Err(error) = EngineManager::stop(manager).await {
         eprintln!("error: {error}");
         return ExitCode::from(2);
     }

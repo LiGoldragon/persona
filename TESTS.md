@@ -36,10 +36,9 @@ Standard `cargo test` paths. Each test file is one integration test.
 Currently:
 
 - `tests/request.rs` — request shapes.
-- `tests/schema.rs` — schema declarations.
-- `tests/state.rs` — state engine.
-- `tests/kameo_actor_path.rs` — Kameo actor-path constraints for the
-  meta CLI request handler.
+- `tests/schema.rs` — NOTA projection records for engine-manager replies.
+- `tests/state.rs` — in-memory engine-manager status reducer.
+- `tests/manager.rs` — Kameo actor-path constraints for the engine manager.
 
 ### 2 · Wire-test shim binaries (`src/bin/wire_*.rs`)
 
@@ -97,7 +96,7 @@ flowchart LR
     message["signal-persona-message Submit"]
     router["persona-router actor"]
     state["router-owned state actor"]
-    sema["persona-sema library"]
+    sema["component-owned Sema layer"]
     redb[("router redb")]
     reply["signal-persona-message SubmitOk"]
 
@@ -110,8 +109,8 @@ The intended Nix-chained witness is:
 | Step | Witness |
 |---|---|
 | Emit | A separate derivation writes a `signal-persona-message::Submit` frame. |
-| Commit | A router-shaped binary reads only those bytes, mints router-owned metadata, and writes through `persona-sema` into a router-owned redb file. |
-| Read back | A separate reader opens the redb through `persona-sema` and asserts the durable message exists. |
+| Commit | A router-shaped binary reads only those bytes, mints router-owned metadata, and writes through the router-owned Sema layer into a router-owned redb file. |
+| Read back | A separate reader opens the redb through the router-owned Sema layer and asserts the durable message exists. |
 | Reply | The router-shaped binary emits `signal-persona-message::SubmitOk`. |
 
 That future test should prove the component path, not only the
@@ -144,7 +143,7 @@ can satisfy the test.
 - It does NOT yet consume `signal-persona-system` in router code; the
   meta repo currently verifies that contract through its own imported
   flake checks.
-- It does NOT write a redb file through `persona-sema`.
+- It does NOT write a redb file through a router-owned Sema layer.
 - It does NOT exercise delivery guards, harness adapters, or terminal
   adapters.
 - It does NOT exercise `persona-mind`; central mind state has its

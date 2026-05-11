@@ -5,7 +5,7 @@ edition      = "2024"
 rust-version = "1.88"
 license      = "MIT OR Apache-2.0"
 repository   = "https://github.com/LiGoldragon/persona"
-description  = "Typed coordination framework for multi-harness AI systems."
+description  = "Engine manager and apex integration repo for multi-harness AI systems."
 
 [lib]
 name = "persona"
@@ -18,15 +18,8 @@ path = "src/main.rs"
 [dependencies]
 kameo                  = { version = "0.20", default-features = false }
 nota-codec             = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }
-redb                   = "2"
-rkyv                   = { version = "0.8", default-features = false, features = [
-    "std",
-    "bytecheck",
-    "little_endian",
-    "pointer_width_32",
-    "unaligned",
-] }
 signal-core            = { git = "https://github.com/LiGoldragon/signal-core.git" }
+signal-persona         = { git = "https://github.com/LiGoldragon/signal-persona.git" }
 signal-persona-message = { git = "https://github.com/LiGoldragon/signal-persona-message.git" }
 thiserror              = "2"
 tokio                  = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net"] }
@@ -42,9 +35,6 @@ path = "src/bin/wire_emit_message.rs"
 [[bin]]
 name = "wire-decode-message"
 path = "src/bin/wire_decode_message.rs"
-
-[dev-dependencies]
-tempfile = "3"
 
 [lints.rust]
 unused = "warn"

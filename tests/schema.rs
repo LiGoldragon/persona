@@ -1,44 +1,55 @@
-use persona::schema::{HarnessName, PersonaDocument};
+use persona::schema::{
+    ComponentDesiredState, ComponentHealth, ComponentKind, EnginePhase, EngineStatusReport,
+};
+use signal_persona::{
+    ComponentDesiredState as ContractDesiredState, ComponentHealth as ContractHealth,
+    ComponentKind as ContractKind, ComponentName, ComponentStatus, EngineGeneration,
+    EnginePhase as ContractPhase, EngineStatus,
+};
 
 struct SchemaFixture {
-    document: PersonaDocument,
+    status: EngineStatus,
 }
 
 impl SchemaFixture {
-    fn example() -> Self {
+    fn starting_engine() -> Self {
         Self {
-            document: PersonaDocument::example(),
+            status: EngineStatus {
+                generation: EngineGeneration::new(3),
+                phase: ContractPhase::Starting,
+                components: vec![ComponentStatus {
+                    name: ComponentName::new("persona-system"),
+                    kind: ContractKind::System,
+                    desired_state: ContractDesiredState::Running,
+                    health: ContractHealth::Starting,
+                }],
+            },
         }
     }
 
-    fn encoded_document(&self) -> String {
-        self.document.to_nota().unwrap()
+    fn report(&self) -> EngineStatusReport {
+        EngineStatusReport::from_contract(self.status.clone())
     }
 }
 
 #[test]
-fn example_document_round_trips_as_nota() {
-    let document = PersonaDocument::example();
-    let encoded = document.to_nota().unwrap();
-    let recovered = PersonaDocument::from_nota(&encoded).unwrap();
+fn engine_status_report_round_trips_as_nota() {
+    let report = SchemaFixture::starting_engine().report();
+    let encoded = report.to_nota().unwrap();
+    let recovered = EngineStatusReport::from_nota(&encoded).unwrap();
 
-    assert_eq!(recovered, document);
-    assert!(encoded.starts_with("(PersonaDocument ["));
+    assert_eq!(recovered, report);
+    assert!(encoded.starts_with("(EngineStatusReport 3 Starting ["));
 }
 
 #[test]
-fn harness_name_is_a_transparent_nota_value() {
-    let name = HarnessName::new("operator");
+fn signal_persona_status_projects_to_nota_enums() {
+    let report = SchemaFixture::starting_engine().report();
+    let component = report.components.first().unwrap();
 
-    assert_eq!(name.as_str(), "operator");
-}
-
-#[test]
-fn example_document_contains_initial_message_object() {
-    let encoded = SchemaFixture::example().encoded_document();
-
-    assert!(encoded.contains("(MessageRecord \"message-1\" \"operator\" \"designer\""));
-    assert!(encoded.contains("(AuthorizationRecord \"delivery-1\" \"message-1\" Allow"));
-    assert!(encoded.contains("(StateTransitionRecord \"transition-1\" AppendMessage"));
-    assert!(encoded.contains("(PersonaStateSnapshot 1 Running"));
+    assert_eq!(report.phase, EnginePhase::Starting);
+    assert_eq!(component.kind, ComponentKind::System);
+    assert_eq!(component.desired_state, ComponentDesiredState::Running);
+    assert_eq!(component.health, ComponentHealth::Starting);
+    assert_eq!(component.name.as_str(), "persona-system");
 }

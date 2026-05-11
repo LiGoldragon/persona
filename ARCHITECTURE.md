@@ -1,18 +1,30 @@
 # persona — architecture
 
-*Apex integration repository for the Persona component ecosystem.*
+*Engine manager and apex integration repository for the Persona component ecosystem.*
 
-> `persona` composes the system. Component implementations live in component
-> repositories. This repo wires them through Nix, documents the whole topology,
-> and owns deployment-level verification.
+> `persona` is the engine manager for the Persona component ecosystem. It
+> supervises the whole engine, keeps the component daemons visible and
+> coordinated, wires them through Nix, documents the whole topology, and owns
+> deployment-level verification. Component implementations live in component
+> repositories.
 
 ---
 
 ## 0 · TL;DR
 
 Persona coordinates interactive AI harnesses as first-class participants in one
-inspectable system. The center is `persona-mind`: the daemon-backed state
-component for role coordination, activity, work memory, decisions, aliases, and
+inspectable engine. The top-level `persona` daemon is the engine manager: it
+supervises component daemons, exposes engine status, and gives operators and
+harnesses one place to ask whether the total system is up, healthy, and
+coherent.
+
+`signal-persona` is the management contract for the `persona` engine manager.
+It is the contract a client uses to ask for engine status, component health,
+engine-visible projections, and supervisor actions. Component-to-component
+behavior uses the relation-specific `signal-persona-*` contracts.
+
+The center of agent state is `persona-mind`: the daemon-backed state component
+for role coordination, activity, work memory, decisions, aliases, and
 ready/blocked views. The command-line surface for that state is the `mind`
 binary: one NOTA request record in, one NOTA reply record out, with the CLI
 acting as a thin client to the daemon.
@@ -22,29 +34,30 @@ The architecture is contract-first. A wire boundary is defined in a dedicated
 move against it. Contract crates own typed records and rkyv frame behavior;
 runtime crates own actors, policy, storage, and side effects.
 
-`persona` is the apex repo. It owns architecture, flake composition,
-deployment wiring, and cross-component tests. It does not own router policy,
-mind state transitions, terminal adapters, storage table internals, actor
-logic, or signal records.
+`persona` is the apex repo and engine-manager home. It owns architecture,
+flake composition, supervisor wiring, deployment verification, and
+cross-component tests. Component repositories own router policy, mind state
+transitions, terminal adapters, storage table internals, actor logic, and
+relation-specific signal records.
 
-`persona` is a meta project today, not a state-bearing component. There is no
-shared `persona-sema` layer in the current architecture. Sema belongs to the
-component that owns the state: `persona-mind` has mind Sema / `mind.redb`,
-`persona-router` has router Sema / `router.redb`, and so on. If a future
-`persona` supervisor daemon exists to keep the whole stack running, that daemon
-may own its own Sema database for supervisor state. That is undecided and not
-part of the current implementation target.
+Sema belongs to the component that owns the state: `persona-mind` has mind Sema
+/ `mind.redb`, `persona-router` has router Sema / `router.redb`, and so on.
+The `persona` engine manager owns only supervisor state: component desired
+state, health, lifecycle observations, startup/shutdown activity, and
+engine-level status.
 
 ```mermaid
 graph TB
-    user[human or harness] --> text[NOTA text]
-    text --> message[persona message]
-    message --> router[persona router]
-    system[persona system] --> router
-    router --> harness[persona harness]
-    harness --> terminal[persona wezterm]
+    operator[human or harness] --> persona_cli[persona CLI]
+    persona_cli --> persona_contract[signal persona]
+    persona_contract --> manager[persona engine manager]
+    manager --> mind_daemon[persona mind daemon]
+    manager --> router[persona router]
+    manager --> system[persona system]
+    manager --> harness[persona harness]
+    manager --> terminal[persona terminal]
     agent[agent] --> mind_cli[mind CLI]
-    mind_cli --> mind_daemon[persona mind daemon]
+    mind_cli --> mind_daemon
     mind_daemon --> mind_db[mind redb]
     router --> router_db[router redb]
 ```
@@ -83,7 +96,7 @@ identity) lives in the criome ecosystem.
 
 | Repository | Role |
 |---|---|
-| `persona` | Apex Nix/deployment/test composition and meta architecture. |
+| `persona` | Engine manager, supervisor daemon home, apex Nix/deployment/test composition, and meta architecture. |
 | `persona-mind` | Central state component and command-line mind runtime. |
 | `signal-persona-mind` | Typed contract for role coordination, activity, and work graph operations. |
 | `persona-router` | Message routing, delivery state, gate state, and pending-delivery decisions. |
@@ -93,7 +106,7 @@ identity) lives in the criome ecosystem.
 | `persona-wezterm` | Durable PTY and detachable visible terminal transport. |
 | `sema` | Typed database kernel library over redb/rkyv. |
 | `signal-core` | Signal wire kernel: frames, channel macro, shared wire primitives. |
-| `signal-persona` | Persona-wide umbrella vocabulary. |
+| `signal-persona` | Management contract for the `persona` engine manager. |
 | `signal-persona-message` | Message ingress contract. |
 | `signal-persona-system` | System observation contract. |
 | `signal-persona-harness` | Router/harness delivery and observation contract. |
@@ -151,6 +164,15 @@ path, and stop treating lock files as authoritative state.
 
 Rust-to-Rust traffic uses Signal frames: length-prefixed rkyv archives with
 channel-specific request/reply payloads.
+
+`signal-persona` is the contract for talking to the top-level `persona` engine
+manager. A client uses it to ask the engine manager for engine status,
+component health, engine-visible projections, and supervisor actions.
+
+The `signal-persona-*` repos are relation-specific contracts between concrete
+components: mind, message, router, system, harness, terminal, and their
+neighbors. Runtime crates move against those contracts instead of reaching into
+another component's state.
 
 Text uses NOTA syntax. Nexus is semantic content written in NOTA syntax, not a
 second parser or alternate text format. Convenience CLIs may hide wrapper
@@ -271,6 +293,8 @@ Migration rules:
 ## 8 · Invariants
 
 - The meta repo composes; component repos implement.
+- The `persona` runtime owns the top-level engine-manager actor and supervisor
+  status surface.
 - Each wire between components has a Signal contract repo.
 - Contract repos own types; runtime repos own behavior.
 - Runtime behavior lives in direct Kameo actors inside the owning component.
@@ -314,8 +338,8 @@ ARCHITECTURE.md  apex system shape
 skills.md        how to work in the meta repo
 flake.nix        component flake composition
 TESTS.md         cross-component test architecture
-src/             temporary schema and wire-test shims
-tests/           schema tests and multi-component end-to-end tests
+src/             engine-manager runtime stub, NOTA projection, wire-test shims
+tests/           manager, request, projection, and multi-component tests
 ```
 
 ## See Also

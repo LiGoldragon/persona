@@ -91,7 +91,13 @@
           persona-message = inputs.persona-message.checks.${system}.default;
           persona-mind = inputs.persona-mind.checks.${system}.default;
           persona-router = inputs.persona-router.checks.${system}.default;
-          signal-persona = inputs.signal-persona.checks.${system}.default;
+          signal-persona-build = inputs.signal-persona.checks.${system}.build;
+          signal-persona-test = inputs.signal-persona.checks.${system}.test;
+          signal-persona-test-engine-manager = inputs.signal-persona.checks.${system}.test-engine-manager;
+          signal-persona-test-version = inputs.signal-persona.checks.${system}.test-version;
+          signal-persona-doc = inputs.signal-persona.checks.${system}.doc;
+          signal-persona-fmt = inputs.signal-persona.checks.${system}.fmt;
+          signal-persona-clippy = inputs.signal-persona.checks.${system}.clippy;
           signal-persona-mind = inputs.signal-persona-mind.checks.${system}.test;
           signal-persona-system-build = inputs.signal-persona-system.checks.${system}.build;
           signal-persona-system-test = inputs.signal-persona-system.checks.${system}.test;

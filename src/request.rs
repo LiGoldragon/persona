@@ -1,34 +1,52 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode, NotaRecord};
+use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode, NotaEnum, NotaRecord};
+use signal_persona as contract;
 
 use crate::error::{Error, Result};
-use crate::schema::{PersonaDocument, PersonaObject};
+use crate::schema::{
+    ComponentDesiredState, ComponentStatusMissingReport, ComponentStatusRecord,
+    ComponentStatusReport, EngineStatusReport, SupervisorActionAcceptedReport,
+    SupervisorActionRejectedReport, SupervisorActionRejectionReason, TextComponentName,
+};
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
-pub struct DescribeSchema {}
-
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
-pub struct ValidateObject {
-    pub object: PersonaObject,
+#[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EngineStatusScope {
+    WholeEngine,
 }
 
 #[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
-pub struct ValidateDocument {
-    pub document: PersonaDocument,
+pub struct EngineStatusQuery {
+    pub scope: EngineStatusScope,
+}
+
+#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+pub struct ComponentStatusQuery {
+    pub component: TextComponentName,
+}
+
+#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+pub struct ComponentStartup {
+    pub component: TextComponentName,
+}
+
+#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+pub struct ComponentShutdown {
+    pub component: TextComponentName,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PersonaRequest {
-    DescribeSchema(DescribeSchema),
-    ValidateObject(ValidateObject),
-    ValidateDocument(ValidateDocument),
+    EngineStatusQuery(EngineStatusQuery),
+    ComponentStatusQuery(ComponentStatusQuery),
+    ComponentStartup(ComponentStartup),
+    ComponentShutdown(ComponentShutdown),
 }
 
 impl PersonaRequest {
     pub fn from_nota(text: &str) -> Result<Self> {
-        let mut decoder = Decoder::nota(text);
+        let mut decoder = Decoder::new(text);
         let request = Self::decode(&mut decoder)?;
         if let Some(token) = decoder.peek_token()? {
             return Err(nota_codec::Error::UnexpectedToken {
@@ -40,17 +58,26 @@ impl PersonaRequest {
         Ok(request)
     }
 
-    pub fn into_output(self) -> PersonaOutput {
+    pub fn into_engine_request(self) -> contract::EngineRequest {
         match self {
-            Self::DescribeSchema(_) => PersonaOutput::SchemaExample(SchemaExample {
-                document: PersonaDocument::example(),
-            }),
-            Self::ValidateObject(request) => PersonaOutput::ValidatedObject(ValidatedObject {
-                object: request.object,
-            }),
-            Self::ValidateDocument(request) => {
-                PersonaOutput::ValidatedDocument(ValidatedDocument {
-                    document: request.document,
+            Self::EngineStatusQuery(request) => match request.scope {
+                EngineStatusScope::WholeEngine => contract::EngineRequest::EngineStatusQuery(
+                    contract::EngineStatusQuery::whole_engine(),
+                ),
+            },
+            Self::ComponentStatusQuery(request) => {
+                contract::EngineRequest::ComponentStatusQuery(contract::ComponentStatusQuery {
+                    component: request.component.into_contract(),
+                })
+            }
+            Self::ComponentStartup(request) => {
+                contract::EngineRequest::ComponentStartup(contract::ComponentStartup {
+                    component: request.component.into_contract(),
+                })
+            }
+            Self::ComponentShutdown(request) => {
+                contract::EngineRequest::ComponentShutdown(contract::ComponentShutdown {
+                    component: request.component.into_contract(),
                 })
             }
         }
@@ -60,9 +87,10 @@ impl PersonaRequest {
 impl NotaEncode for PersonaRequest {
     fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
         match self {
-            Self::DescribeSchema(request) => request.encode(encoder),
-            Self::ValidateObject(request) => request.encode(encoder),
-            Self::ValidateDocument(request) => request.encode(encoder),
+            Self::EngineStatusQuery(request) => request.encode(encoder),
+            Self::ComponentStatusQuery(request) => request.encode(encoder),
+            Self::ComponentStartup(request) => request.encode(encoder),
+            Self::ComponentShutdown(request) => request.encode(encoder),
         }
     }
 }
@@ -71,9 +99,12 @@ impl NotaDecode for PersonaRequest {
     fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
         let head = decoder.peek_record_head()?;
         match head.as_str() {
-            "DescribeSchema" => Ok(Self::DescribeSchema(DescribeSchema::decode(decoder)?)),
-            "ValidateObject" => Ok(Self::ValidateObject(ValidateObject::decode(decoder)?)),
-            "ValidateDocument" => Ok(Self::ValidateDocument(ValidateDocument::decode(decoder)?)),
+            "EngineStatusQuery" => Ok(Self::EngineStatusQuery(EngineStatusQuery::decode(decoder)?)),
+            "ComponentStatusQuery" => Ok(Self::ComponentStatusQuery(ComponentStatusQuery::decode(
+                decoder,
+            )?)),
+            "ComponentStartup" => Ok(Self::ComponentStartup(ComponentStartup::decode(decoder)?)),
+            "ComponentShutdown" => Ok(Self::ComponentShutdown(ComponentShutdown::decode(decoder)?)),
             other => Err(nota_codec::Error::UnknownKindForVerb {
                 verb: "PersonaRequest",
                 got: other.to_string(),
@@ -82,49 +113,48 @@ impl NotaDecode for PersonaRequest {
     }
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
-pub struct SchemaExample {
-    pub document: PersonaDocument,
-}
-
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
-pub struct ValidatedObject {
-    pub object: PersonaObject,
-}
-
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
-pub struct ValidatedDocument {
-    pub document: PersonaDocument,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PersonaOutput {
-    SchemaExample(SchemaExample),
-    ValidatedObject(ValidatedObject),
-    ValidatedDocument(ValidatedDocument),
-}
-
-impl kameo::reply::Reply for PersonaOutput {
-    type Ok = Self;
-    type Error = kameo::error::Infallible;
-    type Value = Self;
-
-    fn to_result(self) -> std::result::Result<Self::Ok, Self::Error> {
-        Ok(self)
-    }
-
-    fn into_any_err(self) -> Option<Box<dyn kameo::reply::ReplyError>> {
-        None
-    }
-
-    fn into_value(self) -> Self::Value {
-        self
-    }
+    EngineStatusReport(EngineStatusReport),
+    ComponentStatusReport(ComponentStatusReport),
+    ComponentStatusMissingReport(ComponentStatusMissingReport),
+    SupervisorActionAcceptedReport(SupervisorActionAcceptedReport),
+    SupervisorActionRejectedReport(SupervisorActionRejectedReport),
 }
 
 impl PersonaOutput {
+    pub fn from_engine_reply(reply: contract::EngineReply) -> Self {
+        match reply {
+            contract::EngineReply::EngineStatus(status) => {
+                Self::EngineStatusReport(EngineStatusReport::from_contract(status))
+            }
+            contract::EngineReply::ComponentStatus(status) => {
+                Self::ComponentStatusReport(ComponentStatusReport {
+                    component: ComponentStatusRecord::from_contract(status),
+                })
+            }
+            contract::EngineReply::ComponentStatusMissing(missing) => {
+                Self::ComponentStatusMissingReport(ComponentStatusMissingReport {
+                    component: TextComponentName::from_contract(&missing.component),
+                })
+            }
+            contract::EngineReply::SupervisorActionAccepted(acceptance) => {
+                Self::SupervisorActionAcceptedReport(SupervisorActionAcceptedReport {
+                    component: TextComponentName::from_contract(&acceptance.component),
+                    desired_state: ComponentDesiredState::from_contract(acceptance.desired_state),
+                })
+            }
+            contract::EngineReply::SupervisorActionRejected(rejection) => {
+                Self::SupervisorActionRejectedReport(SupervisorActionRejectedReport {
+                    component: TextComponentName::from_contract(&rejection.component),
+                    reason: SupervisorActionRejectionReason::from_contract(rejection.reason),
+                })
+            }
+        }
+    }
+
     pub fn to_nota(&self) -> Result<String> {
-        let mut encoder = Encoder::nota();
+        let mut encoder = Encoder::new();
         self.encode(&mut encoder)?;
         Ok(encoder.into_string())
     }
@@ -133,9 +163,11 @@ impl PersonaOutput {
 impl NotaEncode for PersonaOutput {
     fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
         match self {
-            Self::SchemaExample(output) => output.encode(encoder),
-            Self::ValidatedObject(output) => output.encode(encoder),
-            Self::ValidatedDocument(output) => output.encode(encoder),
+            Self::EngineStatusReport(output) => output.encode(encoder),
+            Self::ComponentStatusReport(output) => output.encode(encoder),
+            Self::ComponentStatusMissingReport(output) => output.encode(encoder),
+            Self::SupervisorActionAcceptedReport(output) => output.encode(encoder),
+            Self::SupervisorActionRejectedReport(output) => output.encode(encoder),
         }
     }
 }
@@ -144,9 +176,21 @@ impl NotaDecode for PersonaOutput {
     fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
         let head = decoder.peek_record_head()?;
         match head.as_str() {
-            "SchemaExample" => Ok(Self::SchemaExample(SchemaExample::decode(decoder)?)),
-            "ValidatedObject" => Ok(Self::ValidatedObject(ValidatedObject::decode(decoder)?)),
-            "ValidatedDocument" => Ok(Self::ValidatedDocument(ValidatedDocument::decode(decoder)?)),
+            "EngineStatusReport" => Ok(Self::EngineStatusReport(EngineStatusReport::decode(
+                decoder,
+            )?)),
+            "ComponentStatusReport" => Ok(Self::ComponentStatusReport(
+                ComponentStatusReport::decode(decoder)?,
+            )),
+            "ComponentStatusMissingReport" => Ok(Self::ComponentStatusMissingReport(
+                ComponentStatusMissingReport::decode(decoder)?,
+            )),
+            "SupervisorActionAcceptedReport" => Ok(Self::SupervisorActionAcceptedReport(
+                SupervisorActionAcceptedReport::decode(decoder)?,
+            )),
+            "SupervisorActionRejectedReport" => Ok(Self::SupervisorActionRejectedReport(
+                SupervisorActionRejectedReport::decode(decoder)?,
+            )),
             other => Err(nota_codec::Error::UnknownKindForVerb {
                 verb: "PersonaOutput",
                 got: other.to_string(),
@@ -184,7 +228,9 @@ impl CommandLine {
                 self.require_single_path_argument()?;
                 RequestFile::from_path(PathBuf::from(first)).decode()
             }
-            None => Ok(PersonaRequest::DescribeSchema(DescribeSchema {})),
+            None => Ok(PersonaRequest::EngineStatusQuery(EngineStatusQuery {
+                scope: EngineStatusScope::WholeEngine,
+            })),
         }
     }
 
