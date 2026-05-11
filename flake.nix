@@ -78,6 +78,16 @@
               exec ${pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox} "$@"
             '';
           };
+          personaEngineSandboxAttach = pkgs.writeShellApplication {
+            name = "persona-engine-sandbox-attach";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.util-linux
+            ];
+            text = ''
+              exec ${pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox-attach} "$@"
+            '';
+          };
         in
         {
           inherit
@@ -88,6 +98,7 @@
             cargoArtifacts
             personaDevStack
             personaEngineSandbox
+            personaEngineSandboxAttach
             ;
         };
     in
@@ -118,6 +129,7 @@
           persona-dev-stack = context.personaDevStack "run";
           persona-dev-stack-smoke = context.personaDevStack "smoke";
           persona-engine-sandbox = context.personaEngineSandbox;
+          persona-engine-sandbox-attach = context.personaEngineSandboxAttach;
         }
       );
 
@@ -280,6 +292,30 @@
                 test -f "$out/auth-isolation-witness.nota"
                 grep -Fq '(AuthIsolationWitness Passed)' "$out/auth-isolation-witness.nota"
               '';
+          persona-engine-sandbox-attach-script-builds =
+            context.pkgs.runCommand "persona-engine-sandbox-attach-script-builds" { }
+              ''
+                test -x ${self.packages.${system}.persona-engine-sandbox-attach}/bin/persona-engine-sandbox-attach
+                touch $out
+              '';
+          persona-engine-sandbox-attach-plans-host-ghostty =
+            context.pkgs.runCommand "persona-engine-sandbox-attach-plans-host-ghostty" { }
+              ''
+                mkdir -p "$out/run"
+                GHOSTTY_BIN="$out/fake-ghostty" \
+                  ${self.packages.${system}.persona-engine-sandbox-attach}/bin/persona-engine-sandbox-attach \
+                    --dry-run \
+                    --sandbox-dir "$out" \
+                    > "$out/attach.stdout"
+                test -f "$out/artifacts/host-attach.nota"
+                test -f "$out/artifacts/host-attach-command.txt"
+                grep -Fq '(WaylandIntoSandbox false)' "$out/artifacts/host-attach.nota"
+                grep -Fq "$out/run/cell.sock" "$out/artifacts/host-attach-command.txt"
+                grep -Fq 'terminal-cell-view' "$out/artifacts/host-attach-command.txt"
+                if grep -R -Fq 'WAYLAND_DISPLAY' "$out/artifacts"; then
+                  exit 1
+                fi
+              '';
           persona-engine-layout-uses-engine-id-scoped-paths = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -354,6 +390,12 @@
         persona-engine-sandbox = {
           type = "app";
           program = "${self.packages.${system}.persona-engine-sandbox}/bin/persona-engine-sandbox";
+        };
+        persona-engine-sandbox-attach = {
+          type = "app";
+          program = "${
+            self.packages.${system}.persona-engine-sandbox-attach
+          }/bin/persona-engine-sandbox-attach";
         };
       });
 

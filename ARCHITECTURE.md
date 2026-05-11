@@ -263,6 +263,13 @@ separate `CLAUDE_CONFIG_DIR`. Pi bootstrap creates isolated
 path; copying `~/.codex/auth.json` or `~/.claude/.credentials.json` for
 prompt-bearing tests is forbidden.
 
+The host-visible attach helper is `persona-engine-sandbox-attach`. It runs
+outside the sandbox, locates the sandbox `run/cell.sock`, and opens host
+Ghostty with host `terminal-cell-view`. The helper writes
+`artifacts/host-attach.nota` and `artifacts/host-attach-command.txt` so the
+exact view command is inspectable. It does not pass a Wayland socket into the
+sandbox; only the terminal-cell socket path crosses the boundary.
+
 The first daemon-first apex slice is present: `persona-daemon` binds a Unix socket,
 starts the Kameo `EngineManager`, accepts one Signal frame per connection,
 dispatches through `HandleEngineRequest`, writes one Signal reply frame, and
@@ -446,6 +453,9 @@ Migration rules:
 - Auth-isolation witnesses run the actual sandbox runner against fake host
   auth/session files and fail if host paths leak into artifacts, host files
   change, or credential files are copied into the sandbox.
+- Host attach uses `persona-engine-sandbox-attach`: Ghostty and
+  `terminal-cell-view` run on the host and attach to the sandbox cell socket.
+  Wayland is not passed into the sandbox for viewing.
 - Development runners push socket paths to components through environment and
   argv, never by filesystem discovery.
 - Production startup is systemd/NixOS-shaped; Rust systemd control is an
@@ -551,6 +561,8 @@ The apex repo owns tests that prove cross-component shape:
 | sandbox auth bootstrap emits real dedicated login surfaces | `nix flake check .#persona-engine-sandbox-bootstrap-auth-dry-run` |
 | Pi bootstrap creates isolated config/session directories | `nix flake check .#persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs` |
 | auth isolation witness protects host credential/session files | `nix flake check .#persona-engine-sandbox-auth-isolation-witness` |
+| host attach helper is a Nix-owned app | `nix flake check .#persona-engine-sandbox-attach-script-builds` |
+| host attach helper plans Ghostty without Wayland-in-sandbox | `nix flake check .#persona-engine-sandbox-attach-plans-host-ghostty` |
 | engine resources are scoped | `nix flake check .#persona-engine-layout-uses-engine-id-scoped-paths` |
 | socket policy is boundary-specific | `nix flake check .#persona-engine-layout-assigns-socket-modes-by-component-boundary` |
 | spawn envelopes carry manager-supplied peers | `nix flake check .#persona-spawn-envelope-carries-component-paths-and-peer-sockets` |
@@ -565,6 +577,7 @@ flake.nix        component flake composition
 TESTS.md         cross-component test architecture
 scripts/persona-engine-sandbox  systemd-run sandbox scaffold for full-engine witnesses
 scripts/persona-engine-sandbox-auth-isolation-witness  Nix witness for host auth/session isolation
+scripts/persona-engine-sandbox-attach  host Ghostty attach helper for sandbox cell sockets
 src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
 src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records

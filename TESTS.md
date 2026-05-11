@@ -83,6 +83,8 @@ What the check proves:
 | `persona-engine-sandbox-bootstrap-auth-dry-run` | Bootstrap dry-run emits the real dedicated auth surfaces: `codex login --device-auth`, separate `CLAUDE_CONFIG_DIR` login or token-file credential, and isolated Pi config/session directories. |
 | `persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs` | Live Pi bootstrap creates isolated config/session directories without touching paid-provider auth. |
 | `persona-engine-sandbox-auth-isolation-witness` | Runs the actual sandbox runner against fake host Codex/Claude/Pi auth/session files and proves they are not copied, modified, or leaked into artifacts. |
+| `persona-engine-sandbox-attach-script-builds` | The Nix-created host attach helper is executable. |
+| `persona-engine-sandbox-attach-plans-host-ghostty` | Dry-run host attach emits a Ghostty + `terminal-cell-view` command against the sandbox `run/cell.sock` and records that Wayland is not passed into the sandbox. |
 
 Run all checks:
 
@@ -103,6 +105,7 @@ nix run .#dev-stack
 nix run .#dev-stack-smoke
 nix run .#persona-engine-sandbox -- --harness pi --dry-run
 nix run .#persona-engine-sandbox -- --harness codex --bootstrap-auth --dry-run
+nix run .#persona-engine-sandbox-attach -- --sandbox-dir /tmp/persona-engine-sandbox.example --dry-run
 ```
 
 `persona-daemon` starts the daemon-first apex slice. It accepts an optional socket
@@ -156,6 +159,17 @@ style: it creates fake host `~/.codex`, `~/.claude`, and Pi session files, runs
 the real runner, and proves those files are unchanged while generated harness
 env files use sandbox or dedicated paths. This catches accidental regressions
 back toward live host auth/home usage.
+
+Host attach mode is deliberately separate from engine launch:
+
+```sh
+nix run .#persona-engine-sandbox-attach -- --sandbox-dir "$sandbox_dir"
+```
+
+It expects a terminal-cell socket at `$sandbox_dir/run/cell.sock`, opens host
+Ghostty with the packaged `terminal-cell-view`, and writes the planned command
+under `$sandbox_dir/artifacts/`. The viewer stays on the host side, so Wayland
+does not need to enter the sandbox.
 
 ---
 

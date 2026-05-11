@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+socket=""
+sandbox_dir=""
+ready_file=""
+dry_run=0
+ghostty_class="${TERMINAL_CELL_GHOSTTY_CLASS:-com.ligoldragon.persona.sandbox}"
+ghostty_bin="${GHOSTTY_BIN:-ghostty}"
+terminal_cell_view="${TERMINAL_CELL_VIEW:-terminal-cell-view}"
+
+usage() {
+  cat <<'EOF'
+usage: persona-engine-sandbox-attach (--sandbox-dir DIR | --socket PATH) [--ready-file PATH] [--class APP_ID] [--dry-run]
+
+Opens a host Ghostty window attached to a sandbox terminal-cell socket.
+Ghostty and terminal-cell-view run on the host; the sandbox only exposes the
+cell socket path under its run directory.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --sandbox-dir)
+      shift
+      sandbox_dir="${1:-}"
+      ;;
+    --socket)
+      shift
+      socket="${1:-}"
+      ;;
+    --ready-file)
+      shift
+      ready_file="${1:-}"
+      ;;
+    --class)
+      shift
+      ghostty_class="${1:-}"
+      ;;
+    --dry-run)
+      dry_run=1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'unknown argument: %s\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift || true
+done
+
+if [ -z "$socket" ]; then
+  if [ -z "$sandbox_dir" ]; then
+    printf '%s\n' 'missing --sandbox-dir or --socket' >&2
+    usage >&2
+    exit 2
+  fi
+  socket="$sandbox_dir/run/cell.sock"
+fi
+
+if [ -z "$ready_file" ]; then
+  if [ -n "$sandbox_dir" ]; then
+    mkdir -p "$sandbox_dir/artifacts"
+    ready_file="$sandbox_dir/artifacts/ghostty-view-ready"
+  else
+    ready_file="$(dirname "$socket")/ghostty-view-ready"
+  fi
+fi
+
+command=(
+  "$ghostty_bin"
+  --class="$ghostty_class"
+  -e
+  "$terminal_cell_view"
+  --socket
+  "$socket"
+  --ready-file
+  "$ready_file"
+)
+
+write_command_artifact() {
+  if [ -n "$sandbox_dir" ]; then
+    mkdir -p "$sandbox_dir/artifacts"
+    {
+      printf '%s\n' '(HostAttachCommand'
+      printf '  (Socket "%s")\n' "$socket"
+      printf '  (ReadyFile "%s")\n' "$ready_file"
+      printf '  (Viewer HostGhostty)\n'
+      printf '  (TerminalCellView HostProcess)\n'
+      printf '  (WaylandIntoSandbox false)\n'
+      printf ')\n'
+    } >"$sandbox_dir/artifacts/host-attach.nota"
+    printf '%q ' "${command[@]}" >"$sandbox_dir/artifacts/host-attach-command.txt"
+    printf '\n' >>"$sandbox_dir/artifacts/host-attach-command.txt"
+  fi
+}
+
+write_command_artifact
+
+if [ "$dry_run" -eq 1 ]; then
+  printf 'persona-engine-sandbox-attach dry-run=ready\n'
+  printf 'socket=%s\n' "$socket"
+  printf 'ready-file=%s\n' "$ready_file"
+  printf 'command='
+  printf '%q ' "${command[@]}"
+  printf '\n'
+  exit 0
+fi
+
+if [ ! -S "$socket" ]; then
+  printf 'terminal-cell socket is not available: %s\n' "$socket" >&2
+  exit 1
+fi
+
+setsid "${command[@]}" >"$(dirname "$ready_file")/ghostty.stdout" 2>"$(dirname "$ready_file")/ghostty.stderr" &
+printf 'persona-engine-sandbox-attach launched pid=%s\n' "$!"
+printf 'socket=%s\n' "$socket"
+printf 'ready-file=%s\n' "$ready_file"
