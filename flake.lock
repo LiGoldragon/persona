@@ -732,7 +732,8 @@
         "persona-terminal": "persona-terminal",
         "signal-persona": "signal-persona",
         "signal-persona-mind": "signal-persona-mind",
-        "signal-persona-system": "signal-persona-system"
+        "signal-persona-system": "signal-persona-system",
+        "terminal-cell": "terminal-cell"
       }
     },
     "rust-analyzer-src": {
@@ -1008,6 +1009,22 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "terminal-cell": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1778517338,
+        "narHash": "sha256-U7oMI5DWRrg/OFFJbob0RrTfqdzwTGNkmRs+w5Fb2pI=",
+        "owner": "LiGoldragon",
+        "repo": "terminal-cell",
+        "rev": "5d3babb806f4fe0359ac0831a4b06ab5769bc3f8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "LiGoldragon",
+        "repo": "terminal-cell",
         "type": "github"
       }
     }

@@ -9,10 +9,11 @@ credential_root=""
 dry_run=0
 inside_unit=0
 bootstrap_auth=0
+test_lane="dev-stack"
 
 usage() {
   cat <<'EOF'
-usage: persona-engine-sandbox --harness pi|claude|codex|codex-api [--sandbox-dir DIR] [--credential-root DIR] [--bootstrap-auth] [--dry-run] [--inside-unit]
+usage: persona-engine-sandbox --harness pi|claude|codex|codex-api|fixture [--test dev-stack|terminal-cell] [--sandbox-dir DIR] [--credential-root DIR] [--bootstrap-auth] [--dry-run] [--inside-unit]
 
 Creates the sandbox directory layout for a disposable Persona engine test and,
 unless --dry-run is supplied, enters it through systemd-run --user.
@@ -42,6 +43,10 @@ while [ "$#" -gt 0 ]; do
     --bootstrap-auth)
       bootstrap_auth=1
       ;;
+    --test)
+      shift
+      test_lane="${1:-}"
+      ;;
     --dry-run)
       dry_run=1
       ;;
@@ -68,9 +73,18 @@ if [ -z "$harness" ]; then
 fi
 
 case "$harness" in
-  pi|claude|codex|codex-api) ;;
+  pi|claude|codex|codex-api|fixture) ;;
   *)
     printf 'unsupported harness: %s\n' "$harness" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
+case "$test_lane" in
+  dev-stack|terminal-cell) ;;
+  *)
+    printf 'unsupported sandbox test lane: %s\n' "$test_lane" >&2
     usage >&2
     exit 2
     ;;
@@ -101,6 +115,7 @@ dev_stack_stderr="$artifact_dir/dev-stack.stderr"
 dev_stack_run_file="$artifact_dir/dev-stack-run.nota"
 dev_stack_process_file="$artifact_dir/dev-stack-processes.nota"
 dev_stack_socket_file="$artifact_dir/dev-stack-sockets.nota"
+pi_snapshot_file="$artifact_dir/pi-model-snapshot.nota"
 
 prepare_layout() {
   mkdir -p "$state_dir" "$run_dir" "$home_dir" "$work_dir" "$artifact_dir"
@@ -129,6 +144,9 @@ credential_policy() {
         printf '%s\n' '(CredentialPolicy CodexApi MissingDedicatedCredential "Codex API witness requires PERSONA_OPENAI_API_KEY_FILE.")'
       fi
       ;;
+    fixture)
+      printf '%s\n' '(CredentialPolicy Fixture NoExternalCredential "Deterministic terminal-cell fixture uses no provider credential.")'
+      ;;
   esac
 }
 
@@ -138,6 +156,7 @@ dedicated_credential_dir() {
     claude) printf '%s\n' "$credential_root/claude-config" ;;
     codex) printf '%s\n' "$credential_root/codex-home" ;;
     codex-api) printf '%s\n' "$credential_root/codex-api" ;;
+    fixture) printf '%s\n' "$credential_root/fixture" ;;
   esac
 }
 
@@ -149,7 +168,39 @@ resolve_pi_package_dir() {
 
   local pi_bin
   if pi_bin="$(command -v pi 2>/dev/null)"; then
-    dirname "$(dirname "$(readlink -f "$pi_bin")")"
+    local pi_root
+    pi_root="$(dirname "$(dirname "$(readlink -f "$pi_bin")")")"
+    if [ -f "$pi_root/lib/pi-monorepo/packages/coding-agent/package.json" ]; then
+      printf '%s\n' "$pi_root/lib/pi-monorepo/packages/coding-agent"
+    elif [ -f "$pi_root/lib/pi-monorepo/package.json" ]; then
+      printf '%s\n' "$pi_root/lib/pi-monorepo"
+    else
+      printf '%s\n' "$pi_root"
+    fi
+    return 0
+  fi
+
+  printf '%s\n' ''
+}
+
+resolve_pi_binary() {
+  if [ -n "${PERSONA_PI_BIN:-}" ]; then
+    if [ -e "$PERSONA_PI_BIN" ]; then
+      readlink -f "$PERSONA_PI_BIN"
+    else
+      printf '%s\n' "$PERSONA_PI_BIN"
+    fi
+    return 0
+  fi
+
+  local pi_bin
+  if pi_bin="$(command -v pi 2>/dev/null)"; then
+    readlink -f "$pi_bin"
+    return 0
+  fi
+
+  if [ -x "$HOME/.nix-profile/bin/pi" ]; then
+    readlink -f "$HOME/.nix-profile/bin/pi"
     return 0
   fi
 
@@ -162,6 +213,36 @@ write_codex_config() {
 model = "gpt-5.4-mini"
 model_reasoning_effort = "low"
 EOF
+}
+
+prepare_pi_model_snapshot() {
+  if [ "$harness" != "pi" ]; then
+    return 0
+  fi
+
+  local source_dir="${PERSONA_PI_SOURCE_CONFIG_DIR:-$HOME/.pi/agent}"
+  if [ ! -r "$source_dir/models.json" ]; then
+    printf 'Pi model snapshot requires readable %s/models.json\n' "$source_dir" >&2
+    exit 1
+  fi
+
+  mkdir -p "$home_dir/pi" "$home_dir/pi-session"
+  cp "$source_dir/models.json" "$home_dir/pi/models.json"
+  if [ -r "$source_dir/settings.json" ]; then
+    cp "$source_dir/settings.json" "$home_dir/pi/settings.json"
+  else
+    printf '%s\n' '{}' >"$home_dir/pi/settings.json"
+  fi
+  printf '%s\n' '{}' >"$home_dir/pi/auth.json"
+
+  {
+    printf '%s\n' '(PiModelSnapshot'
+    printf '  (Source "%s")\n' "$source_dir"
+    printf '  (Models "%s")\n' "$home_dir/pi/models.json"
+    printf '  (Settings "%s")\n' "$home_dir/pi/settings.json"
+    printf '  (Auth EmptyJson)\n'
+    printf ')\n'
+  } >"$pi_snapshot_file"
 }
 
 write_bootstrap_artifacts() {
@@ -199,6 +280,10 @@ write_bootstrap_artifacts() {
           printf '  (Command "set PERSONA_OPENAI_API_KEY_FILE to a dedicated API key file")\n'
           printf '  (AuthKind MissingDedicatedCredential)\n'
         fi
+        ;;
+      fixture)
+        printf '  (Command "no external credential")\n'
+        printf '  (AuthKind NoExternalCredential)\n'
         ;;
     esac
     printf '  (ForbiddenCopy "~/.codex/auth.json")\n'
@@ -239,6 +324,11 @@ if [ -n "\${CREDENTIALS_DIRECTORY:-}" ] && [ -r "\$CREDENTIALS_DIRECTORY/openai-
 fi
 EOF
       ;;
+    fixture)
+      cat >"$bootstrap_env_file" <<EOF
+export PERSONA_FIXTURE_HARNESS='terminal-cell'
+EOF
+      ;;
   esac
 }
 
@@ -274,7 +364,7 @@ prepare_bootstrap_dirs() {
     codex|codex-api)
       write_codex_config "$dedicated_dir"
       ;;
-    claude) ;;
+    claude|fixture) ;;
   esac
 }
 
@@ -284,6 +374,7 @@ harness_record() {
     claude) printf '%s\n' '(Harness Claude)' ;;
     codex) printf '%s\n' '(Harness Codex)' ;;
     codex-api) printf '%s\n' '(Harness CodexApi)' ;;
+    fixture) printf '%s\n' '(Harness Fixture)' ;;
   esac
 }
 
@@ -310,12 +401,23 @@ write_manifest() {
 write_harness_environment() {
   case "$harness" in
     pi)
+      local pi_package_dir
+      pi_package_dir="$(resolve_pi_package_dir)"
+      local pi_bin
+      pi_bin="$(resolve_pi_binary)"
       cat >"$artifact_dir/harness-env.sh" <<EOF
 export PI_CODING_AGENT_DIR='$home_dir/pi'
 export PI_CODING_AGENT_SESSION_DIR='$home_dir/pi-session'
-export PI_PACKAGE_DIR='\${PI_PACKAGE_DIR:-}'
+export PI_PACKAGE_DIR='$pi_package_dir'
+export PERSONA_PI_BIN='$pi_bin'
 export PERSONA_PI_PROVIDER='prometheus'
-export PERSONA_PI_MODEL='prometheus/glm-4.7-flash'
+export PERSONA_PI_MODEL='prometheus/qwen3.6-27b'
+export PERSONA_PI_THINKING='medium'
+EOF
+      ;;
+    fixture)
+      cat >"$artifact_dir/harness-env.sh" <<EOF
+export PERSONA_FIXTURE_HARNESS='terminal-cell'
 EOF
       ;;
     claude)
@@ -364,6 +466,7 @@ systemd_command() {
     --service-type=exec
     --setenv=PERSONA_BASH="$PERSONA_BASH"
     --setenv=PERSONA_DEV_STACK_SMOKE="${PERSONA_DEV_STACK_SMOKE:-}"
+    --setenv=PERSONA_TERMINAL_CELL_SMOKE="${PERSONA_TERMINAL_CELL_SMOKE:-}"
     --setenv=HOME="$home_dir"
     --property=PrivateUsers=yes
     --property=ProtectHome=tmpfs
@@ -373,6 +476,14 @@ systemd_command() {
 
   if [ -d "$credential_root" ]; then
     command+=(--property=ReadWritePaths="$credential_root")
+  fi
+
+  if [ "$harness" = "pi" ]; then
+    command+=(--setenv=PERSONA_PI_BIN="$(resolve_pi_binary)")
+    command+=(--setenv=PI_PACKAGE_DIR="$(resolve_pi_package_dir)")
+    command+=(--setenv=PERSONA_PI_PROVIDER=prometheus)
+    command+=(--setenv=PERSONA_PI_MODEL=prometheus/qwen3.6-27b)
+    command+=(--setenv=PERSONA_PI_THINKING=medium)
   fi
 
   if [ "$harness" = "claude" ] && [ -n "${PERSONA_CLAUDE_OAUTH_TOKEN_FILE:-}" ]; then
@@ -389,6 +500,8 @@ systemd_command() {
     --inside-unit
     --harness
     "$harness"
+    --test
+    "$test_lane"
     --sandbox-dir
     "$sandbox_dir"
     --credential-root
@@ -408,13 +521,36 @@ run_inside_unit() {
   write_manifest
   write_harness_environment
   . "$artifact_dir/harness-env.sh"
-  run_dev_stack_smoke
-  printf 'persona-engine-sandbox inside-unit=passed\n'
+  case "$test_lane" in
+    dev-stack) run_dev_stack_smoke ;;
+    terminal-cell) run_terminal_cell_smoke ;;
+  esac
+  printf 'persona-engine-sandbox inside-unit=passed test=%s\n' "$test_lane"
   printf 'sandbox=%s\n' "$sandbox_dir"
   printf 'manifest=%s\n' "$manifest_file"
-  printf 'dev-stack=%s\n' "$dev_stack_run_file"
-  printf 'processes=%s\n' "$dev_stack_process_file"
-  printf 'sockets=%s\n' "$dev_stack_socket_file"
+  case "$test_lane" in
+    dev-stack)
+      printf 'dev-stack=%s\n' "$dev_stack_run_file"
+      printf 'processes=%s\n' "$dev_stack_process_file"
+      printf 'sockets=%s\n' "$dev_stack_socket_file"
+      ;;
+    terminal-cell)
+      printf 'terminal-cell=%s\n' "$artifact_dir/terminal-cell-run.nota"
+      printf 'processes=%s\n' "$artifact_dir/terminal-cell-processes.nota"
+      printf 'sockets=%s\n' "$artifact_dir/terminal-cell-sockets.nota"
+      ;;
+  esac
+}
+
+run_terminal_cell_smoke() {
+  if [ -z "${PERSONA_TERMINAL_CELL_SMOKE:-}" ]; then
+    printf '%s\n' 'PERSONA_TERMINAL_CELL_SMOKE must point at persona-engine-sandbox-terminal-cell-smoke' >&2
+    exit 2
+  fi
+
+  "$PERSONA_TERMINAL_CELL_SMOKE" \
+    --sandbox-dir "$sandbox_dir" \
+    --harness "$harness"
 }
 
 run_dev_stack_smoke() {
@@ -497,6 +633,8 @@ run_outer() {
     exit 0
   fi
 
+  prepare_pi_model_snapshot
+
   exec $PERSONA_BASH -lc "$(systemd_command)"
 }
 
@@ -532,6 +670,11 @@ run_auth_bootstrap() {
       printf 'persona-engine-sandbox auth-bootstrap=ready\n'
       printf 'harness=codex-api\n'
       printf 'credential-file=%s\n' "$PERSONA_OPENAI_API_KEY_FILE"
+      ;;
+    fixture)
+      printf 'persona-engine-sandbox auth-bootstrap=ready\n'
+      printf 'harness=fixture\n'
+      printf 'environment=%s\n' "$bootstrap_env_file"
       ;;
   esac
 }

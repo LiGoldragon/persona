@@ -16,9 +16,10 @@
 Persona coordinates interactive AI harnesses as first-class participants in
 durable, inspectable engines. The top-level `persona-daemon` process is the
 host-level engine manager: it runs as the dedicated `persona` system user,
-supervises multiple engine instances, exposes engine status, classifies
-connections, and gives operators and harnesses one place to ask whether the
-total system is up, healthy, and coherent.
+supervises multiple engine instances, exposes engine status, allocates local
+socket/state boundaries, records origin context for audit, and gives operators
+and harnesses one place to ask whether the total system is up, healthy, and
+coherent.
 
 `signal-persona` is the management contract for the `persona` engine manager.
 It is the contract a client uses to ask for engine status, component health,
@@ -174,30 +175,26 @@ component desired state, lifecycle observations, and inter-engine route
 declarations. Every transition appends a typed event and reduces into the
 manager tables.
 
-## 1.6 · Connection Class and Routes
+## 1.6 · Local Boundary and Routes
 
-Every connection into a manager-owned engine carries a `ConnectionClass`
-minted by the engine boundary, never supplied by the agent:
+The local engine boundary is not an in-band proof scheme. `persona-daemon`
+creates the per-engine runtime directory, component sockets, filesystem modes,
+and child spawn envelopes. Local trust comes from the operating-system boundary:
+dedicated user, ownership, socket permissions, and the manager-controlled
+process tree.
 
-```text
-ConnectionClass =
-  Owner
-  | NonOwnerUser(Uid)
-  | System(SystemPrincipal)
-  | OtherPersona { engine_id, host }
-```
+Signal traffic may carry an origin/context tag for audit and mind policy, but
+agents do not get to assert authority by placing a field in a request. Runtime
+authorization lives at the receiving component and is based on the socket it is
+serving, the peer credentials it can observe, the manager-supplied spawn
+context, and the relevant contract. Persona-local components must not recreate
+an in-band proof or class gate inside their application payloads.
 
-The manager reads peer credentials, compares them with the engine owner,
-verifies cross-engine auth proofs when needed, and stamps the class onto the
-connection's Signal auth context. Components use the class as a policy axis:
-router quarantines non-owner messages, system gates privileged focus actions,
-harness redacts non-owner identity views, terminal gates programmatic input,
-and mind records non-owner work-graph mutations as suggestions until adopted.
-
-Inter-engine traffic requires an `EngineRoute`: a typed, manager-owned route
-record from one engine to another with allowed message kinds and an approval
-state. Human-owned engines require explicit owner approval on both sides;
-system-owned engines may use explicit `SystemApproved` policy records.
+Inter-engine routing remains a manager-level catalog concern. The manager may
+record typed route declarations between engines, owners, and hosts, but traffic
+flows only through explicitly configured component sockets and relation-specific
+Signal contracts. The exact cross-engine approval vocabulary belongs in the
+auth/route contract when that implementation wave starts.
 
 ## 1.7 · Startup Strategy
 
@@ -264,6 +261,19 @@ under `state/dev-stack`, starts real `persona-router-daemon` and
 `artifacts/`. This proves the sandbox envelope runs real component daemons
 inside the unit; it does not claim router-to-mind adjudication,
 persona-harness delivery, or a terminal-cell live-agent path yet.
+
+The terminal-cell sandbox lane is a separate witness. It runs
+`terminal-cell-daemon` directly at `$sandbox_dir/run/cell.sock`, launches one
+child harness inside the cell, drives the harness through the packaged
+`terminal-cell-send` / `terminal-cell-wait` / `terminal-cell-capture` clients,
+and writes `terminal-cell-run.nota`, `terminal-cell-processes.nota`,
+`terminal-cell-sockets.nota`, `terminal-cell-transcript.txt`,
+`terminal-cell-prompt.nota`, `host-attach.nota`, and
+`harness-environment.nota`. The fixture variant proves the terminal-cell lane
+deterministically; the Pi variant proves a real prompt-bearing local model
+harness can start inside the sandbox and receive input through terminal-cell.
+Pi snapshots only model catalog/settings into the isolated config directory and
+writes an empty auth file.
 
 The sandbox runner also owns the dedicated-auth bootstrap surface:
 `persona-engine-sandbox --bootstrap-auth --harness <kind>`. Codex bootstrap
@@ -342,11 +352,11 @@ channel-specific request/reply payloads.
 `signal-persona` is the contract for talking to the top-level `persona` engine
 manager. A client uses it to ask the engine manager for engine status,
 component health, engine-visible projections, and supervisor actions.
-It is also the home for engine catalog and route records: `EngineId`,
-`OwnerIdentity`, `ConnectionClass`, `EngineRoute`, `ComponentName`,
-`ComponentSet`, `DesiredState`, and shutdown/restart requests. If a second
-contract domain needs `ConnectionClass`, it may move down into `signal-core`;
-until then it remains part of the engine-manager contract.
+It is also the home for engine catalog and lifecycle records: `EngineId`,
+component desired state, component health, socket layout, spawn envelopes, and
+shutdown/restart requests. Authorization/provenance vocabulary belongs in the
+auth/route contract layer when it is needed; `signal-persona` should not grow a
+Persona-local in-band proof system.
 
 The `signal-persona-*` repos are relation-specific contracts between concrete
 components: mind, message, router, system, harness, terminal, and their
@@ -413,15 +423,15 @@ The central split:
 memory. The two communicate through explicit contracts when they need each
 other.
 
-Connection-class policy is component-owned:
+Runtime authorization and origin handling are component-owned:
 
-| Component | Class-aware behavior |
+| Component | Boundary behavior |
 |---|---|
 | `persona-router` | Applies router-owned authorized-channel state. Unknown or inactive channels park and ask `persona-mind` for adjudication. |
-| `persona-system` | Read observations are subscribable; privileged focus actions require `System(persona)`. |
-| `persona-harness` | Full harness identity is owner/system visible; non-owner views are redacted. |
-| `persona-terminal` | Programmatic input uses `ConnectionClass` at the gate; non-owner injections are dropped unless owner-approved. |
-| `persona-mind` | Non-owner work-graph mutations are third-party suggestions until the owner adopts them. |
+| `persona-system` | Publishes system observations through its contract; privileged focus actions are deferred to a later system authority design. |
+| `persona-harness` | Owns harness identity and lifecycle records; visibility policy is expressed through typed requests/replies, not string class checks. |
+| `persona-terminal` | Owns terminal input safety and prompt cleanliness. Its gate prevents human/programmatic interleaving; it is not an auth-proof gate. |
+| `persona-mind` | Adjudicates work graph, role, decision, and suggestion state through its own contract and durable store. |
 
 ## 6 · Lock Files and BEADS
 
@@ -471,8 +481,17 @@ Migration rules:
   at manifest writing.
 - The dev-stack sandbox smoke is a stateful Nix app because it starts PTY
   daemons; pure Nix checks only prove that the app is packaged.
+- The terminal-cell sandbox smoke is a separate stateful Nix app. It starts a
+  real `terminal-cell-daemon`, creates `run/cell.sock`, runs a child harness
+  inside the PTY, drives that harness with `terminal-cell-send`/`wait`, records
+  a transcript, and records a host attach command. It is deliberately separate
+  from `persona-dev-stack`, whose terminal socket is the persona-terminal
+  contract socket rather than the raw terminal-cell attach surface.
 - Prompt-bearing Claude/Codex sandbox tests require dedicated sandbox
   credentials; the runner never copies live host authentication files.
+- The Pi live-agent sandbox smoke may snapshot Pi `settings.json` and
+  `models.json` into the sandbox so local providers are known, but it writes an
+  empty Pi auth file and does not copy provider OAuth/API credentials.
 - Sandboxed engine artifacts are sanitized manifests and targeted witness
   outputs, not raw home snapshots.
 - Dedicated auth bootstrap is an explicit runner mode; prompt-bearing Codex
@@ -505,10 +524,11 @@ Migration rules:
   the message-proxy socket is group-writable for owner ingress.
 - Spawn envelopes carry the component's own state/socket paths and every peer
   socket path; components do not derive peers by scanning directories.
-- The manager mints `ConnectionClass` at the engine boundary; agents cannot
-  supply their own class.
-- Inter-engine routes are typed, manager-owned records and require owner or
-  system approval before traffic flows.
+- Local engine trust is created by manager-owned sockets, ownership, modes, and
+  spawn envelopes. Components do not accept agent-supplied in-band auth proofs
+  as authority.
+- Inter-engine routes are typed, manager-owned records; their exact approval
+  contract is deferred to the auth/route implementation wave.
 - Component spawn receives peer socket paths from the manager; components do
   not scan the filesystem to discover peers.
 - Components talk by Signal frames, not by opening another component's redb
@@ -536,8 +556,9 @@ Migration rules:
   status surface.
 - The `persona` runtime owns the manager catalog and supervises multiple
   per-engine component federations.
-- `ConnectionClass` is minted by the manager boundary and carried as auth
-  context through downstream Signal traffic.
+- Local engine authority comes from manager-created sockets, filesystem modes,
+  peer process context, and spawn envelopes; not from agent-supplied request
+  fields.
 - Each wire between components has a Signal contract repo.
 - Contract repos own types; runtime repos own behavior.
 - Runtime behavior lives in direct Kameo actors inside the owning component.
@@ -579,7 +600,7 @@ The apex repo owns tests that prove cross-component shape:
 | component databases are separate | router/mind/harness open distinct redb files. |
 | NOTA is the only text syntax | no CLI-only parser accepts non-NOTA command records. |
 | engine resources are scoped | generated state/socket paths include `EngineId`. |
-| connection class is manager-minted | request decoding rejects agent-supplied class fields. |
+| in-band auth proof is not accepted as authority | request decoding and component handlers ignore agent-supplied proof/class fields for local authority. |
 | persona CLI is daemon client | CLI accepts exactly one NOTA request and prints one NOTA reply. |
 | persona-daemon preserves unrelated files | daemon startup refuses a non-socket endpoint path instead of deleting it. |
 | manager catalog writes go through the writer actor | `nix flake check .#persona-manager-store-writes-engine-status-through-writer-actor` |
@@ -593,6 +614,8 @@ The apex repo owns tests that prove cross-component shape:
 | auth isolation witness protects host credential/session files | `nix flake check .#persona-engine-sandbox-auth-isolation-witness` |
 | host attach helper is a Nix-owned app | `nix flake check .#persona-engine-sandbox-attach-script-builds` |
 | sandbox dev-stack smoke is a Nix-owned stateful app | `nix flake check .#persona-engine-sandbox-dev-stack-smoke-script-builds`; run with `nix run .#persona-engine-sandbox-dev-stack-smoke` |
+| sandbox terminal-cell smoke is a Nix-owned stateful app | `nix flake check .#persona-engine-sandbox-terminal-cell-script-builds`; run fixture with `nix run .#persona-engine-sandbox-terminal-cell-fixture-smoke` |
+| sandbox terminal-cell Pi smoke uses local model config without copied auth | run with `nix run .#persona-engine-sandbox-terminal-cell-pi-smoke` and inspect `pi-model-snapshot.nota` plus `terminal-cell-transcript.txt` |
 | host attach helper plans Ghostty without Wayland-in-sandbox | `nix flake check .#persona-engine-sandbox-attach-plans-host-ghostty` |
 | optional bwrap strict profile is documented as a tiny bind set | `nix flake check .#persona-engine-sandbox-documents-bwrap-strict-profile` |
 | engine resources are scoped | `nix flake check .#persona-engine-layout-uses-engine-id-scoped-paths` |
@@ -610,6 +633,7 @@ TESTS.md         cross-component test architecture
 scripts/persona-engine-sandbox  systemd-run sandbox scaffold for full-engine witnesses
 scripts/persona-engine-sandbox-auth-isolation-witness  Nix witness for host auth/session isolation
 scripts/persona-engine-sandbox-attach  host Ghostty attach helper for sandbox cell sockets
+scripts/persona-engine-sandbox-terminal-cell-smoke  terminal-cell fixture/Pi live-agent sandbox witness
 src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
 src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records

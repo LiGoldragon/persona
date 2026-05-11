@@ -85,6 +85,7 @@ What the check proves:
 | `persona-engine-sandbox-auth-isolation-witness` | Runs the actual sandbox runner against fake host Codex/Claude/Pi auth/session files and proves they are not copied, modified, or leaked into artifacts. |
 | `persona-engine-sandbox-attach-script-builds` | The Nix-created host attach helper is executable. |
 | `persona-engine-sandbox-dev-stack-smoke-script-builds` | The Nix-created stateful sandbox dev-stack smoke app is executable. |
+| `persona-engine-sandbox-terminal-cell-script-builds` | The Nix-created terminal-cell smoke apps are executable and the persona flake packages `terminal-cell-daemon`, `terminal-cell-view`, `terminal-cell-send`, `terminal-cell-wait`, and `terminal-cell-capture`. |
 | `persona-engine-sandbox-attach-plans-host-ghostty` | Dry-run host attach emits a Ghostty + `terminal-cell-view` command against the sandbox `run/cell.sock` and records that Wayland is not passed into the sandbox. |
 | `persona-engine-sandbox-documents-bwrap-strict-profile` | Dry-run writes the optional bwrap strict-mount plan as a NOTA artifact with a tiny read-only/read-write bind set and no Wayland passthrough. |
 
@@ -107,6 +108,8 @@ nix run .#dev-stack
 nix run .#dev-stack-smoke
 nix run .#persona-engine-sandbox -- --harness pi --dry-run
 nix run .#persona-engine-sandbox-dev-stack-smoke
+nix run .#persona-engine-sandbox-terminal-cell-fixture-smoke
+nix run .#persona-engine-sandbox-terminal-cell-pi-smoke
 nix run .#persona-engine-sandbox -- --harness codex --bootstrap-auth --dry-run
 nix run .#persona-engine-sandbox-attach -- --sandbox-dir /tmp/persona-engine-sandbox.example --dry-run
 ```
@@ -153,6 +156,15 @@ not valid inside the pure Nix build sandbox. Real prompt-bearing Claude/Codex
 runs require dedicated sandbox credentials and are not driven from live host
 auth files.
 
+`persona-engine-sandbox-terminal-cell-fixture-smoke` and
+`persona-engine-sandbox-terminal-cell-pi-smoke` exercise the separate
+terminal-cell lane. They start a real `terminal-cell-daemon` at
+`$sandbox_dir/run/cell.sock`, drive it with Nix-packaged terminal-cell clients,
+write host attach artifacts, and capture the transcript. The fixture variant
+uses a deterministic shell child; the Pi variant starts the real Pi TUI with a
+local Prometheus-backed model. The Pi variant snapshots only `settings.json`
+and `models.json` into the sandbox and writes an empty `auth.json`.
+
 Auth bootstrap mode is the live handoff for those dedicated credentials:
 
 ```sh
@@ -192,8 +204,16 @@ systemd-run path remains the executable scaffold.
 
 ## Next witness
 
-The next load-bearing integration test targets the corrected first
-stack:
+The next load-bearing integration work is split by lane:
+
+| Lane | Current state | Next target |
+|---|---|---|
+| Router persistence | Planned | Router-shaped binary commits `signal-persona-message::Submit` through router-owned Sema/redb and emits `SubmitOk`. |
+| Sandbox dev-stack | Landed | Keep proving real persona daemons run under the systemd sandbox. |
+| Sandbox terminal-cell | Landed for fixture and Pi | Add dedicated Codex/Claude auth smoke after sandbox credentials are provisioned. |
+| Full federation | Not landed | Route message through router/mind/harness/terminal with durable traces. |
+
+The next router persistence witness targets the corrected first stack:
 
 ```mermaid
 flowchart LR

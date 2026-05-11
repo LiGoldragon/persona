@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${PERSONA_BASH:?PERSONA_BASH must point at bash}"
+: "${TERMINAL_CELL_DAEMON:?TERMINAL_CELL_DAEMON must point at terminal-cell-daemon}"
+: "${TERMINAL_CELL_SEND:?TERMINAL_CELL_SEND must point at terminal-cell-send}"
+: "${TERMINAL_CELL_WAIT:?TERMINAL_CELL_WAIT must point at terminal-cell-wait}"
+: "${TERMINAL_CELL_CAPTURE:?TERMINAL_CELL_CAPTURE must point at terminal-cell-capture}"
+: "${TERMINAL_CELL_VIEW:?TERMINAL_CELL_VIEW must point at terminal-cell-view}"
+: "${PERSONA_ENGINE_SANDBOX_ATTACH:?PERSONA_ENGINE_SANDBOX_ATTACH must point at persona-engine-sandbox-attach}"
+
+sandbox_dir=""
+harness="pi"
+
+usage() {
+  cat <<'EOF'
+usage: persona-engine-sandbox-terminal-cell-smoke --sandbox-dir DIR [--harness pi|fixture]
+
+Starts terminal-cell-daemon at DIR/run/cell.sock, runs one child harness inside
+the PTY, drives it through terminal-cell clients, and leaves inspectable
+artifacts under DIR/artifacts.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --sandbox-dir)
+      shift
+      sandbox_dir="${1:-}"
+      ;;
+    --harness)
+      shift
+      harness="${1:-}"
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'unknown argument: %s\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift || true
+done
+
+if [ -z "$sandbox_dir" ]; then
+  printf '%s\n' 'missing --sandbox-dir' >&2
+  usage >&2
+  exit 2
+fi
+
+case "$harness" in
+  pi|fixture) ;;
+  claude|codex|codex-api)
+    printf 'terminal-cell smoke does not yet support prompt-bearing %s; use pi first\n' "$harness" >&2
+    exit 2
+    ;;
+  *)
+    printf 'unsupported terminal-cell smoke harness: %s\n' "$harness" >&2
+    exit 2
+    ;;
+esac
+
+state_dir="$sandbox_dir/state/terminal-cell"
+run_dir="$sandbox_dir/run"
+work_dir="$sandbox_dir/work"
+artifact_dir="$sandbox_dir/artifacts"
+cell_socket="$run_dir/cell.sock"
+daemon_ready="$artifact_dir/terminal-cell-daemon.ready"
+daemon_stdout="$artifact_dir/terminal-cell-daemon.stdout"
+daemon_stderr="$artifact_dir/terminal-cell-daemon.stderr"
+run_file="$artifact_dir/terminal-cell-run.nota"
+process_file="$artifact_dir/terminal-cell-processes.nota"
+socket_file="$artifact_dir/terminal-cell-sockets.nota"
+transcript_file="$artifact_dir/terminal-cell-transcript.txt"
+prompt_file="$artifact_dir/terminal-cell-prompt.nota"
+harness_environment_file="$artifact_dir/harness-environment.nota"
+view_once_file="$artifact_dir/terminal-cell-view-once.txt"
+attach_stdout="$artifact_dir/host-attach.stdout"
+
+mkdir -p "$state_dir" "$run_dir" "$work_dir" "$artifact_dir"
+rm -f "$cell_socket" "$daemon_ready"
+mkfifo "$daemon_ready"
+
+daemon_pid=""
+
+cleanup() {
+  status="$?"
+  if [ -S "$cell_socket" ]; then
+    "$TERMINAL_CELL_CAPTURE" --socket "$cell_socket" >"$transcript_file" 2>/dev/null || true
+  fi
+  if [ -n "$daemon_pid" ]; then
+    kill -- "-$daemon_pid" 2>/dev/null || kill "$daemon_pid" 2>/dev/null || true
+    wait "$daemon_pid" 2>/dev/null || true
+  fi
+  rm -f "$daemon_ready"
+  return "$status"
+}
+trap cleanup EXIT INT TERM
+
+nota_string() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '"%s"' "$value"
+}
+
+write_harness_environment() {
+  {
+    printf '%s\n' '(HarnessEnvironment'
+    printf '  (Harness "%s")\n' "$harness"
+    printf '  (TerminalCellDaemon "%s")\n' "$TERMINAL_CELL_DAEMON"
+    printf '  (TerminalCellSend "%s")\n' "$TERMINAL_CELL_SEND"
+    printf '  (TerminalCellWait "%s")\n' "$TERMINAL_CELL_WAIT"
+    printf '  (TerminalCellCapture "%s")\n' "$TERMINAL_CELL_CAPTURE"
+    printf '  (TerminalCellView "%s")\n' "$TERMINAL_CELL_VIEW"
+    if [ "$harness" = "pi" ]; then
+      printf '  (PiBin "%s")\n' "${PERSONA_PI_BIN:-pi}"
+      printf '  (PiPackageDir "%s")\n' "${PI_PACKAGE_DIR:-}"
+      printf '  (PiConfigDir "%s")\n' "${PI_CODING_AGENT_DIR:-}"
+      printf '  (PiSessionDir "%s")\n' "${PI_CODING_AGENT_SESSION_DIR:-}"
+      printf '  (PiProvider "%s")\n' "${PERSONA_PI_PROVIDER:-prometheus}"
+      printf '  (PiModel "%s")\n' "${PERSONA_PI_MODEL:-prometheus/qwen3.6-27b}"
+      printf '  (PiThinking "%s")\n' "${PERSONA_PI_THINKING:-medium}"
+    fi
+    printf ')\n'
+  } >"$harness_environment_file"
+}
+
+fixture_command() {
+  child_command=(
+    "$PERSONA_BASH"
+    -lc
+    'printf "fixture-ready\n"; while IFS= read -r line; do printf "fixture-response:%s\n" "$line"; done'
+  )
+  ready_text="fixture-ready"
+  prompt_text="terminal-cell-smoke"
+  marker_text="fixture-response:terminal-cell-smoke"
+}
+
+pi_command() {
+  local pi_bin="${PERSONA_PI_BIN:-pi}"
+  if command -v "$pi_bin" >/dev/null 2>&1; then
+    pi_bin="$(command -v "$pi_bin")"
+  elif [ -x "$pi_bin" ]; then
+    :
+  else
+    printf 'pi not found; set PERSONA_PI_BIN=/path/to/pi\n' >&2
+    exit 1
+  fi
+
+  local pi_provider="${PERSONA_PI_PROVIDER:-prometheus}"
+  local pi_model="${PERSONA_PI_MODEL:-prometheus/qwen3.6-27b}"
+  local pi_thinking="${PERSONA_PI_THINKING:-medium}"
+  child_command=(
+    "$pi_bin"
+    --offline
+    --provider
+    "$pi_provider"
+    --model
+    "$pi_model"
+    --thinking
+    "$pi_thinking"
+    --no-tools
+    --no-extensions
+    --no-skills
+    --no-context-files
+    --no-session
+  )
+  ready_text="Pi can explain"
+  prompt_text="Reply with the uppercase token whose lowercase spelling is terminal-cell-pi-smoke-ok, replacing each hyphen with an underscore. No other text."
+  marker_text="TERMINAL_CELL_PI_SMOKE_OK"
+}
+
+case "$harness" in
+  fixture) fixture_command ;;
+  pi) pi_command ;;
+esac
+
+write_harness_environment
+
+{
+  printf '%s\n' '(TerminalCellPrompt'
+  printf '  (Harness "%s")\n' "$harness"
+  printf '  (Prompt "%s")\n' "$prompt_text"
+  printf '  (ExpectedMarker "%s")\n' "$marker_text"
+  printf ')\n'
+} >"$prompt_file"
+
+setsid "$TERMINAL_CELL_DAEMON" \
+  --socket "$cell_socket" \
+  -- "$PERSONA_BASH" -lc 'cd "$1" || exit; shift; exec "$@"' terminal-cell-smoke "$work_dir" "${child_command[@]}" \
+  >"$daemon_ready" 2>"$daemon_stderr" &
+daemon_pid="$!"
+
+if ! ready_line="$(timeout 20s head -n 1 "$daemon_ready")"; then
+  printf '%s\n' 'terminal-cell daemon did not announce readiness' >&2
+  exit 1
+fi
+printf '%s\n' "$ready_line" >"$daemon_stdout"
+
+timeout 90s "$TERMINAL_CELL_WAIT" --socket "$cell_socket" --text "$ready_text"
+"$TERMINAL_CELL_VIEW" --socket "$cell_socket" --once >"$view_once_file"
+TERMINAL_CELL_VIEW="$TERMINAL_CELL_VIEW" \
+  "$PERSONA_ENGINE_SANDBOX_ATTACH" --dry-run --sandbox-dir "$sandbox_dir" >"$attach_stdout"
+"$TERMINAL_CELL_SEND" --socket "$cell_socket" --line "$prompt_text"
+timeout 420s "$TERMINAL_CELL_WAIT" --socket "$cell_socket" --text "$marker_text"
+"$TERMINAL_CELL_CAPTURE" --socket "$cell_socket" >"$transcript_file"
+
+keep_seconds="${PERSONA_TERMINAL_CELL_KEEP_SECONDS:-0}"
+if [ "$keep_seconds" != "0" ]; then
+  sleep "$keep_seconds"
+fi
+
+{
+  printf '%s\n' '(TerminalCellRun'
+  printf '  (Mode LiveAgentSmoke)\n'
+  printf '  (Harness "%s")\n' "$harness"
+  printf '  (Status Passed)\n'
+  printf '  (Transcript "%s")\n' "$transcript_file"
+  printf ')\n'
+} >"$run_file"
+
+{
+  printf '%s\n' '(TerminalCellProcesses'
+  printf '  (DaemonPid %s)\n' "$daemon_pid"
+  printf '%s\n' '  (ChildCommand'
+  for part in "${child_command[@]}"; do
+    printf '    '
+    nota_string "$part"
+    printf '\n'
+  done
+  printf '  )\n'
+  printf ')\n'
+} >"$process_file"
+
+{
+  printf '%s\n' '(TerminalCellSockets'
+  printf '  (CellSocket "%s")\n' "$cell_socket"
+  printf ')\n'
+} >"$socket_file"
+
+printf 'persona-engine-sandbox-terminal-cell-smoke passed\n'
+printf 'socket=%s\n' "$cell_socket"
+printf 'transcript=%s\n' "$transcript_file"
