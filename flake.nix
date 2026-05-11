@@ -174,9 +174,9 @@
           type = "app";
           program = "${self.packages.${system}.persona-dev-stack-smoke}/bin/persona-dev-stack-smoke";
         };
-        personad = {
+        persona-daemon = {
           type = "app";
-          program = "${self.packages.${system}.default}/bin/personad";
+          program = "${self.packages.${system}.default}/bin/persona-daemon";
         };
       });
 

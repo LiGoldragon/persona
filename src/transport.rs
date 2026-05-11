@@ -202,12 +202,15 @@ impl PersonaDaemon {
         let listener = UnixListener::bind(self.endpoint.as_path())?;
         let manager = EngineManager::start().await;
 
-        println!("personad socket={}", self.endpoint.as_path().display());
+        println!(
+            "persona-daemon socket={}",
+            self.endpoint.as_path().display()
+        );
 
         loop {
             let (stream, _) = listener.accept().await?;
             if let Err(error) = self.handle_stream(stream, &manager).await {
-                eprintln!("personad connection error: {error}");
+                eprintln!("persona-daemon connection error: {error}");
             }
         }
     }

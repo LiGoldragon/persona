@@ -14,12 +14,12 @@ impl DaemonFixture {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("test root created");
         let socket = root.join("persona.sock");
-        let mut daemon = Command::new(env!("CARGO_BIN_EXE_personad"))
+        let mut daemon = Command::new(env!("CARGO_BIN_EXE_persona-daemon"))
             .arg(&socket)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .expect("personad starts");
+            .expect("persona-daemon starts");
 
         let stdout = daemon.stdout.take().expect("daemon stdout is piped");
         let mut reader = BufReader::new(stdout);
@@ -30,7 +30,7 @@ impl DaemonFixture {
 
         assert_eq!(
             readiness.trim(),
-            format!("personad socket={}", socket.display())
+            format!("persona-daemon socket={}", socket.display())
         );
 
         Self {
@@ -66,7 +66,7 @@ impl Drop for DaemonFixture {
 }
 
 #[test]
-fn constraint_persona_cli_talks_to_personad_over_socket() {
+fn constraint_persona_cli_talks_to_persona_daemon_over_socket() {
     let fixture = DaemonFixture::start();
 
     let shutdown = fixture.persona("(ComponentShutdown persona-terminal)");
@@ -78,7 +78,7 @@ fn constraint_persona_cli_talks_to_personad_over_socket() {
 }
 
 #[test]
-fn constraint_personad_does_not_delete_non_socket_endpoint_path() {
+fn constraint_persona_daemon_does_not_delete_non_socket_endpoint_path() {
     let root = std::env::temp_dir().join(format!(
         "persona-daemon-occupied-path-test-{}",
         std::process::id()
@@ -88,14 +88,14 @@ fn constraint_personad_does_not_delete_non_socket_endpoint_path() {
     let endpoint = root.join("persona.sock");
     std::fs::write(&endpoint, "not a socket").expect("regular file created");
 
-    let output = Command::new(env!("CARGO_BIN_EXE_personad"))
+    let output = Command::new(env!("CARGO_BIN_EXE_persona-daemon"))
         .arg(&endpoint)
         .output()
-        .expect("personad runs");
+        .expect("persona-daemon runs");
 
     assert!(
         !output.status.success(),
-        "personad should reject occupied path"
+        "persona-daemon should reject occupied path"
     );
     assert_eq!(
         std::fs::read_to_string(&endpoint).expect("regular file preserved"),

@@ -16,8 +16,8 @@ name = "persona"
 path = "src/main.rs"
 
 [[bin]]
-name = "personad"
-path = "src/bin/personad.rs"
+name = "persona-daemon"
+path = "src/bin/persona_daemon.rs"
 
 [dependencies]
 kameo                  = { version = "0.20", default-features = false }
