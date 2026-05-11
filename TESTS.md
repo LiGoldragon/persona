@@ -84,6 +84,7 @@ What the check proves:
 | `persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs` | Live Pi bootstrap creates isolated config/session directories without touching paid-provider auth. |
 | `persona-engine-sandbox-auth-isolation-witness` | Runs the actual sandbox runner against fake host Codex/Claude/Pi auth/session files and proves they are not copied, modified, or leaked into artifacts. |
 | `persona-engine-sandbox-attach-script-builds` | The Nix-created host attach helper is executable. |
+| `persona-engine-sandbox-dev-stack-smoke-script-builds` | The Nix-created stateful sandbox dev-stack smoke app is executable. |
 | `persona-engine-sandbox-attach-plans-host-ghostty` | Dry-run host attach emits a Ghostty + `terminal-cell-view` command against the sandbox `run/cell.sock` and records that Wayland is not passed into the sandbox. |
 | `persona-engine-sandbox-documents-bwrap-strict-profile` | Dry-run writes the optional bwrap strict-mount plan as a NOTA artifact with a tiny read-only/read-write bind set and no Wayland passthrough. |
 
@@ -105,6 +106,7 @@ nix run .#persona-daemon
 nix run .#dev-stack
 nix run .#dev-stack-smoke
 nix run .#persona-engine-sandbox -- --harness pi --dry-run
+nix run .#persona-engine-sandbox-dev-stack-smoke
 nix run .#persona-engine-sandbox -- --harness codex --bootstrap-auth --dry-run
 nix run .#persona-engine-sandbox-attach -- --sandbox-dir /tmp/persona-engine-sandbox.example --dry-run
 ```
@@ -135,11 +137,21 @@ router-to-harness-to-terminal delivery. It is a stateful app, not a pure
 `checks` derivation, because the terminal daemon owns a live PTY.
 
 `persona-engine-sandbox` is the scaffold for the full federation witness from
-`reports/designer/129-sandboxed-persona-engine-test.md`. In the first slice it
-creates the sandbox directory layout, writes NOTA manifests and credential
-policy artifacts, and plans the `systemd-run --user` invocation. The pure Nix
-checks exercise its dry-run mode; real prompt-bearing Claude/Codex runs require
-dedicated sandbox credentials and are not driven from live host auth files.
+`reports/designer/129-sandboxed-persona-engine-test.md`. It creates the
+sandbox directory layout, writes NOTA manifests and credential policy
+artifacts, and launches the `systemd-run --user` invocation. Its current
+inside-unit witness runs `persona-dev-stack-smoke` under
+`state/dev-stack`, then copies the dev-stack process/socket manifests into the
+sandbox artifacts directory. That proves the envelope runs real component
+daemons; it is still not the full router-to-mind-to-harness-to-terminal
+federation.
+
+Pure Nix checks exercise dry-run mode and packaging. The production-code
+inside-unit smoke is exposed as the stateful app
+`persona-engine-sandbox-dev-stack-smoke` because it starts PTY daemons and is
+not valid inside the pure Nix build sandbox. Real prompt-bearing Claude/Codex
+runs require dedicated sandbox credentials and are not driven from live host
+auth files.
 
 Auth bootstrap mode is the live handoff for those dedicated credentials:
 

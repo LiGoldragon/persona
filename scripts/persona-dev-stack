@@ -26,6 +26,8 @@ router_stderr="$root/router.stderr"
 terminal_stdout="$root/terminal.stdout"
 terminal_stderr="$root/terminal.stderr"
 environment_file="$root/env.sh"
+process_manifest="$root/process-manifest.nota"
+socket_manifest="$root/socket-manifest.nota"
 
 message_bin="$PERSONA_MESSAGE_PACKAGE/bin/message"
 router_bin="$PERSONA_ROUTER_PACKAGE/bin/persona-router-daemon"
@@ -97,6 +99,28 @@ export PATH='$PERSONA_MESSAGE_PACKAGE/bin:$PERSONA_ROUTER_PACKAGE/bin:$PERSONA_T
 EOF
 }
 
+write_stack_manifests() {
+  {
+    printf '%s\n' '(PersonaDevStackProcesses'
+    printf '  (Root "%s")\n' "$root"
+    printf '  (RouterPid %s)\n' "$router_pid"
+    printf '  (TerminalPid %s)\n' "$terminal_pid"
+    printf '  (RouterReady "%s")\n' "$router_stdout"
+    printf '  (TerminalReady "%s")\n' "$terminal_stdout"
+    printf ')\n'
+  } >"$process_manifest"
+
+  {
+    printf '%s\n' '(PersonaDevStackSockets'
+    printf '  (Root "%s")\n' "$root"
+    printf '  (RouterSocket "%s")\n' "$router_socket"
+    printf '  (TerminalSocket "%s")\n' "$terminal_socket"
+    printf '  (TerminalStore "%s")\n' "$terminal_store"
+    printf '  (MessageStore "%s")\n' "$message_store"
+    printf ')\n'
+  } >"$socket_manifest"
+}
+
 run_smoke() {
   local register_output="$root/message-register.nota"
   local send_output="$root/message-send.nota"
@@ -142,6 +166,7 @@ run_smoke() {
 start_router
 start_terminal
 write_environment_file
+write_stack_manifests
 
 case "$mode" in
   smoke)
@@ -150,6 +175,8 @@ case "$mode" in
   run)
     printf 'persona dev stack root=%s\n' "$root"
     printf 'environment=%s\n' "$environment_file"
+    printf 'process manifest=%s\n' "$process_manifest"
+    printf 'socket manifest=%s\n' "$socket_manifest"
     printf 'router socket=%s\n' "$router_socket"
     printf 'terminal socket=%s\n' "$terminal_socket"
     printf 'try: source %s\n' "$environment_file"

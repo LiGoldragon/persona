@@ -95,6 +95,12 @@ systemd_command_file="$artifact_dir/systemd-command.txt"
 bootstrap_file="$artifact_dir/auth-bootstrap.nota"
 bootstrap_env_file="$artifact_dir/auth-bootstrap-env.sh"
 bwrap_profile_file="$artifact_dir/bwrap-profile.nota"
+dev_stack_root="$state_dir/dev-stack"
+dev_stack_stdout="$artifact_dir/dev-stack.stdout"
+dev_stack_stderr="$artifact_dir/dev-stack.stderr"
+dev_stack_run_file="$artifact_dir/dev-stack-run.nota"
+dev_stack_process_file="$artifact_dir/dev-stack-processes.nota"
+dev_stack_socket_file="$artifact_dir/dev-stack-sockets.nota"
 
 prepare_layout() {
   mkdir -p "$state_dir" "$run_dir" "$home_dir" "$work_dir" "$artifact_dir"
@@ -352,12 +358,16 @@ systemd_command() {
   local command=(
     systemd-run
     --user
+    --pty
     --wait
     --collect
     --service-type=exec
+    --setenv=PERSONA_BASH="$PERSONA_BASH"
+    --setenv=PERSONA_DEV_STACK_SMOKE="${PERSONA_DEV_STACK_SMOKE:-}"
+    --setenv=HOME="$home_dir"
     --property=PrivateUsers=yes
-    --property=PrivateTmp=yes
     --property=ProtectHome=tmpfs
+    --property=WorkingDirectory="$work_dir"
     --property=ReadWritePaths="$sandbox_dir"
   )
 
@@ -374,6 +384,7 @@ systemd_command() {
 
   command+=(
     --
+    "$PERSONA_BASH"
     "$0"
     --inside-unit
     --harness
@@ -396,9 +407,66 @@ run_inside_unit() {
   prepare_layout
   write_manifest
   write_harness_environment
-  printf 'persona-engine-sandbox inside-unit=ready\n'
+  . "$artifact_dir/harness-env.sh"
+  run_dev_stack_smoke
+  printf 'persona-engine-sandbox inside-unit=passed\n'
   printf 'sandbox=%s\n' "$sandbox_dir"
   printf 'manifest=%s\n' "$manifest_file"
+  printf 'dev-stack=%s\n' "$dev_stack_run_file"
+  printf 'processes=%s\n' "$dev_stack_process_file"
+  printf 'sockets=%s\n' "$dev_stack_socket_file"
+}
+
+run_dev_stack_smoke() {
+  if [ -z "${PERSONA_DEV_STACK_SMOKE:-}" ]; then
+    printf '%s\n' 'PERSONA_DEV_STACK_SMOKE must point at persona-dev-stack-smoke' >&2
+    exit 2
+  fi
+
+  mkdir -p "$dev_stack_root"
+
+  local status
+  if PERSONA_STACK_ROOT="$dev_stack_root" \
+    PERSONA_STACK_KEEP_ARTIFACTS=1 \
+    "$PERSONA_DEV_STACK_SMOKE" \
+      >"$dev_stack_stdout" \
+      2>"$dev_stack_stderr"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  {
+    printf '%s\n' '(SandboxStackRun'
+    printf '  (Mode DevStackSmoke)\n'
+    printf '  (Root "%s")\n' "$dev_stack_root"
+    printf '  (Stdout "%s")\n' "$dev_stack_stdout"
+    printf '  (Stderr "%s")\n' "$dev_stack_stderr"
+    printf '  (ExitCode %s)\n' "$status"
+    if [ "$status" -eq 0 ]; then
+      printf '  (Status Passed)\n'
+    else
+      printf '  (Status Failed)\n'
+    fi
+    printf ')\n'
+  } >"$dev_stack_run_file"
+
+  if [ -f "$dev_stack_root/process-manifest.nota" ]; then
+    cp "$dev_stack_root/process-manifest.nota" "$dev_stack_process_file"
+  fi
+  if [ -f "$dev_stack_root/socket-manifest.nota" ]; then
+    cp "$dev_stack_root/socket-manifest.nota" "$dev_stack_socket_file"
+  fi
+
+  if [ "$status" -ne 0 ]; then
+    printf 'persona-dev-stack smoke failed; stdout=%s stderr=%s\n' \
+      "$dev_stack_stdout" \
+      "$dev_stack_stderr" >&2
+    if [ -s "$dev_stack_stderr" ]; then
+      cat "$dev_stack_stderr" >&2
+    fi
+    exit "$status"
+  fi
 }
 
 run_outer() {

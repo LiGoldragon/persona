@@ -75,6 +75,7 @@
             ];
             text = ''
               export PERSONA_BASH=${pkgs.bash}/bin/bash
+              export PERSONA_DEV_STACK_SMOKE=${personaDevStack "smoke"}/bin/persona-dev-stack-smoke
               exec ${pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox} "$@"
             '';
           };
@@ -88,6 +89,19 @@
               exec ${pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox-attach} "$@"
             '';
           };
+          personaEngineSandboxDevStackSmoke = pkgs.writeShellApplication {
+            name = "persona-engine-sandbox-dev-stack-smoke";
+            runtimeInputs = [
+              pkgs.coreutils
+            ];
+            text = ''
+              if [ "$#" -eq 0 ]; then
+                sandbox_dir="$(mktemp -d -t persona-engine-sandbox-dev-stack-smoke.XXXXXX)"
+                set -- --sandbox-dir "$sandbox_dir"
+              fi
+              exec ${personaEngineSandbox}/bin/persona-engine-sandbox --inside-unit --harness pi "$@"
+            '';
+          };
         in
         {
           inherit
@@ -99,6 +113,7 @@
             personaDevStack
             personaEngineSandbox
             personaEngineSandboxAttach
+            personaEngineSandboxDevStackSmoke
             ;
         };
     in
@@ -130,6 +145,7 @@
           persona-dev-stack-smoke = context.personaDevStack "smoke";
           persona-engine-sandbox = context.personaEngineSandbox;
           persona-engine-sandbox-attach = context.personaEngineSandboxAttach;
+          persona-engine-sandbox-dev-stack-smoke = context.personaEngineSandboxDevStackSmoke;
         }
       );
 
@@ -299,6 +315,14 @@
                 test -x ${self.packages.${system}.persona-engine-sandbox-attach}/bin/persona-engine-sandbox-attach
                 touch $out
               '';
+          persona-engine-sandbox-dev-stack-smoke-script-builds =
+            context.pkgs.runCommand "persona-engine-sandbox-dev-stack-smoke-script-builds" { }
+              ''
+                test -x ${
+                  self.packages.${system}.persona-engine-sandbox-dev-stack-smoke
+                }/bin/persona-engine-sandbox-dev-stack-smoke
+                touch $out
+              '';
           persona-engine-sandbox-attach-plans-host-ghostty =
             context.pkgs.runCommand "persona-engine-sandbox-attach-plans-host-ghostty" { }
               ''
@@ -413,6 +437,12 @@
           program = "${
             self.packages.${system}.persona-engine-sandbox-attach
           }/bin/persona-engine-sandbox-attach";
+        };
+        persona-engine-sandbox-dev-stack-smoke = {
+          type = "app";
+          program = "${
+            self.packages.${system}.persona-engine-sandbox-dev-stack-smoke
+          }/bin/persona-engine-sandbox-dev-stack-smoke";
         };
       });
 

@@ -243,13 +243,27 @@ registration/control surface has not landed yet.
 
 The full-engine sandbox witness starts at the same apex layer. The Nix app
 `persona-engine-sandbox` creates an isolated `state/`, `run/`, `home/`,
-`work/`, and `artifacts/` tree, writes NOTA manifests, and plans a
+`work/`, and `artifacts/` tree, writes NOTA manifests, and launches a
 `systemd-run --user` transient unit with `PrivateUsers=yes`,
-`PrivateTmp=yes`, `ProtectHome=tmpfs`, and `ReadWritePaths=<sandbox>`.
+`ProtectHome=tmpfs`, `ReadWritePaths=<sandbox>`, `WorkingDirectory=<work>`,
+and `HOME=<home>`. The current host-visible socket scaffold does not enable
+`PrivateTmp`: user-mode systemd mount namespacing rejects the writable
+host-visible sandbox path when `PrivateTmp` is combined with
+`ReadWritePaths`. The optional bwrap profile remains the next hardening layer.
 Prompt-bearing Claude and Codex runs require dedicated sandbox credentials;
 the runner does not copy live host `~/.claude` or `~/.codex` authentication
 files. Pi is the preferred first harness because it uses the local
 Prometheus-backed model path.
+
+The current executable inside-unit witness is still deliberately smaller than
+the final federation: it runs the existing Nix-built `persona-dev-stack-smoke`
+under `state/dev-stack`, starts real `persona-router-daemon` and
+`persona-terminal-daemon` processes, drives them through the `message` and
+`persona-terminal-signal` CLIs, and writes `dev-stack-run.nota`,
+`dev-stack-processes.nota`, and `dev-stack-sockets.nota` under
+`artifacts/`. This proves the sandbox envelope runs real component daemons
+inside the unit; it does not claim router-to-mind adjudication,
+persona-harness delivery, or a terminal-cell live-agent path yet.
 
 The sandbox runner also owns the dedicated-auth bootstrap surface:
 `persona-engine-sandbox --bootstrap-auth --harness <kind>`. Codex bootstrap
@@ -452,6 +466,11 @@ Migration rules:
   daemon startup commands are not left as ad hoc shell history.
 - The sandboxed engine runner is a Nix app named `persona-engine-sandbox`;
   its reusable command line is not an ad hoc shell transcript.
+- `persona-engine-sandbox --inside-unit` runs a Nix-built production-code
+  stack runner and leaves process/socket artifacts; it is not allowed to stop
+  at manifest writing.
+- The dev-stack sandbox smoke is a stateful Nix app because it starts PTY
+  daemons; pure Nix checks only prove that the app is packaged.
 - Prompt-bearing Claude/Codex sandbox tests require dedicated sandbox
   credentials; the runner never copies live host authentication files.
 - Sandboxed engine artifacts are sanitized manifests and targeted witness
@@ -573,6 +592,7 @@ The apex repo owns tests that prove cross-component shape:
 | Pi bootstrap creates isolated config/session directories | `nix flake check .#persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs` |
 | auth isolation witness protects host credential/session files | `nix flake check .#persona-engine-sandbox-auth-isolation-witness` |
 | host attach helper is a Nix-owned app | `nix flake check .#persona-engine-sandbox-attach-script-builds` |
+| sandbox dev-stack smoke is a Nix-owned stateful app | `nix flake check .#persona-engine-sandbox-dev-stack-smoke-script-builds`; run with `nix run .#persona-engine-sandbox-dev-stack-smoke` |
 | host attach helper plans Ghostty without Wayland-in-sandbox | `nix flake check .#persona-engine-sandbox-attach-plans-host-ghostty` |
 | optional bwrap strict profile is documented as a tiny bind set | `nix flake check .#persona-engine-sandbox-documents-bwrap-strict-profile` |
 | engine resources are scoped | `nix flake check .#persona-engine-layout-uses-engine-id-scoped-paths` |
