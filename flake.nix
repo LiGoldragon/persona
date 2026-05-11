@@ -222,8 +222,52 @@
                   --dry-run \
                   --harness claude \
                   --sandbox-dir "$root"
-                grep -Fq 'MissingDedicatedCredential' "$root/artifacts/credential-policy.nota"
+                grep -Fq 'DedicatedRunnerHome' "$root/artifacts/credential-policy.nota"
                 grep -Fq 'live host credentials are not copied' "$root/artifacts/credential-policy.nota"
+              '';
+          persona-engine-sandbox-bootstrap-auth-dry-run =
+            context.pkgs.runCommand "persona-engine-sandbox-bootstrap-auth-dry-run" { }
+              ''
+                mkdir -p "$out"
+                for harness in pi claude codex codex-api; do
+                  root=$out/$harness
+                  mkdir -p "$root"
+                  export PI_PACKAGE_DIR="$root/pi-package"
+                  ${self.packages.${system}.persona-engine-sandbox}/bin/persona-engine-sandbox \
+                    --dry-run \
+                    --bootstrap-auth \
+                    --harness "$harness" \
+                    --sandbox-dir "$root/sandbox" \
+                    --credential-root "$root/credentials" \
+                    > "$root/bootstrap.stdout"
+                  test -f "$root/sandbox/artifacts/auth-bootstrap.nota"
+                  test -f "$root/sandbox/artifacts/auth-bootstrap-env.sh"
+                  test ! -e "$root/credentials"
+                done
+                grep -Fq 'CODEX_HOME=' "$out/codex/sandbox/artifacts/auth-bootstrap-env.sh"
+                grep -Fq 'codex login --device-auth' "$out/codex/sandbox/artifacts/auth-bootstrap.nota"
+                grep -Fq 'CLAUDE_CONFIG_DIR=' "$out/claude/sandbox/artifacts/auth-bootstrap-env.sh"
+                grep -Fq 'CLAUDE_CODE_OAUTH_TOKEN=' "$out/claude/sandbox/artifacts/auth-bootstrap-env.sh"
+                grep -Fq 'claude auth login --claudeai' "$out/claude/sandbox/artifacts/auth-bootstrap.nota"
+                grep -Fq 'PI_CODING_AGENT_DIR=' "$out/pi/sandbox/artifacts/auth-bootstrap-env.sh"
+                grep -Fq 'PI_CODING_AGENT_SESSION_DIR=' "$out/pi/sandbox/artifacts/auth-bootstrap-env.sh"
+                grep -Fq "PI_PACKAGE_DIR='$out/pi/pi-package'" "$out/pi/sandbox/artifacts/auth-bootstrap-env.sh"
+                grep -Fq 'OPENAI_API_KEY=' "$out/codex-api/sandbox/artifacts/auth-bootstrap-env.sh"
+                grep -Fq 'PERSONA_OPENAI_API_KEY_FILE' "$out/codex-api/sandbox/artifacts/auth-bootstrap.nota"
+              '';
+          persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs =
+            context.pkgs.runCommand "persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs" { }
+              ''
+                mkdir -p "$out"
+                PI_PACKAGE_DIR="$out/pi-package" \
+                  ${self.packages.${system}.persona-engine-sandbox}/bin/persona-engine-sandbox \
+                    --bootstrap-auth \
+                    --harness pi \
+                    --sandbox-dir "$out/sandbox" \
+                    --credential-root "$out/credentials"
+                test -d "$out/credentials/pi/config"
+                test -d "$out/credentials/pi/session"
+                grep -Fq "PI_PACKAGE_DIR='$out/pi-package'" "$out/sandbox/artifacts/auth-bootstrap-env.sh"
               '';
           persona-engine-layout-uses-engine-id-scoped-paths = context.craneLib.cargoTest (
             context.commonArgs

@@ -5,18 +5,23 @@ set -euo pipefail
 
 harness=""
 sandbox_dir=""
+credential_root=""
 dry_run=0
 inside_unit=0
+bootstrap_auth=0
 
 usage() {
   cat <<'EOF'
-usage: persona-engine-sandbox --harness pi|claude|codex|codex-api [--sandbox-dir DIR] [--dry-run] [--inside-unit]
+usage: persona-engine-sandbox --harness pi|claude|codex|codex-api [--sandbox-dir DIR] [--credential-root DIR] [--bootstrap-auth] [--dry-run] [--inside-unit]
 
 Creates the sandbox directory layout for a disposable Persona engine test and,
 unless --dry-run is supplied, enters it through systemd-run --user.
 
 Prompt-bearing Claude/Codex runs require dedicated sandbox credentials. The
 runner does not copy live host ~/.claude or ~/.codex authentication files.
+
+Auth bootstrap mode creates or uses the dedicated per-runner credential
+location. It never copies the live host credential files.
 EOF
 }
 
@@ -29,6 +34,13 @@ while [ "$#" -gt 0 ]; do
     --sandbox-dir)
       shift
       sandbox_dir="${1:-}"
+      ;;
+    --credential-root)
+      shift
+      credential_root="${1:-}"
+      ;;
+    --bootstrap-auth)
+      bootstrap_auth=1
       ;;
     --dry-run)
       dry_run=1
@@ -68,6 +80,10 @@ if [ -z "$sandbox_dir" ]; then
   sandbox_dir="$(mktemp -d -t persona-engine-sandbox.XXXXXX)"
 fi
 
+if [ -z "$credential_root" ]; then
+  credential_root="${XDG_STATE_HOME:-$HOME/.local/state}/persona/engine-sandbox/credentials"
+fi
+
 state_dir="$sandbox_dir/state"
 run_dir="$sandbox_dir/run"
 home_dir="$sandbox_dir/home"
@@ -76,6 +92,8 @@ artifact_dir="$sandbox_dir/artifacts"
 manifest_file="$artifact_dir/sandbox-manifest.nota"
 policy_file="$artifact_dir/credential-policy.nota"
 systemd_command_file="$artifact_dir/systemd-command.txt"
+bootstrap_file="$artifact_dir/auth-bootstrap.nota"
+bootstrap_env_file="$artifact_dir/auth-bootstrap-env.sh"
 
 prepare_layout() {
   mkdir -p "$state_dir" "$run_dir" "$home_dir" "$work_dir" "$artifact_dir"
@@ -91,7 +109,7 @@ credential_policy() {
       if [ -n "${PERSONA_CLAUDE_OAUTH_TOKEN_FILE:-}" ]; then
         printf '%s\n' '(CredentialPolicy Claude IssuedSandboxCredential "LoadCredential claude-oauth-token from PERSONA_CLAUDE_OAUTH_TOKEN_FILE.")'
       else
-        printf '%s\n' '(CredentialPolicy Claude MissingDedicatedCredential "Prompt-bearing Claude requires PERSONA_CLAUDE_OAUTH_TOKEN_FILE; live host credentials are not copied.")'
+        printf '%s\n' '(CredentialPolicy Claude DedicatedRunnerHome "Prompt-bearing Claude requires PERSONA_CLAUDE_OAUTH_TOKEN_FILE or a dedicated CLAUDE_CONFIG_DIR login; live host credentials are not copied.")'
       fi
       ;;
     codex)
@@ -104,6 +122,133 @@ credential_policy() {
         printf '%s\n' '(CredentialPolicy CodexApi MissingDedicatedCredential "Codex API witness requires PERSONA_OPENAI_API_KEY_FILE.")'
       fi
       ;;
+  esac
+}
+
+dedicated_credential_dir() {
+  case "$harness" in
+    pi) printf '%s\n' "$credential_root/pi" ;;
+    claude) printf '%s\n' "$credential_root/claude-config" ;;
+    codex) printf '%s\n' "$credential_root/codex-home" ;;
+    codex-api) printf '%s\n' "$credential_root/codex-api" ;;
+  esac
+}
+
+resolve_pi_package_dir() {
+  if [ -n "${PI_PACKAGE_DIR:-}" ]; then
+    printf '%s\n' "$PI_PACKAGE_DIR"
+    return 0
+  fi
+
+  local pi_bin
+  if pi_bin="$(command -v pi 2>/dev/null)"; then
+    dirname "$(dirname "$(readlink -f "$pi_bin")")"
+    return 0
+  fi
+
+  printf '%s\n' ''
+}
+
+write_codex_config() {
+  local codex_home="$1"
+  cat >"$codex_home/config.toml" <<'EOF'
+model = "gpt-5.4-mini"
+model_reasoning_effort = "low"
+EOF
+}
+
+write_bootstrap_artifacts() {
+  local dedicated_dir
+  dedicated_dir="$(dedicated_credential_dir)"
+
+  {
+    printf '%s\n' '(AuthBootstrap'
+    printf '  %s\n' "$(harness_record)"
+    printf '  (CredentialRoot "%s")\n' "$credential_root"
+    printf '  (DedicatedCredentialDir "%s")\n' "$dedicated_dir"
+    case "$harness" in
+      pi)
+        printf '  (Command "mkdir -p %s/config %s/session")\n' "$dedicated_dir" "$dedicated_dir"
+        printf '  (AuthKind NoPaidProviderCredential)\n'
+        ;;
+      claude)
+        if [ -n "${PERSONA_CLAUDE_OAUTH_TOKEN_FILE:-}" ]; then
+          printf '  (Command "LoadCredential claude-oauth-token:%s")\n' "$PERSONA_CLAUDE_OAUTH_TOKEN_FILE"
+          printf '  (AuthKind IssuedSandboxCredential)\n'
+        else
+          printf '  (Command "CLAUDE_CONFIG_DIR=%s claude auth login --claudeai")\n' "$dedicated_dir"
+          printf '  (AuthKind DedicatedRunnerHome)\n'
+        fi
+        ;;
+      codex)
+        printf '  (Command "CODEX_HOME=%s codex login --device-auth")\n' "$dedicated_dir"
+        printf '  (AuthKind DedicatedRunnerHome)\n'
+        ;;
+      codex-api)
+        if [ -n "${PERSONA_OPENAI_API_KEY_FILE:-}" ]; then
+          printf '  (Command "LoadCredential openai-api-key:%s")\n' "$PERSONA_OPENAI_API_KEY_FILE"
+          printf '  (AuthKind IssuedSandboxCredential)\n'
+        else
+          printf '  (Command "set PERSONA_OPENAI_API_KEY_FILE to a dedicated API key file")\n'
+          printf '  (AuthKind MissingDedicatedCredential)\n'
+        fi
+        ;;
+    esac
+    printf '  (ForbiddenCopy "~/.codex/auth.json")\n'
+    printf '  (ForbiddenCopy "~/.claude/.credentials.json")\n'
+    printf ')\n'
+  } >"$bootstrap_file"
+
+  case "$harness" in
+    pi)
+      local pi_package_dir="$(
+        resolve_pi_package_dir
+      )"
+      cat >"$bootstrap_env_file" <<EOF
+export PI_CODING_AGENT_DIR='$dedicated_dir/config'
+export PI_CODING_AGENT_SESSION_DIR='$dedicated_dir/session'
+export PI_PACKAGE_DIR='$pi_package_dir'
+export PERSONA_PI_PROVIDER='prometheus'
+export PERSONA_PI_MODEL='prometheus/glm-4.7-flash'
+EOF
+      ;;
+    claude)
+      cat >"$bootstrap_env_file" <<EOF
+export CLAUDE_CONFIG_DIR='$dedicated_dir'
+export CLAUDE_CODE_SKIP_PROMPT_HISTORY='1'
+export ANTHROPIC_MODEL='claude-haiku-4-5'
+if [ -n "\${CREDENTIALS_DIRECTORY:-}" ] && [ -r "\$CREDENTIALS_DIRECTORY/claude-oauth-token" ]; then
+  export CLAUDE_CODE_OAUTH_TOKEN="\$(cat "\$CREDENTIALS_DIRECTORY/claude-oauth-token")"
+fi
+EOF
+      ;;
+    codex|codex-api)
+      cat >"$bootstrap_env_file" <<EOF
+export CODEX_HOME='$dedicated_dir'
+export PERSONA_CODEX_MODEL='$(if [ "$harness" = "codex-api" ]; then printf '%s' 'gpt-5-nano'; else printf '%s' 'gpt-5.4-mini'; fi)'
+export PERSONA_CODEX_REASONING_EFFORT='low'
+if [ -n "\${CREDENTIALS_DIRECTORY:-}" ] && [ -r "\$CREDENTIALS_DIRECTORY/openai-api-key" ]; then
+  export OPENAI_API_KEY="\$(cat "\$CREDENTIALS_DIRECTORY/openai-api-key")"
+fi
+EOF
+      ;;
+  esac
+}
+
+prepare_bootstrap_dirs() {
+  local dedicated_dir
+  dedicated_dir="$(dedicated_credential_dir)"
+
+  mkdir -p "$dedicated_dir"
+
+  case "$harness" in
+    pi)
+      mkdir -p "$dedicated_dir/config" "$dedicated_dir/session"
+      ;;
+    codex|codex-api)
+      write_codex_config "$dedicated_dir"
+      ;;
+    claude) ;;
   esac
 }
 
@@ -126,10 +271,13 @@ write_manifest() {
     printf '  (HomeDir "%s")\n' "$home_dir"
     printf '  (WorkDir "%s")\n' "$work_dir"
     printf '  (ArtifactDir "%s")\n' "$artifact_dir"
+    printf '  (CredentialRoot "%s")\n' "$credential_root"
+    printf '  (DedicatedCredentialDir "%s")\n' "$(dedicated_credential_dir)"
     printf '  (PromptBearingExternalAuth DedicatedSandboxCredential)\n'
     printf ')\n'
   } >"$manifest_file"
   credential_policy >"$policy_file"
+  write_bootstrap_artifacts
 }
 
 write_harness_environment() {
@@ -144,15 +292,24 @@ export PERSONA_PI_MODEL='prometheus/glm-4.7-flash'
 EOF
       ;;
     claude)
+      local claude_config_dir="$home_dir/.claude"
+      if [ -z "${PERSONA_CLAUDE_OAUTH_TOKEN_FILE:-}" ]; then
+        claude_config_dir="$(dedicated_credential_dir)"
+      fi
       cat >"$artifact_dir/harness-env.sh" <<EOF
-export CLAUDE_CONFIG_DIR='$home_dir/.claude'
+export CLAUDE_CONFIG_DIR='$claude_config_dir'
 export CLAUDE_CODE_SKIP_PROMPT_HISTORY='1'
 export ANTHROPIC_MODEL='claude-haiku-4-5'
+if [ -n "\${CREDENTIALS_DIRECTORY:-}" ] && [ -r "\$CREDENTIALS_DIRECTORY/claude-oauth-token" ]; then
+  export CLAUDE_CODE_OAUTH_TOKEN="\$(cat "\$CREDENTIALS_DIRECTORY/claude-oauth-token")"
+fi
 EOF
       ;;
     codex)
+      local codex_home
+      codex_home="$(dedicated_credential_dir)"
       cat >"$artifact_dir/harness-env.sh" <<EOF
-export CODEX_HOME='$home_dir/.codex'
+export CODEX_HOME='$codex_home'
 export PERSONA_CODEX_MODEL='gpt-5.4-mini'
 export PERSONA_CODEX_REASONING_EFFORT='low'
 EOF
@@ -162,6 +319,9 @@ EOF
 export CODEX_HOME='$home_dir/.codex'
 export PERSONA_CODEX_MODEL='gpt-5-nano'
 export PERSONA_CODEX_REASONING_EFFORT='low'
+if [ -n "\${CREDENTIALS_DIRECTORY:-}" ] && [ -r "\$CREDENTIALS_DIRECTORY/openai-api-key" ]; then
+  export OPENAI_API_KEY="\$(cat "\$CREDENTIALS_DIRECTORY/openai-api-key")"
+fi
 EOF
       ;;
   esac
@@ -180,6 +340,10 @@ systemd_command() {
     --property=ReadWritePaths="$sandbox_dir"
   )
 
+  if [ -d "$credential_root" ]; then
+    command+=(--property=ReadWritePaths="$credential_root")
+  fi
+
   if [ "$harness" = "claude" ] && [ -n "${PERSONA_CLAUDE_OAUTH_TOKEN_FILE:-}" ]; then
     command+=(--property=LoadCredential=claude-oauth-token:"$PERSONA_CLAUDE_OAUTH_TOKEN_FILE")
   fi
@@ -195,6 +359,8 @@ systemd_command() {
     "$harness"
     --sandbox-dir
     "$sandbox_dir"
+    --credential-root
+    "$credential_root"
   )
 
   printf '%q ' "${command[@]}"
@@ -220,6 +386,20 @@ run_outer() {
   write_harness_environment
   write_systemd_command
 
+  if [ "$bootstrap_auth" -eq 1 ]; then
+    if [ "$dry_run" -eq 1 ]; then
+      printf 'persona-engine-sandbox auth-bootstrap=dry-run\n'
+      printf 'sandbox=%s\n' "$sandbox_dir"
+      printf 'bootstrap=%s\n' "$bootstrap_file"
+      printf 'environment=%s\n' "$bootstrap_env_file"
+      exit 0
+    fi
+
+    prepare_bootstrap_dirs
+    run_auth_bootstrap
+    exit 0
+  fi
+
   if [ "$dry_run" -eq 1 ]; then
     printf 'persona-engine-sandbox dry-run=ready\n'
     printf 'sandbox=%s\n' "$sandbox_dir"
@@ -229,6 +409,42 @@ run_outer() {
   fi
 
   exec $PERSONA_BASH -lc "$(systemd_command)"
+}
+
+run_auth_bootstrap() {
+  local dedicated_dir
+  dedicated_dir="$(dedicated_credential_dir)"
+
+  case "$harness" in
+    pi)
+      printf 'persona-engine-sandbox auth-bootstrap=ready\n'
+      printf 'harness=pi\n'
+      printf 'environment=%s\n' "$bootstrap_env_file"
+      ;;
+    claude)
+      if [ -n "${PERSONA_CLAUDE_OAUTH_TOKEN_FILE:-}" ]; then
+        test -r "$PERSONA_CLAUDE_OAUTH_TOKEN_FILE"
+        printf 'persona-engine-sandbox auth-bootstrap=ready\n'
+        printf 'harness=claude\n'
+        printf 'credential-file=%s\n' "$PERSONA_CLAUDE_OAUTH_TOKEN_FILE"
+      else
+        CLAUDE_CONFIG_DIR="$dedicated_dir" claude auth login --claudeai
+      fi
+      ;;
+    codex)
+      CODEX_HOME="$dedicated_dir" codex login --device-auth
+      ;;
+    codex-api)
+      if [ -z "${PERSONA_OPENAI_API_KEY_FILE:-}" ]; then
+        printf '%s\n' 'PERSONA_OPENAI_API_KEY_FILE must point at a dedicated API key file' >&2
+        exit 2
+      fi
+      test -r "$PERSONA_OPENAI_API_KEY_FILE"
+      printf 'persona-engine-sandbox auth-bootstrap=ready\n'
+      printf 'harness=codex-api\n'
+      printf 'credential-file=%s\n' "$PERSONA_OPENAI_API_KEY_FILE"
+      ;;
+  esac
 }
 
 if [ "$inside_unit" -eq 1 ]; then

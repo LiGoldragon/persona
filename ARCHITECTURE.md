@@ -251,6 +251,18 @@ the runner does not copy live host `~/.claude` or `~/.codex` authentication
 files. Pi is the preferred first harness because it uses the local
 Prometheus-backed model path.
 
+The sandbox runner also owns the dedicated-auth bootstrap surface:
+`persona-engine-sandbox --bootstrap-auth --harness <kind>`. Codex bootstrap
+uses a separate sandbox `CODEX_HOME` and the real `codex login --device-auth`
+flow so the host browser can authorize a distinct `auth.json`. Claude
+bootstrap either consumes a dedicated `PERSONA_CLAUDE_OAUTH_TOKEN_FILE`
+through `LoadCredential=` or runs `claude auth login --claudeai` under a
+separate `CLAUDE_CONFIG_DIR`. Pi bootstrap creates isolated
+`PI_CODING_AGENT_DIR` and `PI_CODING_AGENT_SESSION_DIR` paths and records
+`PI_PACKAGE_DIR`. This bootstrap path is specifically not a host-auth copy
+path; copying `~/.codex/auth.json` or `~/.claude/.credentials.json` for
+prompt-bearing tests is forbidden.
+
 The first daemon-first apex slice is present: `persona-daemon` binds a Unix socket,
 starts the Kameo `EngineManager`, accepts one Signal frame per connection,
 dispatches through `HandleEngineRequest`, writes one Signal reply frame, and
@@ -429,6 +441,8 @@ Migration rules:
   credentials; the runner never copies live host authentication files.
 - Sandboxed engine artifacts are sanitized manifests and targeted witness
   outputs, not raw home snapshots.
+- Dedicated auth bootstrap is an explicit runner mode; prompt-bearing Codex
+  and Claude tests never bootstrap by copying live host OAuth files.
 - Development runners push socket paths to components through environment and
   argv, never by filesystem discovery.
 - Production startup is systemd/NixOS-shaped; Rust systemd control is an
@@ -531,6 +545,8 @@ The apex repo owns tests that prove cross-component shape:
 | sandbox runner is a Nix-owned app | `nix flake check .#persona-engine-sandbox-script-builds` |
 | sandbox runner supports each first harness name | `nix flake check .#persona-engine-sandbox-supports-all-harnesses` |
 | sandbox runner documents dedicated auth | `nix flake check .#persona-engine-sandbox-documents-dedicated-auth` |
+| sandbox auth bootstrap emits real dedicated login surfaces | `nix flake check .#persona-engine-sandbox-bootstrap-auth-dry-run` |
+| Pi bootstrap creates isolated config/session directories | `nix flake check .#persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs` |
 | engine resources are scoped | `nix flake check .#persona-engine-layout-uses-engine-id-scoped-paths` |
 | socket policy is boundary-specific | `nix flake check .#persona-engine-layout-assigns-socket-modes-by-component-boundary` |
 | spawn envelopes carry manager-supplied peers | `nix flake check .#persona-spawn-envelope-carries-component-paths-and-peer-sockets` |

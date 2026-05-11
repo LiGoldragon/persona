@@ -80,6 +80,8 @@ What the check proves:
 | `persona-engine-sandbox-script-builds` | The Nix-created sandbox runner is executable. |
 | `persona-engine-sandbox-supports-all-harnesses` | Dry-run mode creates isolated `state/`, `run/`, `home/`, `work/`, and `artifacts/` directories for `pi`, `claude`, `codex`, and `codex-api`. |
 | `persona-engine-sandbox-documents-dedicated-auth` | Dry-run credential policy artifacts say prompt-bearing Claude/Codex runs need dedicated sandbox credentials and do not copy live host auth. |
+| `persona-engine-sandbox-bootstrap-auth-dry-run` | Bootstrap dry-run emits the real dedicated auth surfaces: `codex login --device-auth`, separate `CLAUDE_CONFIG_DIR` login or token-file credential, and isolated Pi config/session directories. |
+| `persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs` | Live Pi bootstrap creates isolated config/session directories without touching paid-provider auth. |
 
 Run all checks:
 
@@ -99,6 +101,7 @@ nix run .#persona-daemon
 nix run .#dev-stack
 nix run .#dev-stack-smoke
 nix run .#persona-engine-sandbox -- --harness pi --dry-run
+nix run .#persona-engine-sandbox -- --harness codex --bootstrap-auth --dry-run
 ```
 
 `persona-daemon` starts the daemon-first apex slice. It accepts an optional socket
@@ -132,6 +135,20 @@ creates the sandbox directory layout, writes NOTA manifests and credential
 policy artifacts, and plans the `systemd-run --user` invocation. The pure Nix
 checks exercise its dry-run mode; real prompt-bearing Claude/Codex runs require
 dedicated sandbox credentials and are not driven from live host auth files.
+
+Auth bootstrap mode is the live handoff for those dedicated credentials:
+
+```sh
+nix run .#persona-engine-sandbox -- --harness codex --bootstrap-auth
+nix run .#persona-engine-sandbox -- --harness claude --bootstrap-auth
+nix run .#persona-engine-sandbox -- --harness pi --bootstrap-auth
+```
+
+Codex uses a dedicated runner `CODEX_HOME` and `codex login --device-auth`.
+Claude uses `PERSONA_CLAUDE_OAUTH_TOKEN_FILE` when present, otherwise a
+separate `CLAUDE_CONFIG_DIR` login. Pi creates isolated config/session
+directories and records the package path used for the local Prometheus-backed
+model path.
 
 ---
 
