@@ -67,6 +67,17 @@
                 exec ${pkgs.bash}/bin/bash ${./scripts/persona-dev-stack} ${mode} "$@"
               '';
             };
+          personaEngineSandbox = pkgs.writeShellApplication {
+            name = "persona-engine-sandbox";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.systemd
+            ];
+            text = ''
+              export PERSONA_BASH=${pkgs.bash}/bin/bash
+              exec ${pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox} "$@"
+            '';
+          };
         in
         {
           inherit
@@ -76,6 +87,7 @@
             commonArgs
             cargoArtifacts
             personaDevStack
+            personaEngineSandbox
             ;
         };
     in
@@ -105,6 +117,7 @@
           persona-terminal = inputs.persona-terminal.packages.${system}.default;
           persona-dev-stack = context.personaDevStack "run";
           persona-dev-stack-smoke = context.personaDevStack "smoke";
+          persona-engine-sandbox = context.personaEngineSandbox;
         }
       );
 
@@ -158,6 +171,60 @@
             test -x ${self.packages.${system}.persona-dev-stack-smoke}/bin/persona-dev-stack-smoke
             touch $out
           '';
+          persona-engine-sandbox-script-builds =
+            context.pkgs.runCommand "persona-engine-sandbox-script-builds" { }
+              ''
+                test -x ${self.packages.${system}.persona-engine-sandbox}/bin/persona-engine-sandbox
+                touch $out
+              '';
+          persona-engine-sandbox-supports-all-harnesses =
+            context.pkgs.runCommand "persona-engine-sandbox-supports-all-harnesses" { }
+              ''
+                mkdir -p "$out"
+                for harness in pi claude codex codex-api; do
+                  root=$out/$harness
+                  mkdir -p "$root"
+                  ${self.packages.${system}.persona-engine-sandbox}/bin/persona-engine-sandbox \
+                    --dry-run \
+                    --harness "$harness" \
+                    --sandbox-dir "$root" \
+                    > "$root/dry-run.stdout"
+                  test -d "$root/state"
+                  test -d "$root/run"
+                  test -d "$root/home"
+                  test -d "$root/work"
+                  test -d "$root/artifacts"
+                  test -f "$root/artifacts/sandbox-manifest.nota"
+                  test -f "$root/artifacts/credential-policy.nota"
+                  test -f "$root/artifacts/systemd-command.txt"
+                done
+                grep -Fq '(Harness Pi)' "$out/pi/artifacts/sandbox-manifest.nota"
+                grep -Fq '(Harness Claude)' "$out/claude/artifacts/sandbox-manifest.nota"
+                grep -Fq '(Harness Codex)' "$out/codex/artifacts/sandbox-manifest.nota"
+                grep -Fq '(Harness CodexApi)' "$out/codex-api/artifacts/sandbox-manifest.nota"
+              '';
+          persona-engine-sandbox-documents-dedicated-auth =
+            context.pkgs.runCommand "persona-engine-sandbox-documents-dedicated-auth" { }
+              ''
+                mkdir -p "$out"
+                root=$out/codex
+                mkdir -p "$root"
+                ${self.packages.${system}.persona-engine-sandbox}/bin/persona-engine-sandbox \
+                  --dry-run \
+                  --harness codex \
+                  --sandbox-dir "$root"
+                grep -Fq 'DedicatedRunnerHome' "$root/artifacts/credential-policy.nota"
+                grep -Fq 'live host auth.json is not copied' "$root/artifacts/credential-policy.nota"
+
+                root=$out/claude
+                mkdir -p "$root"
+                ${self.packages.${system}.persona-engine-sandbox}/bin/persona-engine-sandbox \
+                  --dry-run \
+                  --harness claude \
+                  --sandbox-dir "$root"
+                grep -Fq 'MissingDedicatedCredential' "$root/artifacts/credential-policy.nota"
+                grep -Fq 'live host credentials are not copied' "$root/artifacts/credential-policy.nota"
+              '';
           persona-engine-layout-uses-engine-id-scoped-paths = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -193,13 +260,15 @@
               cargoTestExtraArgs = "--test manager_store constraint_manager_store_writes_engine_status_through_writer_actor -- --exact";
             }
           );
-          persona-engine-manager-persists-component-mutation-through-manager-store = context.craneLib.cargoTest (
-            context.commonArgs
-            // {
-              inherit (context) cargoArtifacts;
-              cargoTestExtraArgs = "--test manager_store constraint_engine_manager_persists_component_mutation_through_manager_store -- --exact";
-            }
-          );
+          persona-engine-manager-persists-component-mutation-through-manager-store =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager_store constraint_engine_manager_persists_component_mutation_through_manager_store -- --exact";
+                }
+              );
           persona-daemon-persists-cli-mutation-to-manager-store = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -226,6 +295,10 @@
         persona-daemon = {
           type = "app";
           program = "${self.packages.${system}.default}/bin/persona-daemon";
+        };
+        persona-engine-sandbox = {
+          type = "app";
+          program = "${self.packages.${system}.persona-engine-sandbox}/bin/persona-engine-sandbox";
         };
       });
 

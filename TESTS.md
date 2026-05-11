@@ -77,6 +77,9 @@ What the check proves:
 | `persona-dev-stack-script-builds` | The Nix-created dev-stack runners are executable. It does not start PTY daemons inside a pure Nix builder. |
 | `constraint_persona_cli_talks_to_persona_daemon_over_socket` | Spawns `persona-daemon`, sends two separate `persona` CLI requests through `PERSONA_SOCKET`, and proves the daemon-owned manager state survives between invocations. |
 | `constraint_persona_daemon_does_not_delete_non_socket_endpoint_path` | Starts `persona-daemon` on an occupied regular-file path and proves daemon startup rejects it without deleting the file. |
+| `persona-engine-sandbox-script-builds` | The Nix-created sandbox runner is executable. |
+| `persona-engine-sandbox-supports-all-harnesses` | Dry-run mode creates isolated `state/`, `run/`, `home/`, `work/`, and `artifacts/` directories for `pi`, `claude`, `codex`, and `codex-api`. |
+| `persona-engine-sandbox-documents-dedicated-auth` | Dry-run credential policy artifacts say prompt-bearing Claude/Codex runs need dedicated sandbox credentials and do not copy live host auth. |
 
 Run all checks:
 
@@ -95,6 +98,7 @@ The meta repo exposes the current integration runner as Nix apps:
 nix run .#persona-daemon
 nix run .#dev-stack
 nix run .#dev-stack-smoke
+nix run .#persona-engine-sandbox -- --harness pi --dry-run
 ```
 
 `persona-daemon` starts the daemon-first apex slice. It accepts an optional socket
@@ -121,6 +125,13 @@ flowchart LR
 artifact paths. It is intentionally explicit that it does not yet prove
 router-to-harness-to-terminal delivery. It is a stateful app, not a pure
 `checks` derivation, because the terminal daemon owns a live PTY.
+
+`persona-engine-sandbox` is the scaffold for the full federation witness from
+`reports/designer/129-sandboxed-persona-engine-test.md`. In the first slice it
+creates the sandbox directory layout, writes NOTA manifests and credential
+policy artifacts, and plans the `systemd-run --user` invocation. The pure Nix
+checks exercise its dry-run mode; real prompt-bearing Claude/Codex runs require
+dedicated sandbox credentials and are not driven from live host auth files.
 
 ---
 

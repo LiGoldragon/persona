@@ -1,0 +1,238 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${PERSONA_BASH:?PERSONA_BASH must point at bash}"
+
+harness=""
+sandbox_dir=""
+dry_run=0
+inside_unit=0
+
+usage() {
+  cat <<'EOF'
+usage: persona-engine-sandbox --harness pi|claude|codex|codex-api [--sandbox-dir DIR] [--dry-run] [--inside-unit]
+
+Creates the sandbox directory layout for a disposable Persona engine test and,
+unless --dry-run is supplied, enters it through systemd-run --user.
+
+Prompt-bearing Claude/Codex runs require dedicated sandbox credentials. The
+runner does not copy live host ~/.claude or ~/.codex authentication files.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --harness)
+      shift
+      harness="${1:-}"
+      ;;
+    --sandbox-dir)
+      shift
+      sandbox_dir="${1:-}"
+      ;;
+    --dry-run)
+      dry_run=1
+      ;;
+    --inside-unit)
+      inside_unit=1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'unknown argument: %s\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift || true
+done
+
+if [ -z "$harness" ]; then
+  printf '%s\n' 'missing --harness' >&2
+  usage >&2
+  exit 2
+fi
+
+case "$harness" in
+  pi|claude|codex|codex-api) ;;
+  *)
+    printf 'unsupported harness: %s\n' "$harness" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
+if [ -z "$sandbox_dir" ]; then
+  sandbox_dir="$(mktemp -d -t persona-engine-sandbox.XXXXXX)"
+fi
+
+state_dir="$sandbox_dir/state"
+run_dir="$sandbox_dir/run"
+home_dir="$sandbox_dir/home"
+work_dir="$sandbox_dir/work"
+artifact_dir="$sandbox_dir/artifacts"
+manifest_file="$artifact_dir/sandbox-manifest.nota"
+policy_file="$artifact_dir/credential-policy.nota"
+systemd_command_file="$artifact_dir/systemd-command.txt"
+
+prepare_layout() {
+  mkdir -p "$state_dir" "$run_dir" "$home_dir" "$work_dir" "$artifact_dir"
+  mkdir -p "$home_dir/.claude" "$home_dir/.codex" "$home_dir/pi" "$home_dir/pi-session"
+}
+
+credential_policy() {
+  case "$harness" in
+    pi)
+      printf '%s\n' '(CredentialPolicy Pi SnapshotCredential "Pi uses isolated PI_CODING_AGENT_DIR and PI_CODING_AGENT_SESSION_DIR; no paid provider credential is copied.")'
+      ;;
+    claude)
+      if [ -n "${PERSONA_CLAUDE_OAUTH_TOKEN_FILE:-}" ]; then
+        printf '%s\n' '(CredentialPolicy Claude IssuedSandboxCredential "LoadCredential claude-oauth-token from PERSONA_CLAUDE_OAUTH_TOKEN_FILE.")'
+      else
+        printf '%s\n' '(CredentialPolicy Claude MissingDedicatedCredential "Prompt-bearing Claude requires PERSONA_CLAUDE_OAUTH_TOKEN_FILE; live host credentials are not copied.")'
+      fi
+      ;;
+    codex)
+      printf '%s\n' '(CredentialPolicy Codex DedicatedRunnerHome "Prompt-bearing Codex requires a dedicated sandbox CODEX_HOME login; live host auth.json is not copied.")'
+      ;;
+    codex-api)
+      if [ -n "${PERSONA_OPENAI_API_KEY_FILE:-}" ]; then
+        printf '%s\n' '(CredentialPolicy CodexApi IssuedSandboxCredential "LoadCredential openai-api-key from PERSONA_OPENAI_API_KEY_FILE.")'
+      else
+        printf '%s\n' '(CredentialPolicy CodexApi MissingDedicatedCredential "Codex API witness requires PERSONA_OPENAI_API_KEY_FILE.")'
+      fi
+      ;;
+  esac
+}
+
+harness_record() {
+  case "$harness" in
+    pi) printf '%s\n' '(Harness Pi)' ;;
+    claude) printf '%s\n' '(Harness Claude)' ;;
+    codex) printf '%s\n' '(Harness Codex)' ;;
+    codex-api) printf '%s\n' '(Harness CodexApi)' ;;
+  esac
+}
+
+write_manifest() {
+  {
+    printf '%s\n' '(PersonaEngineSandbox'
+    printf '  %s\n' "$(harness_record)"
+    printf '  (SandboxDir "%s")\n' "$sandbox_dir"
+    printf '  (StateDir "%s")\n' "$state_dir"
+    printf '  (RunDir "%s")\n' "$run_dir"
+    printf '  (HomeDir "%s")\n' "$home_dir"
+    printf '  (WorkDir "%s")\n' "$work_dir"
+    printf '  (ArtifactDir "%s")\n' "$artifact_dir"
+    printf '  (PromptBearingExternalAuth DedicatedSandboxCredential)\n'
+    printf ')\n'
+  } >"$manifest_file"
+  credential_policy >"$policy_file"
+}
+
+write_harness_environment() {
+  case "$harness" in
+    pi)
+      cat >"$artifact_dir/harness-env.sh" <<EOF
+export PI_CODING_AGENT_DIR='$home_dir/pi'
+export PI_CODING_AGENT_SESSION_DIR='$home_dir/pi-session'
+export PI_PACKAGE_DIR='\${PI_PACKAGE_DIR:-}'
+export PERSONA_PI_PROVIDER='prometheus'
+export PERSONA_PI_MODEL='prometheus/glm-4.7-flash'
+EOF
+      ;;
+    claude)
+      cat >"$artifact_dir/harness-env.sh" <<EOF
+export CLAUDE_CONFIG_DIR='$home_dir/.claude'
+export CLAUDE_CODE_SKIP_PROMPT_HISTORY='1'
+export ANTHROPIC_MODEL='claude-haiku-4-5'
+EOF
+      ;;
+    codex)
+      cat >"$artifact_dir/harness-env.sh" <<EOF
+export CODEX_HOME='$home_dir/.codex'
+export PERSONA_CODEX_MODEL='gpt-5.4-mini'
+export PERSONA_CODEX_REASONING_EFFORT='low'
+EOF
+      ;;
+    codex-api)
+      cat >"$artifact_dir/harness-env.sh" <<EOF
+export CODEX_HOME='$home_dir/.codex'
+export PERSONA_CODEX_MODEL='gpt-5-nano'
+export PERSONA_CODEX_REASONING_EFFORT='low'
+EOF
+      ;;
+  esac
+}
+
+systemd_command() {
+  local command=(
+    systemd-run
+    --user
+    --wait
+    --collect
+    --service-type=exec
+    --property=PrivateUsers=yes
+    --property=PrivateTmp=yes
+    --property=ProtectHome=tmpfs
+    --property=ReadWritePaths="$sandbox_dir"
+  )
+
+  if [ "$harness" = "claude" ] && [ -n "${PERSONA_CLAUDE_OAUTH_TOKEN_FILE:-}" ]; then
+    command+=(--property=LoadCredential=claude-oauth-token:"$PERSONA_CLAUDE_OAUTH_TOKEN_FILE")
+  fi
+  if [ "$harness" = "codex-api" ] && [ -n "${PERSONA_OPENAI_API_KEY_FILE:-}" ]; then
+    command+=(--property=LoadCredential=openai-api-key:"$PERSONA_OPENAI_API_KEY_FILE")
+  fi
+
+  command+=(
+    --
+    "$0"
+    --inside-unit
+    --harness
+    "$harness"
+    --sandbox-dir
+    "$sandbox_dir"
+  )
+
+  printf '%q ' "${command[@]}"
+  printf '\n'
+}
+
+write_systemd_command() {
+  systemd_command >"$systemd_command_file"
+}
+
+run_inside_unit() {
+  prepare_layout
+  write_manifest
+  write_harness_environment
+  printf 'persona-engine-sandbox inside-unit=ready\n'
+  printf 'sandbox=%s\n' "$sandbox_dir"
+  printf 'manifest=%s\n' "$manifest_file"
+}
+
+run_outer() {
+  prepare_layout
+  write_manifest
+  write_harness_environment
+  write_systemd_command
+
+  if [ "$dry_run" -eq 1 ]; then
+    printf 'persona-engine-sandbox dry-run=ready\n'
+    printf 'sandbox=%s\n' "$sandbox_dir"
+    printf 'manifest=%s\n' "$manifest_file"
+    printf 'systemd-command=%s\n' "$systemd_command_file"
+    exit 0
+  fi
+
+  exec $PERSONA_BASH -lc "$(systemd_command)"
+}
+
+if [ "$inside_unit" -eq 1 ]; then
+  run_inside_unit
+else
+  run_outer
+fi

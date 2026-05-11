@@ -241,6 +241,16 @@ That runner proves router ingress and terminal transport independently. It is
 not the final delivery witness because the external router-to-harness
 registration/control surface has not landed yet.
 
+The full-engine sandbox witness starts at the same apex layer. The Nix app
+`persona-engine-sandbox` creates an isolated `state/`, `run/`, `home/`,
+`work/`, and `artifacts/` tree, writes NOTA manifests, and plans a
+`systemd-run --user` transient unit with `PrivateUsers=yes`,
+`PrivateTmp=yes`, `ProtectHome=tmpfs`, and `ReadWritePaths=<sandbox>`.
+Prompt-bearing Claude and Codex runs require dedicated sandbox credentials;
+the runner does not copy live host `~/.claude` or `~/.codex` authentication
+files. Pi is the preferred first harness because it uses the local
+Prometheus-backed model path.
+
 The first daemon-first apex slice is present: `persona-daemon` binds a Unix socket,
 starts the Kameo `EngineManager`, accepts one Signal frame per connection,
 dispatches through `HandleEngineRequest`, writes one Signal reply frame, and
@@ -413,6 +423,12 @@ Migration rules:
   cross-component witness tests.
 - The meta repo exposes Nix apps for stateful integration runners; recurring
   daemon startup commands are not left as ad hoc shell history.
+- The sandboxed engine runner is a Nix app named `persona-engine-sandbox`;
+  its reusable command line is not an ad hoc shell transcript.
+- Prompt-bearing Claude/Codex sandbox tests require dedicated sandbox
+  credentials; the runner never copies live host authentication files.
+- Sandboxed engine artifacts are sanitized manifests and targeted witness
+  outputs, not raw home snapshots.
 - Development runners push socket paths to components through environment and
   argv, never by filesystem discovery.
 - Production startup is systemd/NixOS-shaped; Rust systemd control is an
@@ -512,6 +528,9 @@ The apex repo owns tests that prove cross-component shape:
 | manager catalog writes go through the writer actor | `nix flake check .#persona-manager-store-writes-engine-status-through-writer-actor` |
 | engine manager persists accepted mutations | `nix flake check .#persona-engine-manager-persists-component-mutation-through-manager-store` |
 | persona CLI mutation reaches manager.redb via daemon path | `nix flake check .#persona-daemon-persists-cli-mutation-to-manager-store` |
+| sandbox runner is a Nix-owned app | `nix flake check .#persona-engine-sandbox-script-builds` |
+| sandbox runner supports each first harness name | `nix flake check .#persona-engine-sandbox-supports-all-harnesses` |
+| sandbox runner documents dedicated auth | `nix flake check .#persona-engine-sandbox-documents-dedicated-auth` |
 | engine resources are scoped | `nix flake check .#persona-engine-layout-uses-engine-id-scoped-paths` |
 | socket policy is boundary-specific | `nix flake check .#persona-engine-layout-assigns-socket-modes-by-component-boundary` |
 | spawn envelopes carry manager-supplied peers | `nix flake check .#persona-spawn-envelope-carries-component-paths-and-peer-sockets` |
@@ -524,6 +543,7 @@ ARCHITECTURE.md  apex system shape
 skills.md        how to work in the meta repo
 flake.nix        component flake composition
 TESTS.md         cross-component test architecture
+scripts/persona-engine-sandbox  systemd-run sandbox scaffold for full-engine witnesses
 src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
 src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records
