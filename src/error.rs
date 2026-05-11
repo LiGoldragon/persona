@@ -34,9 +34,6 @@ pub enum Error {
     #[error("socket path is occupied by a non-socket file: {path}")]
     SocketPathOccupied { path: PathBuf },
 
-    #[error("persona daemon request is missing authentication proof")]
-    MissingAuthProof,
-
     #[error("unexpected Signal frame: {got}")]
     UnexpectedSignalFrame { got: String },
 }

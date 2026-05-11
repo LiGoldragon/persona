@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::os::unix::fs::FileTypeExt;
 
 use kameo::actor::ActorRef;
-use signal_core::{AuthProof, FrameBody, LocalOperatorProof, Reply, Request};
+use signal_core::{FrameBody, Reply, Request};
 use signal_persona::{EngineReply, EngineRequest, Frame};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
@@ -54,32 +54,6 @@ impl PersonaEndpoint {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PersonaCaller {
-    name: String,
-}
-
-impl PersonaCaller {
-    pub fn from_environment() -> Self {
-        match std::env::var("PERSONA_OPERATOR") {
-            Ok(name) => Self::new(name),
-            Err(_) => Self::new("operator"),
-        }
-    }
-
-    pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into() }
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.name.as_str()
-    }
-
-    pub fn auth_proof(&self) -> AuthProof {
-        AuthProof::LocalOperator(LocalOperatorProof::new(self.as_str()))
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PersonaFrameCodec {
     maximum_frame_bytes: usize,
@@ -115,8 +89,8 @@ impl PersonaFrameCodec {
         Ok(())
     }
 
-    pub fn request_frame(&self, caller: &PersonaCaller, request: EngineRequest) -> Frame {
-        Frame::new(FrameBody::Request(Request::assert(request))).with_auth(caller.auth_proof())
+    pub fn request_frame(&self, request: EngineRequest) -> Frame {
+        Frame::new(FrameBody::Request(Request::assert(request)))
     }
 
     pub fn reply_frame(&self, reply: EngineReply) -> Frame {
@@ -124,9 +98,6 @@ impl PersonaFrameCodec {
     }
 
     pub fn request_from_frame(&self, frame: Frame) -> Result<EngineRequest> {
-        if frame.auth().is_none() {
-            return Err(Error::MissingAuthProof);
-        }
         match frame.into_body() {
             FrameBody::Request(Request::Operation { payload, .. }) => Ok(payload),
             other => Err(Error::UnexpectedSignalFrame {
@@ -154,29 +125,24 @@ impl Default for PersonaFrameCodec {
 #[derive(Debug, Clone)]
 pub struct PersonaClient {
     endpoint: PersonaEndpoint,
-    caller: PersonaCaller,
     codec: PersonaFrameCodec,
 }
 
 impl PersonaClient {
     pub fn from_environment() -> Self {
-        Self::new(
-            PersonaEndpoint::from_environment(),
-            PersonaCaller::from_environment(),
-        )
+        Self::new(PersonaEndpoint::from_environment())
     }
 
-    pub fn new(endpoint: PersonaEndpoint, caller: PersonaCaller) -> Self {
+    pub fn new(endpoint: PersonaEndpoint) -> Self {
         Self {
             endpoint,
-            caller,
             codec: PersonaFrameCodec::default(),
         }
     }
 
     pub async fn submit(&self, request: EngineRequest) -> Result<EngineReply> {
         let mut stream = UnixStream::connect(self.endpoint.as_path()).await?;
-        let frame = self.codec.request_frame(&self.caller, request);
+        let frame = self.codec.request_frame(request);
         self.codec.write_frame(&mut stream, &frame).await?;
         let reply = self.codec.read_frame(&mut stream).await?;
         self.codec.reply_from_frame(reply)
