@@ -475,7 +475,7 @@ systemd_command() {
   )
 
   if [ -d "$credential_root" ]; then
-    command+=(--property=ReadWritePaths="$credential_root")
+    command+=(--property=BindPaths="$credential_root")
   fi
 
   if [ "$harness" = "pi" ]; then

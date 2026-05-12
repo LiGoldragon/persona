@@ -88,6 +88,7 @@ What the check proves:
 | `persona-engine-sandbox-terminal-cell-script-builds` | The Nix-created terminal-cell smoke apps are executable and the persona flake packages `terminal-cell-daemon`, `terminal-cell-view`, `terminal-cell-send`, `terminal-cell-wait`, and `terminal-cell-capture`. |
 | `persona-engine-sandbox-attach-plans-host-ghostty` | Dry-run host attach emits a Ghostty + `terminal-cell-view` command against the sandbox `run/cell.sock` and records that Wayland is not passed into the sandbox. |
 | `persona-engine-sandbox-documents-bwrap-strict-profile` | Dry-run writes the optional bwrap strict-mount plan as a NOTA artifact with a tiny read-only/read-write bind set and no Wayland passthrough. |
+| `persona-engine-sandbox-binds-dedicated-credential-root` | Dry-run pre-creates a credential root and proves the systemd command uses `BindPaths=` for it under `ProtectHome=tmpfs`, never `ReadWritePaths=`. |
 
 Run all checks:
 

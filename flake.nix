@@ -460,6 +460,30 @@
                 grep -Fq '(WaylandSocketIntoSandbox false)' "$profile"
                 grep -Fq '(Status DocumentedNotEnabled)' "$profile"
               '';
+          persona-engine-sandbox-binds-dedicated-credential-root =
+            context.pkgs.runCommand "persona-engine-sandbox-binds-dedicated-credential-root" { }
+              ''
+                mkdir -p "$out/credentials/existing"
+                sandbox="$out/sandbox"
+                ${self.packages.${system}.persona-engine-sandbox}/bin/persona-engine-sandbox \
+                  --dry-run \
+                  --harness fixture \
+                  --sandbox-dir "$sandbox" \
+                  --credential-root "$out/credentials" \
+                  > "$out/dry-run.stdout"
+                command="$sandbox/artifacts/systemd-command.txt"
+                manifest="$sandbox/artifacts/sandbox-manifest.nota"
+                profile="$sandbox/artifacts/bwrap-profile.nota"
+                grep -Fq -- '--property=ProtectHome=tmpfs' "$command"
+                grep -Fq -- "--property=ReadWritePaths=$sandbox" "$command"
+                grep -Fq -- "--property=BindPaths=$out/credentials" "$command"
+                if grep -Fq -- "--property=ReadWritePaths=$out/credentials" "$command"; then
+                  exit 1
+                fi
+                grep -Fq "(CredentialRoot \"$out/credentials\")" "$manifest"
+                grep -Fq "(ReadWriteBind \"$out/credentials\")" "$profile"
+                touch "$out/passed"
+              '';
           persona-engine-layout-uses-engine-id-scoped-paths = context.craneLib.cargoTest (
             context.commonArgs
             // {
