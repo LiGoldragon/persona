@@ -486,7 +486,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-harness"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-harness.git#08ab13f368c02e9e9694532f48875007148de69e"
+source = "git+https://github.com/LiGoldragon/signal-persona-harness.git#283eacf183934809337c7f83dfa88d565ad5787b"
 dependencies = [
  "nota-codec",
  "rkyv",
