@@ -571,6 +571,14 @@
               cargoTestExtraArgs = "--test direct_process constraint_component_launcher_does_not_block_manager_mailbox -- --exact";
             }
           );
+          persona-component-launcher-passes-spawn-envelope-environment = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+              cargoTestExtraArgs = "--test direct_process constraint_component_launcher_passes_spawn_envelope_to_child_environment -- --exact";
+            }
+          );
           persona-component-launcher-reaps-process-group = context.craneLib.cargoTest (
             context.commonArgs
             // {

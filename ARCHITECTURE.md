@@ -736,6 +736,7 @@ The apex repo owns tests that prove cross-component shape:
 | engine events are typed manager state | `nix flake check .#persona-engine-event-log-records-typed-manager-events` |
 | NOTA event logs are projections | `nix flake check .#persona-engine-event-log-nota-projection-is-view` |
 | component launcher does not block manager request handling | `nix flake check .#persona-component-launcher-does-not-block-manager-mailbox` |
+| component launcher passes spawn envelope to child environment | `nix flake check .#persona-component-launcher-passes-spawn-envelope-environment` |
 | component stop cleans up the child process tree | `nix flake check .#persona-component-launcher-reaps-process-group` |
 | sandbox credential roots remain visible under home hiding | `nix flake check .#persona-engine-sandbox-binds-dedicated-credential-root` |
 

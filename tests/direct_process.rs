@@ -54,6 +54,10 @@ impl DirectProcessFixture {
         self.root.join("child.pid")
     }
 
+    fn envelope_capture_file(&self) -> PathBuf {
+        self.root.join("spawn-envelope.env")
+    }
+
     fn long_running_command(&self) -> ComponentCommand {
         ComponentCommand::from_input(ComponentCommandInput {
             executable_path: ExecutablePath::new(self.shell.clone()),
@@ -67,6 +71,34 @@ impl DirectProcessFixture {
                 name: EnvironmentVariableName::new("PERSONA_TEST_CHILD_PID_FILE"),
                 value: EnvironmentVariableValue::new(
                     self.child_pid_file().to_string_lossy().into_owned(),
+                ),
+            })],
+        })
+    }
+
+    fn envelope_capture_command(&self) -> ComponentCommand {
+        ComponentCommand::from_input(ComponentCommandInput {
+            executable_path: ExecutablePath::new(self.shell.clone()),
+            arguments: vec![
+                CommandArgument::new("-c"),
+                CommandArgument::new(
+                    "{
+  printf 'engine=%s\n' \"$PERSONA_ENGINE_ID\";
+  printf 'component=%s\n' \"$PERSONA_COMPONENT\";
+  printf 'state=%s\n' \"$PERSONA_STATE_PATH\";
+  printf 'socket=%s\n' \"$PERSONA_SOCKET_PATH\";
+  printf 'mode=%s\n' \"$PERSONA_SOCKET_MODE\";
+  printf 'peer_count=%s\n' \"$PERSONA_PEER_SOCKET_COUNT\";
+  printf 'peer_0_component=%s\n' \"$PERSONA_PEER_0_COMPONENT\";
+  printf 'peer_0_socket=%s\n' \"$PERSONA_PEER_0_SOCKET_PATH\";
+} > \"$PERSONA_TEST_ENVELOPE_FILE\";
+exec sleep 3600",
+                ),
+            ],
+            environment: vec![EnvironmentVariable::from_input(EnvironmentVariableInput {
+                name: EnvironmentVariableName::new("PERSONA_TEST_ENVELOPE_FILE"),
+                value: EnvironmentVariableValue::new(
+                    self.envelope_capture_file().to_string_lossy().into_owned(),
                 ),
             })],
         })
@@ -105,6 +137,44 @@ impl DirectProcessFixture {
             .expect("engine directories prepared");
         layout
             .spawn_envelope(component, &self.resolved_commands().await)
+            .expect("component spawn envelope exists")
+    }
+
+    async fn envelope_with_command(
+        &self,
+        component: EngineComponent,
+        command: ComponentCommand,
+    ) -> ComponentSpawnEnvelope {
+        let paths = PersonaDaemonPaths::new(self.state_root(), self.run_root());
+        let layout = paths.engine_layout(EngineId::new("engine-direct-process"));
+        layout
+            .prepare_directories()
+            .expect("engine directories prepared");
+        let mut entries: Vec<ComponentCommandEntry> = EngineComponent::first_stack()
+            .into_iter()
+            .map(|entry_component| {
+                let entry_command = if entry_component == component {
+                    command.clone()
+                } else {
+                    self.long_running_command()
+                };
+                ComponentCommandEntry::from_input(ComponentCommandEntryInput {
+                    component: entry_component,
+                    command: entry_command,
+                })
+            })
+            .collect();
+        entries.sort_by_key(|entry| entry.component().as_str());
+        let catalog = ComponentCommandCatalog::from_entries(entries);
+        let resolver = ComponentCommandResolver::spawn(ComponentCommandResolver::new(catalog));
+        let resolved = resolver
+            .ask(ResolveComponentCommands::new(
+                EngineLaunchConfiguration::empty(),
+            ))
+            .await
+            .expect("component commands resolve");
+        layout
+            .spawn_envelope(component, &resolved)
             .expect("component spawn envelope exists")
     }
 
@@ -155,6 +225,16 @@ impl DirectProcessFixture {
             tokio::time::sleep(std::time::Duration::from_millis(25)).await;
         }
         panic!("child pid file was not written");
+    }
+
+    async fn read_envelope_capture(&self) -> String {
+        for _attempt in 0..40 {
+            if let Ok(text) = std::fs::read_to_string(self.envelope_capture_file()) {
+                return text;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        panic!("spawn envelope capture file was not written");
     }
 }
 
@@ -230,6 +310,36 @@ async fn constraint_component_launcher_reaps_process_group() {
     assert!(snapshot.running().is_empty());
     assert_eq!(snapshot.stop_count(), 1);
 
+    launcher.stop_gracefully().await.expect("launcher stops");
+    launcher.wait_for_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_component_launcher_passes_spawn_envelope_to_child_environment() {
+    let fixture = DirectProcessFixture::new("envelope");
+    let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
+    let envelope = fixture
+        .envelope_with_command(EngineComponent::Router, fixture.envelope_capture_command())
+        .await;
+
+    DirectProcessFixture::launch(&launcher, envelope)
+        .await
+        .expect("component process launches");
+    let captured = fixture.read_envelope_capture().await;
+    assert!(captured.contains("engine=engine-direct-process"));
+    assert!(captured.contains("component=router"));
+    assert!(captured.contains("state="));
+    assert!(captured.contains("router.redb"));
+    assert!(captured.contains("socket="));
+    assert!(captured.contains("router.sock"));
+    assert!(captured.contains("mode=600"));
+    assert!(captured.contains("peer_count=5"));
+    assert!(captured.contains("peer_0_component="));
+    assert!(captured.contains("peer_0_socket="));
+
+    DirectProcessFixture::stop(&launcher, EngineComponent::Router)
+        .await
+        .expect("component process stops");
     launcher.stop_gracefully().await.expect("launcher stops");
     launcher.wait_for_shutdown().await;
 }
