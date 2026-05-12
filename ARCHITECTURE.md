@@ -407,9 +407,13 @@ graph TB
 ```
 
 Each contract repo owns only its channel vocabulary: closed request/reply/event
-enums, validation newtypes, rkyv round trips, and text projection examples
-where useful. It owns no daemon code, Kameo actors, routing policy, storage
-policy, or terminal adapter logic.
+enums, validation newtypes, rkyv round trips, and `NotaEnum` / `NotaRecord` /
+`NotaTransparent` derives on the typed records (so contract values are
+NOTA-encodable directly, with rkyv and NOTA round-trip witnesses both in the
+contract crate's `tests/`). It owns no daemon code, Kameo actors, routing
+policy, storage policy, terminal adapter logic, or text-surface composition
+(which CLI prints NOTA, how a daemon endpoint formats audit output — that
+projection policy lives in the boundary component).
 
 ## 4 · State and Ownership
 
