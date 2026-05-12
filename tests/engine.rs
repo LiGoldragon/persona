@@ -1,7 +1,15 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use kameo::actor::Spawn;
+use kameo::error::SendError;
 use persona::engine::{EngineComponent, PersonaDaemonPaths, SocketMode};
+use persona::launch::{
+    CommandResolutionFailure, ComponentCommand, ComponentCommandCatalog, ComponentCommandEntry,
+    ComponentCommandEntryInput, ComponentCommandOverride, ComponentCommandOverrideInput,
+    ComponentCommandResolver, EngineLaunchConfiguration, ExecutablePath,
+    ReadCommandResolutionAttemptCount, ResolveComponentCommands,
+};
 use signal_persona_auth::EngineId;
 
 struct TemporaryEngineRoot {
@@ -32,6 +40,59 @@ impl TemporaryEngineRoot {
 
     fn contains(path: &Path, expected: &str) -> bool {
         path.to_string_lossy().contains(expected)
+    }
+
+    fn closure_command(component: EngineComponent) -> ComponentCommand {
+        let command_name = match component {
+            EngineComponent::Mind => "persona-mind-daemon",
+            EngineComponent::Router => "persona-router-daemon",
+            EngineComponent::System => "persona-system-daemon",
+            EngineComponent::Harness => "persona-harness-daemon",
+            EngineComponent::Terminal => "persona-terminal-daemon",
+            EngineComponent::MessageProxy => "persona-message-daemon",
+        };
+        ComponentCommand::executable(ExecutablePath::new(format!(
+            "{}/nix-closure/{command_name}/bin/{command_name}",
+            std::env::temp_dir().display()
+        )))
+    }
+
+    fn command_entry(component: EngineComponent) -> ComponentCommandEntry {
+        ComponentCommandEntry::from_input(ComponentCommandEntryInput {
+            component,
+            command: Self::closure_command(component),
+        })
+    }
+
+    fn command_catalog() -> ComponentCommandCatalog {
+        ComponentCommandCatalog::from_entries(
+            EngineComponent::first_stack()
+                .into_iter()
+                .map(Self::command_entry)
+                .collect(),
+        )
+    }
+
+    async fn resolver_result(
+        catalog: ComponentCommandCatalog,
+        configuration: EngineLaunchConfiguration,
+    ) -> std::result::Result<persona::launch::ResolvedComponentCommands, CommandResolutionFailure>
+    {
+        let resolver = ComponentCommandResolver::spawn(ComponentCommandResolver::new(catalog));
+        let resolved = match resolver
+            .ask(ResolveComponentCommands::new(configuration))
+            .await
+        {
+            Ok(commands) => Ok(commands),
+            Err(SendError::HandlerError(failure)) => Err(failure),
+            Err(error) => panic!("resolver actor transport failed: {error:?}"),
+        };
+        let count = resolver
+            .ask(ReadCommandResolutionAttemptCount)
+            .await
+            .expect("resolver actor count replies");
+        assert_eq!(count, 1);
+        resolved
     }
 }
 
@@ -146,4 +207,107 @@ fn constraint_engine_layout_prepares_only_engine_scoped_directories() {
     assert!(prepared.state_dir().ends_with("engine-delta"));
     assert!(prepared.run_dir().ends_with("engine-delta"));
     assert!(!layout.manager_store().exists());
+}
+
+#[tokio::test]
+async fn constraint_component_commands_resolve_from_nix_closure() {
+    let resolved = TemporaryEngineRoot::resolver_result(
+        TemporaryEngineRoot::command_catalog(),
+        EngineLaunchConfiguration::empty(),
+    )
+    .await
+    .expect("all first-stack commands resolve from explicit catalog");
+
+    assert_eq!(
+        resolved.entries().len(),
+        EngineComponent::first_stack().len()
+    );
+    let router = resolved
+        .command_for(EngineComponent::Router)
+        .expect("router command exists");
+    assert!(
+        router
+            .executable_path()
+            .as_str()
+            .ends_with("/persona-router-daemon/bin/persona-router-daemon")
+    );
+}
+
+#[tokio::test]
+async fn constraint_launch_config_overrides_one_component_command() {
+    let override_command = ComponentCommand::executable(ExecutablePath::new(
+        "/test-overrides/router/bin/persona-router-daemon",
+    ));
+    let configuration =
+        EngineLaunchConfiguration::from_overrides(vec![ComponentCommandOverride::from_input(
+            ComponentCommandOverrideInput {
+                component: EngineComponent::Router,
+                command: override_command.clone(),
+            },
+        )]);
+    let resolved =
+        TemporaryEngineRoot::resolver_result(TemporaryEngineRoot::command_catalog(), configuration)
+            .await
+            .expect("override configuration resolves");
+
+    assert_eq!(
+        resolved.command_for(EngineComponent::Router),
+        Some(&override_command)
+    );
+    assert_ne!(
+        resolved.command_for(EngineComponent::Mind),
+        Some(&override_command)
+    );
+}
+
+#[tokio::test]
+async fn constraint_component_command_resolution_fails_without_host_path_fallback() {
+    let catalog = ComponentCommandCatalog::from_entries(
+        EngineComponent::first_stack()
+            .into_iter()
+            .filter(|component| *component != EngineComponent::Router)
+            .map(TemporaryEngineRoot::command_entry)
+            .collect(),
+    );
+    let failure = TemporaryEngineRoot::resolver_result(catalog, EngineLaunchConfiguration::empty())
+        .await
+        .expect_err("missing router command is rejected");
+
+    assert_eq!(
+        failure,
+        CommandResolutionFailure::MissingRequiredCommand {
+            component: EngineComponent::Router
+        }
+    );
+}
+
+#[tokio::test]
+async fn constraint_launch_config_rejects_duplicate_component_overrides() {
+    let first = ComponentCommand::executable(ExecutablePath::new(
+        "/test-overrides/router-one/bin/persona-router-daemon",
+    ));
+    let second = ComponentCommand::executable(ExecutablePath::new(
+        "/test-overrides/router-two/bin/persona-router-daemon",
+    ));
+    let configuration = EngineLaunchConfiguration::from_overrides(vec![
+        ComponentCommandOverride::from_input(ComponentCommandOverrideInput {
+            component: EngineComponent::Router,
+            command: first,
+        }),
+        ComponentCommandOverride::from_input(ComponentCommandOverrideInput {
+            component: EngineComponent::Router,
+            command: second,
+        }),
+    ]);
+    let failure =
+        TemporaryEngineRoot::resolver_result(TemporaryEngineRoot::command_catalog(), configuration)
+            .await
+            .expect_err("duplicate override is rejected");
+
+    assert_eq!(
+        failure,
+        CommandResolutionFailure::DuplicateOverrideCommand {
+            component: EngineComponent::Router
+        }
+    );
 }

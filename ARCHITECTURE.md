@@ -551,6 +551,25 @@ Migration rules:
   guess.
 - Resolved spawn envelopes carry executable path, argv, environment, state
   path, socket path, socket mode, and peer sockets.
+- The first engine-supervision witness starts every first-stack component, not
+  only the components with useful behavior already implemented.
+- Every first-stack component has a runnable daemon/proxy skeleton before the
+  full-topology witness is considered real.
+- A daemon skeleton accepts its component Signal boundary, answers
+  health/status/readiness, and returns typed unfinished-state replies for
+  valid requests whose behavior is not built yet.
+- Unfinished-state replies are closed typed records such as `Unimplemented`,
+  `Unsupported`, `Unavailable`, or `Failed`; they are never plain strings or
+  catch-all text errors.
+- The engine manager owns a typed engine event log in the manager catalog,
+  written through the manager writer path.
+- Engine events record management facts such as component spawned, component
+  ready, component returned `Unimplemented`, component exited, restart
+  scheduled, restart exhausted, component stopped, and engine state changed.
+- NOTA log output is a projection of typed engine events, not the durable
+  source of truth.
+- The engine event log is not a terminal transcript. Terminal and harness
+  transcript data remains owned by terminal/harness components.
 - Component process supervision is owned by data-bearing Kameo launcher /
   supervisor actors. Request handlers do not spawn, wait, reap, or restart
   child processes directly.
@@ -628,6 +647,12 @@ Migration rules:
 - The engine manager owns `manager.redb` through its own Sema table layer.
   The write path is a data-bearing Kameo `ManagerStore` actor, not a CLI
   helper or direct redb call in request decoding.
+- The engine manager event log is typed manager state; text logs are views.
+- Full-engine supervision proves all first-stack daemon skeletons as real
+  processes and sockets before it proves deep component behavior.
+- Component skeletons must be honest: valid unfinished operations return typed
+  unfinished-state replies instead of hanging, crashing, or printing untyped
+  text errors.
 - Cross-component access is by Signal frame, not database peeking.
 - Rust-to-Rust component traffic uses rkyv Signal frames.
 - NOTA is the only text syntax.
@@ -684,6 +709,11 @@ The apex repo owns tests that prove cross-component shape:
 | component command resolution is Nix-owned | `nix flake check .#persona-component-commands-resolve-from-nix-closure` |
 | launch config overrides are narrow | `nix flake check .#persona-launch-config-overrides-one-component-command` |
 | spawn envelope carries the resolved command | `nix flake check .#persona-spawn-envelope-carries-resolved-component-command` |
+| full topology starts every first-stack daemon skeleton | `nix flake check .#persona-daemon-spawns-first-stack-skeletons` |
+| component skeletons answer health/status/readiness | `nix flake check .#persona-component-skeletons-answer-health-status-readiness` |
+| unfinished component behavior is typed | `nix flake check .#persona-component-skeleton-returns-typed-unimplemented` |
+| engine events are typed manager state | `nix flake check .#persona-engine-event-log-records-typed-manager-events` |
+| NOTA event logs are projections | `nix flake check .#persona-engine-event-log-nota-projection-is-view` |
 | component launcher does not block manager request handling | `nix flake check .#persona-component-launcher-does-not-block-manager-mailbox` |
 | component stop cleans up the child process tree | `nix flake check .#persona-component-launcher-reaps-process-group` |
 | sandbox credential roots remain visible under home hiding | `nix flake check .#persona-engine-sandbox-binds-dedicated-credential-root` |
@@ -702,6 +732,7 @@ scripts/persona-engine-sandbox-terminal-cell-smoke  terminal-cell fixture/Pi liv
 src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
 src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records
+src/launch/      launch configuration, resolved commands, command resolver actor
 src/transport.rs Unix-socket Signal codec, client, daemon, endpoint, caller
 src/manager.rs   Kameo EngineManager actor scaffold and trace witness
 src/manager_store.rs  Kameo ManagerStore actor and manager.redb Sema tables

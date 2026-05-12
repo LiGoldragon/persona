@@ -488,6 +488,20 @@
               cargoTestExtraArgs = "--test engine constraint_engine_layout_prepares_only_engine_scoped_directories -- --exact";
             }
           );
+          persona-component-commands-resolve-from-nix-closure = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test engine constraint_component_commands_resolve_from_nix_closure -- --exact";
+            }
+          );
+          persona-launch-config-overrides-one-component-command = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test engine constraint_launch_config_overrides_one_component_command -- --exact";
+            }
+          );
           persona-manager-store-writes-engine-status-through-writer-actor = context.craneLib.cargoTest (
             context.commonArgs
             // {

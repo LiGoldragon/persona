@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use nota_codec::NotaEnum;
 use signal_persona_auth::{ComponentName as SignalComponentName, EngineId};
 
 use crate::Result;
@@ -135,7 +136,7 @@ impl PreparedEngineLayout {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EngineComponent {
     Mind,
     Router,
