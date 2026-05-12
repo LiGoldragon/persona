@@ -5,10 +5,12 @@ use kameo::actor::Spawn;
 use kameo::error::SendError;
 use persona::engine::{EngineComponent, PersonaDaemonPaths, SocketMode};
 use persona::launch::{
-    CommandResolutionFailure, ComponentCommand, ComponentCommandCatalog, ComponentCommandEntry,
-    ComponentCommandEntryInput, ComponentCommandOverride, ComponentCommandOverrideInput,
-    ComponentCommandResolver, EngineLaunchConfiguration, ExecutablePath,
-    ReadCommandResolutionAttemptCount, ResolveComponentCommands,
+    CommandArgument, CommandResolutionFailure, ComponentCommand, ComponentCommandCatalog,
+    ComponentCommandEntry, ComponentCommandEntryInput, ComponentCommandInput,
+    ComponentCommandOverride, ComponentCommandOverrideInput, ComponentCommandResolver,
+    EngineLaunchConfiguration, EnvironmentVariable, EnvironmentVariableInput,
+    EnvironmentVariableName, EnvironmentVariableValue, ExecutablePath,
+    ReadCommandResolutionAttemptCount, ResolveComponentCommands, ResolvedComponentCommands,
 };
 use signal_persona_auth::EngineId;
 
@@ -57,6 +59,19 @@ impl TemporaryEngineRoot {
         )))
     }
 
+    fn routed_command_with_environment() -> ComponentCommand {
+        ComponentCommand::from_input(ComponentCommandInput {
+            executable_path: ExecutablePath::new(
+                "/test-overrides/router/bin/persona-router-daemon",
+            ),
+            arguments: vec![CommandArgument::new("--serve-engine")],
+            environment: vec![EnvironmentVariable::from_input(EnvironmentVariableInput {
+                name: EnvironmentVariableName::new("PERSONA_ENGINE_ID"),
+                value: EnvironmentVariableValue::new("engine-gamma"),
+            })],
+        })
+    }
+
     fn command_entry(component: EngineComponent) -> ComponentCommandEntry {
         ComponentCommandEntry::from_input(ComponentCommandEntryInput {
             component,
@@ -76,8 +91,7 @@ impl TemporaryEngineRoot {
     async fn resolver_result(
         catalog: ComponentCommandCatalog,
         configuration: EngineLaunchConfiguration,
-    ) -> std::result::Result<persona::launch::ResolvedComponentCommands, CommandResolutionFailure>
-    {
+    ) -> std::result::Result<ResolvedComponentCommands, CommandResolutionFailure> {
         let resolver = ComponentCommandResolver::spawn(ComponentCommandResolver::new(catalog));
         let resolved = match resolver
             .ask(ResolveComponentCommands::new(configuration))
@@ -93,6 +107,12 @@ impl TemporaryEngineRoot {
             .expect("resolver actor count replies");
         assert_eq!(count, 1);
         resolved
+    }
+
+    async fn resolved_commands() -> ResolvedComponentCommands {
+        Self::resolver_result(Self::command_catalog(), EngineLaunchConfiguration::empty())
+            .await
+            .expect("default component commands resolve")
     }
 }
 
@@ -162,13 +182,14 @@ fn constraint_engine_layout_assigns_socket_modes_by_component_boundary() {
     assert_eq!(message_proxy.socket().mode().as_octal(), 0o660);
 }
 
-#[test]
-fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
+#[tokio::test]
+async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     let root = TemporaryEngineRoot::new("spawn-envelope");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
     let layout = paths.engine_layout(EngineId::new("engine-gamma"));
+    let resolved_commands = TemporaryEngineRoot::resolved_commands().await;
     let envelope = layout
-        .spawn_envelope(EngineComponent::Router)
+        .spawn_envelope(EngineComponent::Router, &resolved_commands)
         .expect("router spawn envelope exists");
 
     assert_eq!(envelope.engine().as_str(), "engine-gamma");
@@ -190,6 +211,43 @@ fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
             .iter()
             .any(|peer| peer.component() == EngineComponent::MessageProxy
                 && peer.socket_path().ends_with("message-proxy.sock"))
+    );
+}
+
+#[tokio::test]
+async fn constraint_spawn_envelope_carries_resolved_component_command() {
+    let root = TemporaryEngineRoot::new("spawn-envelope-command");
+    let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
+    let layout = paths.engine_layout(EngineId::new("engine-gamma"));
+    let override_command = TemporaryEngineRoot::routed_command_with_environment();
+    let resolved_commands = TemporaryEngineRoot::resolver_result(
+        TemporaryEngineRoot::command_catalog(),
+        EngineLaunchConfiguration::from_overrides(vec![ComponentCommandOverride::from_input(
+            ComponentCommandOverrideInput {
+                component: EngineComponent::Router,
+                command: override_command.clone(),
+            },
+        )]),
+    )
+    .await
+    .expect("override command resolves");
+    let envelope = layout
+        .spawn_envelope(EngineComponent::Router, &resolved_commands)
+        .expect("router spawn envelope exists");
+
+    assert_eq!(envelope.command(), &override_command);
+    assert_eq!(
+        envelope.command().executable_path().as_str(),
+        "/test-overrides/router/bin/persona-router-daemon"
+    );
+    assert_eq!(envelope.command().arguments()[0].as_str(), "--serve-engine");
+    assert_eq!(
+        envelope.command().environment()[0].name().as_str(),
+        "PERSONA_ENGINE_ID"
+    );
+    assert_eq!(
+        envelope.command().environment()[0].value().as_str(),
+        "engine-gamma"
     );
 }
 

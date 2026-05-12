@@ -4,6 +4,7 @@ use nota_codec::NotaEnum;
 use signal_persona_auth::{ComponentName as SignalComponentName, EngineId};
 
 use crate::Result;
+use crate::launch::{ComponentCommand, ResolvedComponentCommands};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaDaemonPaths {
@@ -92,8 +93,13 @@ impl EngineLayout {
             .find(|layout| layout.component == component)
     }
 
-    pub fn spawn_envelope(&self, component: EngineComponent) -> Option<ComponentSpawnEnvelope> {
+    pub fn spawn_envelope(
+        &self,
+        component: EngineComponent,
+        resolved_commands: &ResolvedComponentCommands,
+    ) -> Option<ComponentSpawnEnvelope> {
         let layout = self.component(component)?;
+        let command = resolved_commands.command_for(component)?.clone();
         let peers = self
             .components
             .iter()
@@ -106,6 +112,7 @@ impl EngineLayout {
             state_path: layout.state_path.clone(),
             socket_path: layout.socket.path.clone(),
             socket_mode: layout.socket.mode,
+            command,
             peers,
         })
     }
@@ -279,6 +286,7 @@ pub struct ComponentSpawnEnvelope {
     state_path: PathBuf,
     socket_path: PathBuf,
     socket_mode: SocketMode,
+    command: ComponentCommand,
     peers: Vec<ComponentPeerSocket>,
 }
 
@@ -301,6 +309,10 @@ impl ComponentSpawnEnvelope {
 
     pub fn socket_mode(&self) -> SocketMode {
         self.socket_mode
+    }
+
+    pub fn command(&self) -> &ComponentCommand {
+        &self.command
     }
 
     pub fn peers(&self) -> &[ComponentPeerSocket] {

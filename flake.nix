@@ -502,6 +502,13 @@
               cargoTestExtraArgs = "--test engine constraint_launch_config_overrides_one_component_command -- --exact";
             }
           );
+          persona-spawn-envelope-carries-resolved-component-command = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test engine constraint_spawn_envelope_carries_resolved_component_command -- --exact";
+            }
+          );
           persona-manager-store-writes-engine-status-through-writer-actor = context.craneLib.cargoTest (
             context.commonArgs
             // {
