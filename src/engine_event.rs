@@ -1,6 +1,12 @@
 use nota_codec::NotaEnum;
+pub use signal_persona::EngineOperationKind;
 use signal_persona::{ComponentName, EnginePhase};
 use signal_persona_auth::EngineId;
+pub use signal_persona_harness::HarnessOperationKind;
+pub use signal_persona_message::MessageOperationKind;
+pub use signal_persona_mind::MindOperationKind;
+pub use signal_persona_system::SystemOperationKind;
+pub use signal_persona_terminal::TerminalOperationKind;
 use strum::EnumDiscriminants;
 
 /// Monotonic event key scoped to one manager catalog.
@@ -206,73 +212,9 @@ pub enum ComponentOperation {
     Terminal(TerminalOperationKind),
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EngineOperationKind {
-    EngineStatusQuery,
-    ComponentStatusQuery,
-    ComponentStartup,
-    ComponentShutdown,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MessageOperationKind {
-    MessageSubmission,
-    InboxQuery,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MindOperationKind {
-    RoleClaim,
-    RoleRelease,
-    RoleHandoff,
-    RoleObservation,
-    ActivitySubmission,
-    ActivityQuery,
-    Opening,
-    NoteSubmission,
-    Link,
-    StatusChange,
-    AliasAssignment,
-    Query,
-    AdjudicationRequest,
-    ChannelGrant,
-    ChannelExtend,
-    ChannelRetract,
-    AdjudicationDeny,
-    ChannelList,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SystemOperationKind {
-    FocusSubscription,
-    FocusUnsubscription,
-    FocusSnapshot,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HarnessOperationKind {
-    MessageDelivery,
-    InteractionPrompt,
-    DeliveryCancellation,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TerminalOperationKind {
-    TerminalConnection,
-    TerminalInput,
-    TerminalResize,
-    TerminalDetachment,
-    TerminalCapture,
-    RegisterPromptPattern,
-    UnregisterPromptPattern,
-    ListPromptPatterns,
-    AcquireInputGate,
-    ReleaseInputGate,
-    WriteInjection,
-    SubscribeTerminalWorkerLifecycle,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, NotaEnum, Debug, Clone, Copy, PartialEq, Eq,
+)]
 pub enum UnimplementedReason {
     NotBuiltYet,
     /// Cross-cutting prerequisite work is not landed in the current stack.

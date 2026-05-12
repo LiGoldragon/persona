@@ -286,7 +286,11 @@ dependencies = [
  "signal-core",
  "signal-persona",
  "signal-persona-auth",
+ "signal-persona-harness",
  "signal-persona-message",
+ "signal-persona-mind",
+ "signal-persona-system",
+ "signal-persona-terminal",
  "strum",
  "thiserror",
  "tokio",
@@ -462,7 +466,7 @@ dependencies = [
 [[package]]
 name = "signal-persona"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona.git#c62e2c391e628ea82fad20991cae792023b7133f"
+source = "git+https://github.com/LiGoldragon/signal-persona.git#893f7a02deb49c5fdec152b5923cb3a42b7ce0bd"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -480,9 +484,54 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-persona-harness"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-persona-harness.git#08ab13f368c02e9e9694532f48875007148de69e"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "signal-core",
+ "thiserror",
+]
+
+[[package]]
 name = "signal-persona-message"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-message.git#a5a13a5e04e1c6549064866e3925ba2b5088570a"
+source = "git+https://github.com/LiGoldragon/signal-persona-message.git#3dc218d59f0db424b0ee1335f25f520f8d8154dc"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "signal-core",
+ "thiserror",
+]
+
+[[package]]
+name = "signal-persona-mind"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-persona-mind.git#2b451670478abc0dfd6ff8c630059f8daca50f97"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "signal-core",
+ "signal-persona-auth",
+ "thiserror",
+]
+
+[[package]]
+name = "signal-persona-system"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-persona-system.git#ce0be70fca7918a42ad15a0acc1924ed714f4e50"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "signal-core",
+ "thiserror",
+]
+
+[[package]]
+name = "signal-persona-terminal"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-persona-terminal.git#ea5e2174f3a623e247575cb052a79d86df28dff2"
 dependencies = [
  "nota-codec",
  "rkyv",

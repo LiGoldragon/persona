@@ -1,7 +1,6 @@
-use nota_codec::{
-    Decoder, Encoder, NotaDecode, NotaEncode, NotaEnum, NotaRecord, NotaSum, NotaTransparent,
-};
+use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode, NotaRecord, NotaSum};
 use signal_persona as contract;
+use signal_persona_auth::EngineId;
 
 pub use crate::engine_event::{EngineEventBodyKind, EngineEventSourceKind};
 pub use contract::{
@@ -15,23 +14,10 @@ use crate::engine_event::{
     TerminalOperationKind, UnimplementedReason,
 };
 
-#[derive(NotaTransparent, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct TextEngineId(String);
-
-impl TextEngineId {
-    pub fn new(text: impl Into<String>) -> Self {
-        Self(text.into())
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
 #[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
 pub struct EngineEventReport {
     pub sequence: u64,
-    pub engine: TextEngineId,
+    pub engine: EngineId,
     pub source: EngineEventSourceKind,
     pub source_component: Option<ComponentName>,
     pub body: EngineEventBodyReport,
@@ -41,7 +27,7 @@ impl EngineEventReport {
     pub fn from_event(event: &EngineEvent) -> Self {
         Self {
             sequence: event.sequence().into_u64(),
-            engine: TextEngineId::new(event.engine().as_str()),
+            engine: event.engine().clone(),
             source: event.source().into(),
             source_component: EngineEventSourceComponent::from_event_source(event.source())
                 .into_option(),
@@ -95,7 +81,7 @@ pub struct ComponentLifecycleEventReport {
 pub struct ComponentUnimplementedReport {
     pub component: ComponentName,
     pub operation: ComponentOperationReport,
-    pub reason: UnimplementedReasonReport,
+    pub reason: UnimplementedReason,
 }
 
 #[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
@@ -135,96 +121,12 @@ pub enum EngineEventBodyReport {
 
 #[derive(NotaSum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComponentOperationReport {
-    Engine {
-        operation: EngineOperationKindReport,
-    },
-    Message {
-        operation: MessageOperationKindReport,
-    },
-    Mind {
-        operation: MindOperationKindReport,
-    },
-    System {
-        operation: SystemOperationKindReport,
-    },
-    Harness {
-        operation: HarnessOperationKindReport,
-    },
-    Terminal {
-        operation: TerminalOperationKindReport,
-    },
-}
-
-#[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EngineOperationKindReport {
-    EngineStatusQuery,
-    ComponentStatusQuery,
-    ComponentStartup,
-    ComponentShutdown,
-}
-
-#[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MessageOperationKindReport {
-    MessageSubmission,
-    InboxQuery,
-}
-
-#[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MindOperationKindReport {
-    RoleClaim,
-    RoleRelease,
-    RoleHandoff,
-    RoleObservation,
-    ActivitySubmission,
-    ActivityQuery,
-    Opening,
-    NoteSubmission,
-    Link,
-    StatusChange,
-    AliasAssignment,
-    Query,
-    AdjudicationRequest,
-    ChannelGrant,
-    ChannelExtend,
-    ChannelRetract,
-    AdjudicationDeny,
-    ChannelList,
-}
-
-#[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SystemOperationKindReport {
-    FocusSubscription,
-    FocusUnsubscription,
-    FocusSnapshot,
-}
-
-#[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HarnessOperationKindReport {
-    MessageDelivery,
-    InteractionPrompt,
-    DeliveryCancellation,
-}
-
-#[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TerminalOperationKindReport {
-    TerminalConnection,
-    TerminalInput,
-    TerminalResize,
-    TerminalDetachment,
-    TerminalCapture,
-    RegisterPromptPattern,
-    UnregisterPromptPattern,
-    ListPromptPatterns,
-    AcquireInputGate,
-    ReleaseInputGate,
-    WriteInjection,
-    SubscribeTerminalWorkerLifecycle,
-}
-
-#[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UnimplementedReasonReport {
-    NotBuiltYet,
-    DependencyTrackNotLanded,
+    Engine { operation: EngineOperationKind },
+    Message { operation: MessageOperationKind },
+    Mind { operation: MindOperationKind },
+    System { operation: SystemOperationKind },
+    Harness { operation: HarnessOperationKind },
+    Terminal { operation: TerminalOperationKind },
 }
 
 #[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
@@ -297,7 +199,7 @@ impl EngineEventBodyReport {
                 Self::ComponentUnimplemented(ComponentUnimplementedReport {
                     component: event.component().clone(),
                     operation: ComponentOperationReport::from_operation(event.operation()),
-                    reason: UnimplementedReasonReport::from_reason(event.reason()),
+                    reason: event.reason(),
                 })
             }
             EngineEventBody::ComponentExited(event) => {
@@ -341,119 +243,12 @@ impl ComponentLifecycleEventReport {
 impl ComponentOperationReport {
     pub fn from_operation(operation: &ComponentOperation) -> Self {
         match operation {
-            ComponentOperation::Engine(kind) => Self::Engine {
-                operation: EngineOperationKindReport::from_kind(*kind),
-            },
-            ComponentOperation::Message(kind) => Self::Message {
-                operation: MessageOperationKindReport::from_kind(*kind),
-            },
-            ComponentOperation::Mind(kind) => Self::Mind {
-                operation: MindOperationKindReport::from_kind(*kind),
-            },
-            ComponentOperation::System(kind) => Self::System {
-                operation: SystemOperationKindReport::from_kind(*kind),
-            },
-            ComponentOperation::Harness(kind) => Self::Harness {
-                operation: HarnessOperationKindReport::from_kind(*kind),
-            },
-            ComponentOperation::Terminal(kind) => Self::Terminal {
-                operation: TerminalOperationKindReport::from_kind(*kind),
-            },
-        }
-    }
-}
-
-impl EngineOperationKindReport {
-    pub fn from_kind(kind: EngineOperationKind) -> Self {
-        match kind {
-            EngineOperationKind::EngineStatusQuery => Self::EngineStatusQuery,
-            EngineOperationKind::ComponentStatusQuery => Self::ComponentStatusQuery,
-            EngineOperationKind::ComponentStartup => Self::ComponentStartup,
-            EngineOperationKind::ComponentShutdown => Self::ComponentShutdown,
-        }
-    }
-}
-
-impl MessageOperationKindReport {
-    pub fn from_kind(kind: MessageOperationKind) -> Self {
-        match kind {
-            MessageOperationKind::MessageSubmission => Self::MessageSubmission,
-            MessageOperationKind::InboxQuery => Self::InboxQuery,
-        }
-    }
-}
-
-impl MindOperationKindReport {
-    pub fn from_kind(kind: MindOperationKind) -> Self {
-        match kind {
-            MindOperationKind::RoleClaim => Self::RoleClaim,
-            MindOperationKind::RoleRelease => Self::RoleRelease,
-            MindOperationKind::RoleHandoff => Self::RoleHandoff,
-            MindOperationKind::RoleObservation => Self::RoleObservation,
-            MindOperationKind::ActivitySubmission => Self::ActivitySubmission,
-            MindOperationKind::ActivityQuery => Self::ActivityQuery,
-            MindOperationKind::Opening => Self::Opening,
-            MindOperationKind::NoteSubmission => Self::NoteSubmission,
-            MindOperationKind::Link => Self::Link,
-            MindOperationKind::StatusChange => Self::StatusChange,
-            MindOperationKind::AliasAssignment => Self::AliasAssignment,
-            MindOperationKind::Query => Self::Query,
-            MindOperationKind::AdjudicationRequest => Self::AdjudicationRequest,
-            MindOperationKind::ChannelGrant => Self::ChannelGrant,
-            MindOperationKind::ChannelExtend => Self::ChannelExtend,
-            MindOperationKind::ChannelRetract => Self::ChannelRetract,
-            MindOperationKind::AdjudicationDeny => Self::AdjudicationDeny,
-            MindOperationKind::ChannelList => Self::ChannelList,
-        }
-    }
-}
-
-impl SystemOperationKindReport {
-    pub fn from_kind(kind: SystemOperationKind) -> Self {
-        match kind {
-            SystemOperationKind::FocusSubscription => Self::FocusSubscription,
-            SystemOperationKind::FocusUnsubscription => Self::FocusUnsubscription,
-            SystemOperationKind::FocusSnapshot => Self::FocusSnapshot,
-        }
-    }
-}
-
-impl HarnessOperationKindReport {
-    pub fn from_kind(kind: HarnessOperationKind) -> Self {
-        match kind {
-            HarnessOperationKind::MessageDelivery => Self::MessageDelivery,
-            HarnessOperationKind::InteractionPrompt => Self::InteractionPrompt,
-            HarnessOperationKind::DeliveryCancellation => Self::DeliveryCancellation,
-        }
-    }
-}
-
-impl TerminalOperationKindReport {
-    pub fn from_kind(kind: TerminalOperationKind) -> Self {
-        match kind {
-            TerminalOperationKind::TerminalConnection => Self::TerminalConnection,
-            TerminalOperationKind::TerminalInput => Self::TerminalInput,
-            TerminalOperationKind::TerminalResize => Self::TerminalResize,
-            TerminalOperationKind::TerminalDetachment => Self::TerminalDetachment,
-            TerminalOperationKind::TerminalCapture => Self::TerminalCapture,
-            TerminalOperationKind::RegisterPromptPattern => Self::RegisterPromptPattern,
-            TerminalOperationKind::UnregisterPromptPattern => Self::UnregisterPromptPattern,
-            TerminalOperationKind::ListPromptPatterns => Self::ListPromptPatterns,
-            TerminalOperationKind::AcquireInputGate => Self::AcquireInputGate,
-            TerminalOperationKind::ReleaseInputGate => Self::ReleaseInputGate,
-            TerminalOperationKind::WriteInjection => Self::WriteInjection,
-            TerminalOperationKind::SubscribeTerminalWorkerLifecycle => {
-                Self::SubscribeTerminalWorkerLifecycle
-            }
-        }
-    }
-}
-
-impl UnimplementedReasonReport {
-    pub fn from_reason(reason: UnimplementedReason) -> Self {
-        match reason {
-            UnimplementedReason::NotBuiltYet => Self::NotBuiltYet,
-            UnimplementedReason::DependencyTrackNotLanded => Self::DependencyTrackNotLanded,
+            ComponentOperation::Engine(kind) => Self::Engine { operation: *kind },
+            ComponentOperation::Message(kind) => Self::Message { operation: *kind },
+            ComponentOperation::Mind(kind) => Self::Mind { operation: *kind },
+            ComponentOperation::System(kind) => Self::System { operation: *kind },
+            ComponentOperation::Harness(kind) => Self::Harness { operation: *kind },
+            ComponentOperation::Terminal(kind) => Self::Terminal { operation: *kind },
         }
     }
 }

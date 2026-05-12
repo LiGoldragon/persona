@@ -10,7 +10,6 @@ use persona::manager_store::{
 };
 use persona::schema::{
     ComponentOperationReport, EngineEventBodyReport, EngineEventReport, EngineEventSourceKind,
-    HarnessOperationKindReport, UnimplementedReasonReport,
 };
 use persona::state::EngineState;
 use signal_persona::{
@@ -266,9 +265,9 @@ async fn constraint_engine_event_log_nota_projection_is_view() {
             if unimplemented.component.as_str() == "persona-harness"
                 && unimplemented.operation
                     == (ComponentOperationReport::Harness {
-                        operation: HarnessOperationKindReport::MessageDelivery,
+                        operation: HarnessOperationKind::MessageDelivery,
                     })
-                && unimplemented.reason == UnimplementedReasonReport::NotBuiltYet
+                && unimplemented.reason == UnimplementedReason::NotBuiltYet
     ));
     assert!(
         nota.starts_with("(EngineEventReport 1 engine-event-projection Component persona-harness (ComponentUnimplemented")
