@@ -53,23 +53,30 @@ fn main() {
         FrameBody::Request(Request::Operation { verb, payload }) => {
             assert_eq!(verb, SemaVerb::Assert, "expected Assert verb");
             match payload {
-                MessageRequest::Submit(submit) => {
+                MessageRequest::MessageSubmission(submission) => {
                     assert_eq!(
-                        submit.recipient, expect.recipient,
+                        submission.recipient.as_str(),
+                        expect.recipient.as_str(),
                         "recipient mismatch (expected {}, got {})",
-                        expect.recipient, submit.recipient
+                        expect.recipient,
+                        submission.recipient.as_str()
                     );
                     assert_eq!(
-                        submit.body, expect.body,
+                        submission.body.as_str(),
+                        expect.body.as_str(),
                         "body mismatch (expected {}, got {})",
-                        expect.body, submit.body
+                        expect.body,
+                        submission.body.as_str()
                     );
                     eprintln!(
-                        "✓ decoded SubmitMessage {{ recipient: {}, body: {} }}",
-                        submit.recipient, submit.body
+                        "decoded MessageSubmission {{ recipient: {}, body: {} }}",
+                        submission.recipient.as_str(),
+                        submission.body.as_str()
                     );
                 }
-                MessageRequest::Inbox(_) => panic!("expected Submit variant, got Inbox"),
+                MessageRequest::InboxQuery(_) => {
+                    panic!("expected MessageSubmission variant, got InboxQuery")
+                }
             }
         }
         other => panic!("expected Operation request frame, got {other:?}"),

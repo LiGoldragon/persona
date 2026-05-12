@@ -1,5 +1,5 @@
 //! Shim binary — emit a `signal-persona-message`
-//! `Frame::Request(Submit(...))` as length-prefixed bytes
+//! `Frame::Request(MessageSubmission(...))` as length-prefixed bytes
 //! on stdout.
 //!
 //! Used by the nix-chained wire test: derivA runs this with
@@ -15,7 +15,9 @@
 use std::io::Write;
 
 use signal_core::{FrameBody, Request};
-use signal_persona_message::{Frame, MessageRequest, SubmitMessage};
+use signal_persona_message::{
+    Frame, MessageBody, MessageRecipient, MessageRequest, MessageSubmission,
+};
 
 struct Cli {
     recipient: String,
@@ -40,17 +42,17 @@ impl Cli {
         }
     }
 
-    fn submit(self) -> SubmitMessage {
-        SubmitMessage {
-            recipient: self.recipient,
-            body: self.body,
+    fn message_submission(self) -> MessageSubmission {
+        MessageSubmission {
+            recipient: MessageRecipient::new(self.recipient),
+            body: MessageBody::new(self.body),
         }
     }
 }
 
 fn main() {
     let cli = Cli::parse();
-    let request = MessageRequest::Submit(cli.submit());
+    let request = MessageRequest::MessageSubmission(cli.message_submission());
     let frame = Frame::new(FrameBody::Request(Request::assert(request)));
     let bytes = frame
         .encode_length_prefixed()

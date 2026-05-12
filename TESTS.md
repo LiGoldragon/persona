@@ -48,7 +48,7 @@ below**, not by `cargo test`.
 
 | Binary | Role |
 |---|---|
-| `wire-emit-message` | Construct a `signal_persona_message::Frame` containing a `Submit`, encode length-prefixed, write to stdout. |
+| `wire-emit-message` | Construct a `signal_persona_message::Frame` containing a `MessageSubmission`, encode length-prefixed, write to stdout. |
 | `wire-decode-message` | Read length-prefixed bytes from stdin; decode as `signal_persona_message::Frame`; assert `--expect-recipient` / `--expect-body` match. |
 
 Each shim is intentionally terse: one encode-or-decode operation and
@@ -73,7 +73,7 @@ What the check proves:
 
 | Check | Witnesses |
 |---|---|
-| `wire-message-channel-round-trip` | `signal-persona-message` constructs a `Submit` request frame, emits real length-prefixed bytes, decodes those bytes through a separate binary, and preserves the recipient + body. |
+| `wire-message-channel-round-trip` | `signal-persona-message` constructs a `MessageSubmission` request frame, emits real length-prefixed bytes, decodes those bytes through a separate binary, and preserves the recipient + body. |
 | `persona-dev-stack-script-builds` | The Nix-created dev-stack runners are executable. It does not start PTY daemons inside a pure Nix builder. |
 | `constraint_persona_cli_talks_to_persona_daemon_over_socket` | Spawns `persona-daemon`, sends two separate `persona` CLI requests through `PERSONA_SOCKET`, and proves the daemon-owned manager state survives between invocations. |
 | `constraint_persona_daemon_does_not_delete_non_socket_endpoint_path` | Starts `persona-daemon` on an occupied regular-file path and proves daemon startup rejects it without deleting the file. |
@@ -209,7 +209,7 @@ The next load-bearing integration work is split by lane:
 
 | Lane | Current state | Next target |
 |---|---|---|
-| Router persistence | Planned | Router-shaped binary commits `signal-persona-message::Submit` through router-owned Sema/redb and emits `SubmitOk`. |
+| Router persistence | Planned | Router-shaped binary commits `signal-persona-message::MessageSubmission` through router-owned Sema/redb and emits `SubmissionAccepted`. |
 | Sandbox dev-stack | Landed | Keep proving real persona daemons run under the systemd sandbox. |
 | Sandbox terminal-cell | Landed for fixture and Pi | Add dedicated Codex/Claude auth smoke after sandbox credentials are provisioned. |
 | Full federation | Not landed | Route message through router/mind/harness/terminal with durable traces. |
@@ -218,12 +218,12 @@ The next router persistence witness targets the corrected first stack:
 
 ```mermaid
 flowchart LR
-    message["signal-persona-message Submit"]
+    message["signal-persona-message MessageSubmission"]
     router["persona-router actor"]
     state["router-owned state actor"]
     sema["component-owned Sema layer"]
     redb[("router redb")]
-    reply["signal-persona-message SubmitOk"]
+    reply["signal-persona-message SubmissionAccepted"]
 
     message --> router --> state --> sema --> redb
     state --> reply
@@ -233,10 +233,10 @@ The intended Nix-chained witness is:
 
 | Step | Witness |
 |---|---|
-| Emit | A separate derivation writes a `signal-persona-message::Submit` frame. |
+| Emit | A separate derivation writes a `signal-persona-message::MessageSubmission` frame. |
 | Commit | A router-shaped binary reads only those bytes, mints router-owned metadata, and writes through the router-owned Sema layer into a router-owned redb file. |
 | Read back | A separate reader opens the redb through the router-owned Sema layer and asserts the durable message exists. |
-| Reply | The router-shaped binary emits `signal-persona-message::SubmitOk`. |
+| Reply | The router-shaped binary emits `signal-persona-message::SubmissionAccepted`. |
 
 That future test should prove the component path, not only the
 visible behavior.
