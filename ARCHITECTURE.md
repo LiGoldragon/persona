@@ -216,6 +216,34 @@ systemd readiness/watchdog notification once they run under systemd; direct
 systemd D-Bus control from Rust is only needed if the `persona` daemon later
 creates or manipulates transient units itself.
 
+Component executables are supplied by the Nix-built stack. The default
+component command set comes from the `persona` flake closure or the
+deployment's NixOS module, not from whatever happens to be installed on the
+host. Development runs may put those commands on `PATH`, but that path is a
+Nix-owned environment and must be recorded in the runner artifacts. Production
+launch resolves every component command before spawn and fails closed if a
+required binary is missing or ambiguous.
+
+The engine launch configuration is the place for explicit component command
+overrides. A NOTA launch record may provide an override for one component
+command, for example a custom `persona-message` build during an integration
+test. Omitted components use the Nix-provided default. A resolved spawn
+envelope carries the executable path, argv, environment, state path, socket
+path, socket mode, and peer socket paths; components receive this envelope
+from the manager and do not discover binaries or peer sockets by scanning the
+filesystem.
+
+Component process supervision belongs behind an actor boundary. The manager
+may first use a direct child-process backend, but it should be driven by a
+data-bearing Kameo launcher/supervisor actor that owns child handles, process
+groups, readiness state, restart state, stop order, and lifecycle events.
+Request decoding and the `EngineManager` mailbox do not run blocking process
+management directly. If systemd features become load-bearing for component
+children, the same launcher boundary may gain a systemd transient-unit backend
+with EngineId-scoped unit names, explicit unit properties, cgroup cleanup,
+resource accounting, credentials, sandboxing, journald visibility, and
+readiness/watchdog integration.
+
 The first meta-repo runner starts only the executable halves that exist today:
 
 ```mermaid
@@ -246,7 +274,10 @@ The full-engine sandbox witness starts at the same apex layer. The Nix app
 and `HOME=<home>`. The current host-visible socket scaffold does not enable
 `PrivateTmp`: user-mode systemd mount namespacing rejects the writable
 host-visible sandbox path when `PrivateTmp` is combined with
-`ReadWritePaths`. The optional bwrap profile remains the next hardening layer.
+`ReadWritePaths`. Dedicated credential roots outside the sandbox tree must be
+made visible with a bind/credential mechanism such as `BindPaths=` or
+`LoadCredential=`; `ReadWritePaths=` alone is not a visibility mechanism under
+`ProtectHome=tmpfs`. The optional bwrap profile remains the next hardening layer.
 Prompt-bearing Claude and Codex runs require dedicated sandbox credentials;
 the runner does not copy live host `~/.claude` or `~/.codex` authentication
 files. Pi is the preferred first harness because it uses the local
@@ -308,8 +339,8 @@ dispatches through `HandleEngineRequest`, writes one Signal reply frame, and
 keeps manager state across CLI invocations. The manager redb path is present
 through a dedicated `ManagerStore` Kameo actor backed by Sema; manager
 mutations persist by sending typed messages to that actor. The full
-multi-engine catalog, spawn supervisor, connection-class minting, socket ACL
-application, and privileged-user deployment witnesses are the next
+multi-engine catalog, component launcher/supervisor, origin tagging, socket
+ACL application, and privileged-user deployment witnesses are the next
 engine-manager layers.
 
 ## 2 · Command-line Mind
@@ -509,6 +540,30 @@ Migration rules:
   argv, never by filesystem discovery.
 - Production startup is systemd/NixOS-shaped; Rust systemd control is an
   implementation detail, not the first required integration boundary.
+- Component executables are Nix-built stack dependencies. Default resolution
+  comes from the flake closure or NixOS module, not the ambient host
+  installation.
+- Component command overrides are explicit launch-config fields. An override
+  may replace one component command for a test or custom build; omitted
+  components use the Nix-provided default.
+- Component command resolution fails closed when a required command is missing
+  or ambiguous. A spawn request does not continue with a best-effort host PATH
+  guess.
+- Resolved spawn envelopes carry executable path, argv, environment, state
+  path, socket path, socket mode, and peer sockets.
+- Component process supervision is owned by data-bearing Kameo launcher /
+  supervisor actors. Request handlers do not spawn, wait, reap, or restart
+  child processes directly.
+- A direct child-process backend must own process groups, readiness state,
+  kill/reap behavior, restart tracing, and reverse-order shutdown before it is
+  treated as production-worthy.
+- A systemd child-process backend, if added, is an implementation behind the
+  launcher/supervisor actor boundary. It uses EngineId-scoped transient units
+  and records unit names, properties, and lifecycle results in the manager
+  catalog.
+- Dedicated sandbox credential roots hidden by `ProtectHome=tmpfs` are exposed
+  with `BindPaths=` or `LoadCredential=`, not by assuming `ReadWritePaths=`
+  makes them visible.
 - `persona` does not own mind state transitions, router policy, harness
   lifecycle, terminal transport, storage table internals, or Signal records.
 - Every runtime boundary in the stack has a dedicated Signal contract repo.
@@ -556,6 +611,10 @@ Migration rules:
   status surface.
 - The `persona` runtime owns the manager catalog and supervises multiple
   per-engine component federations.
+- Component binaries are resolved from the Nix-built stack or explicit launch
+  overrides before spawn; components are not discovered from the ambient host.
+- Component OS-process supervision is an actor-owned plane, not a side effect
+  hidden in request decoding.
 - Local engine authority comes from manager-created sockets, filesystem modes,
   peer process context, and spawn envelopes; not from agent-supplied request
   fields.
@@ -622,6 +681,12 @@ The apex repo owns tests that prove cross-component shape:
 | socket policy is boundary-specific | `nix flake check .#persona-engine-layout-assigns-socket-modes-by-component-boundary` |
 | spawn envelopes carry manager-supplied peers | `nix flake check .#persona-spawn-envelope-carries-component-paths-and-peer-sockets` |
 | engine preparation does not write global manager state as a side effect | `nix flake check .#persona-engine-layout-prepares-only-engine-scoped-directories` |
+| component command resolution is Nix-owned | `nix flake check .#persona-component-commands-resolve-from-nix-closure` |
+| launch config overrides are narrow | `nix flake check .#persona-launch-config-overrides-one-component-command` |
+| spawn envelope carries the resolved command | `nix flake check .#persona-spawn-envelope-carries-resolved-component-command` |
+| component launcher does not block manager request handling | `nix flake check .#persona-component-launcher-does-not-block-manager-mailbox` |
+| component stop cleans up the child process tree | `nix flake check .#persona-component-launcher-reaps-process-group` |
+| sandbox credential roots remain visible under home hiding | `nix flake check .#persona-engine-sandbox-binds-dedicated-credential-root` |
 
 ## Code Map
 
