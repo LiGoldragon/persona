@@ -525,6 +525,20 @@
                   cargoTestExtraArgs = "--test manager_store constraint_engine_manager_persists_component_mutation_through_manager_store -- --exact";
                 }
               );
+          persona-engine-event-log-records-typed-manager-events = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test manager_store constraint_engine_event_log_records_typed_manager_events -- --exact";
+            }
+          );
+          persona-engine-event-log-nota-projection-is-view = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test manager_store constraint_engine_event_log_nota_projection_is_view -- --exact";
+            }
+          );
           persona-daemon-persists-cli-mutation-to-manager-store = context.craneLib.cargoTest (
             context.commonArgs
             // {

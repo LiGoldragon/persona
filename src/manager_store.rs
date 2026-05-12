@@ -8,13 +8,15 @@ use signal_persona::EngineStatus;
 use signal_persona_auth::EngineId;
 
 use crate::Result;
+use crate::engine_event::{EngineEvent, EngineEventDraft, EngineEventSequence};
 
 const MANAGER_SCHEMA: Schema = Schema {
-    version: SchemaVersion::new(1),
+    version: SchemaVersion::new(2),
 };
 
 const ENGINE_RECORDS: Table<&'static str, StoredEngineRecord> =
     Table::new("manager.engine-records");
+const ENGINE_EVENTS: Table<u64, EngineEvent> = Table::new("manager.engine-events");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManagerStoreLocation {
@@ -77,6 +79,7 @@ impl ManagerTables {
         let database = Sema::open_with_schema(location.as_path(), &MANAGER_SCHEMA)?;
         database.write(|transaction| {
             ENGINE_RECORDS.ensure(transaction)?;
+            ENGINE_EVENTS.ensure(transaction)?;
             Ok(())
         })?;
         Ok(Self { database })
@@ -94,18 +97,54 @@ impl ManagerTables {
             .database
             .read(|transaction| ENGINE_RECORDS.get(transaction, engine.as_str()))?)
     }
+
+    fn write_engine_event(&self, event: &EngineEvent) -> Result<()> {
+        Ok(self.database.write(|transaction| {
+            ENGINE_EVENTS.insert(transaction, event.key(), event)?;
+            Ok(())
+        })?)
+    }
+
+    fn engine_events(&self, engine: &EngineId) -> Result<Vec<EngineEvent>> {
+        Ok(self.database.read(|transaction| {
+            let events = ENGINE_EVENTS
+                .iter(transaction)?
+                .into_iter()
+                .map(|(_sequence, event)| event)
+                .filter(|event| event.engine() == engine)
+                .collect();
+            Ok(events)
+        })?)
+    }
+
+    fn highest_event_sequence(&self) -> Result<Option<EngineEventSequence>> {
+        Ok(self.database.read(|transaction| {
+            let sequence = ENGINE_EVENTS
+                .iter(transaction)?
+                .into_iter()
+                .map(|(sequence, _event)| EngineEventSequence::new(sequence))
+                .last();
+            Ok(sequence)
+        })?)
+    }
 }
 
 pub struct ManagerStore {
     tables: ManagerTables,
     write_count: u64,
+    event_sequence: EngineEventSequence,
 }
 
 impl ManagerStore {
     pub fn open(location: ManagerStoreLocation) -> Result<Self> {
+        let tables = ManagerTables::open(&location)?;
+        let event_sequence = tables
+            .highest_event_sequence()?
+            .unwrap_or(EngineEventSequence::new(0));
         Ok(Self {
-            tables: ManagerTables::open(&location)?,
+            tables,
             write_count: 0,
+            event_sequence,
         })
     }
 
@@ -122,6 +161,19 @@ impl ManagerStore {
 
     fn read_engine_record(&self, engine: &EngineId) -> Result<Option<StoredEngineRecord>> {
         self.tables.engine_record(engine)
+    }
+
+    fn append_engine_event(&mut self, draft: EngineEventDraft) -> Result<EngineEventReceipt> {
+        let sequence = self.event_sequence.next();
+        let event = draft.into_event(sequence);
+        self.tables.write_engine_event(&event)?;
+        self.event_sequence = sequence;
+        self.write_count = self.write_count.saturating_add(1);
+        Ok(EngineEventReceipt::new(sequence, self.write_count))
+    }
+
+    fn read_engine_events(&self, engine: &EngineId) -> Result<Vec<EngineEvent>> {
+        self.tables.engine_events(engine)
     }
 
     fn write_count(&self) -> u64 {
@@ -188,6 +240,51 @@ impl Message<PersistEngineRecord> for ManagerStore {
     }
 }
 
+pub struct AppendEngineEvent {
+    draft: EngineEventDraft,
+}
+
+impl AppendEngineEvent {
+    pub fn new(draft: EngineEventDraft) -> Self {
+        Self { draft }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EngineEventReceipt {
+    sequence: EngineEventSequence,
+    write_count: u64,
+}
+
+impl EngineEventReceipt {
+    fn new(sequence: EngineEventSequence, write_count: u64) -> Self {
+        Self {
+            sequence,
+            write_count,
+        }
+    }
+
+    pub fn sequence(&self) -> EngineEventSequence {
+        self.sequence
+    }
+
+    pub fn write_count(&self) -> u64 {
+        self.write_count
+    }
+}
+
+impl Message<AppendEngineEvent> for ManagerStore {
+    type Reply = Result<EngineEventReceipt>;
+
+    async fn handle(
+        &mut self,
+        message: AppendEngineEvent,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.append_engine_event(message.draft)
+    }
+}
+
 pub struct ReadEngineRecord {
     engine: EngineId,
 }
@@ -207,6 +304,28 @@ impl Message<ReadEngineRecord> for ManagerStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.read_engine_record(&message.engine)
+    }
+}
+
+pub struct ReadEngineEvents {
+    engine: EngineId,
+}
+
+impl ReadEngineEvents {
+    pub fn new(engine: EngineId) -> Self {
+        Self { engine }
+    }
+}
+
+impl Message<ReadEngineEvents> for ManagerStore {
+    type Reply = Result<Vec<EngineEvent>>;
+
+    async fn handle(
+        &mut self,
+        message: ReadEngineEvents,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.read_engine_events(&message.engine)
     }
 }
 

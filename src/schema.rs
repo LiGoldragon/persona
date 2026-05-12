@@ -1,6 +1,21 @@
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode, NotaEnum, NotaRecord, NotaTransparent};
 use signal_persona as contract;
 
+use crate::engine_event::{EngineEvent, EngineEventBody, EngineEventSource};
+
+#[derive(NotaTransparent, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TextEngineId(String);
+
+impl TextEngineId {
+    pub fn new(text: impl Into<String>) -> Self {
+        Self(text.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 #[derive(NotaTransparent, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TextComponentName(String);
 
@@ -60,6 +75,61 @@ pub enum ComponentHealth {
 pub enum SupervisorActionRejectionReason {
     ComponentNotManaged,
     ComponentAlreadyInDesiredState,
+}
+
+#[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EngineEventSourceKind {
+    Manager,
+    Component,
+}
+
+#[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EngineEventBodyKind {
+    ComponentSpawned,
+    ComponentReady,
+    ComponentUnimplemented,
+    ComponentExited,
+    RestartScheduled,
+    RestartExhausted,
+    ComponentStopped,
+    EngineStateChanged,
+}
+
+#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+pub struct EngineEventReport {
+    pub sequence: u64,
+    pub engine: TextEngineId,
+    pub source: EngineEventSourceKind,
+    pub body: EngineEventBodyKind,
+}
+
+impl EngineEventReport {
+    pub fn from_event(event: &EngineEvent) -> Self {
+        Self {
+            sequence: event.sequence().into_u64(),
+            engine: TextEngineId::new(event.engine().as_str()),
+            source: EngineEventSourceKind::from_event_source(event.source()),
+            body: EngineEventBodyKind::from_event_body(event.body()),
+        }
+    }
+
+    pub fn from_nota(text: &str) -> nota_codec::Result<Self> {
+        let mut decoder = Decoder::new(text);
+        let report = Self::decode(&mut decoder)?;
+        if let Some(token) = decoder.peek_token()? {
+            return Err(nota_codec::Error::UnexpectedToken {
+                expected: "end of input",
+                got: token,
+            });
+        }
+        Ok(report)
+    }
+
+    pub fn to_nota(&self) -> nota_codec::Result<String> {
+        let mut encoder = Encoder::new();
+        self.encode(&mut encoder)?;
+        Ok(encoder.into_string())
+    }
 }
 
 #[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
@@ -197,6 +267,30 @@ impl SupervisorActionRejectionReason {
             contract::SupervisorActionRejectionReason::ComponentAlreadyInDesiredState => {
                 Self::ComponentAlreadyInDesiredState
             }
+        }
+    }
+}
+
+impl EngineEventSourceKind {
+    pub fn from_event_source(source: &EngineEventSource) -> Self {
+        match source {
+            EngineEventSource::Manager => Self::Manager,
+            EngineEventSource::Component(_) => Self::Component,
+        }
+    }
+}
+
+impl EngineEventBodyKind {
+    pub fn from_event_body(body: &EngineEventBody) -> Self {
+        match body {
+            EngineEventBody::ComponentSpawned(_) => Self::ComponentSpawned,
+            EngineEventBody::ComponentReady(_) => Self::ComponentReady,
+            EngineEventBody::ComponentUnimplemented(_) => Self::ComponentUnimplemented,
+            EngineEventBody::ComponentExited(_) => Self::ComponentExited,
+            EngineEventBody::RestartScheduled(_) => Self::RestartScheduled,
+            EngineEventBody::RestartExhausted(_) => Self::RestartExhausted,
+            EngineEventBody::ComponentStopped(_) => Self::ComponentStopped,
+            EngineEventBody::EngineStateChanged(_) => Self::EngineStateChanged,
         }
     }
 }

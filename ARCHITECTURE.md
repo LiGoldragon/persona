@@ -732,6 +732,7 @@ scripts/persona-engine-sandbox-terminal-cell-smoke  terminal-cell fixture/Pi liv
 src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
 src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records
+src/engine_event.rs  typed engine-management event records
 src/launch/      launch configuration, resolved commands, command resolver actor
 src/transport.rs Unix-socket Signal codec, client, daemon, endpoint, caller
 src/manager.rs   Kameo EngineManager actor scaffold and trace witness

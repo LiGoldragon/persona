@@ -5,6 +5,7 @@
 //! NOTA projections for the command-line surface.
 
 pub mod engine;
+pub mod engine_event;
 pub mod error;
 pub mod launch;
 pub mod manager;

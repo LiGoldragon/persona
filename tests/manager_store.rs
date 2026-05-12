@@ -1,8 +1,14 @@
+use persona::engine_event::{
+    ComponentLifecycleEvent, ComponentOperation, ComponentUnimplemented,
+    ComponentUnimplementedInput, EngineEventBody, EngineEventDraft, EngineEventDraftInput,
+    EngineEventSource, UnimplementedReason,
+};
 use persona::manager::EngineManager;
 use persona::manager_store::{
-    ManagerStore, ManagerStoreLocation, PersistEngineRecord, ReadEngineRecord,
-    ReadManagerStoreWriteCount,
+    AppendEngineEvent, ManagerStore, ManagerStoreLocation, PersistEngineRecord, ReadEngineEvents,
+    ReadEngineRecord, ReadManagerStoreWriteCount,
 };
+use persona::schema::{EngineEventBodyKind, EngineEventReport, EngineEventSourceKind};
 use persona::state::EngineState;
 use signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, ComponentStatusQuery,
@@ -29,6 +35,30 @@ impl StoreFixture {
 
     fn location(&self) -> ManagerStoreLocation {
         self.location.clone()
+    }
+
+    fn spawned_event(engine: EngineId, component: &str) -> EngineEventDraft {
+        let component = ComponentName::new(component);
+        EngineEventDraft::from_input(EngineEventDraftInput {
+            engine,
+            source: EngineEventSource::Manager,
+            body: EngineEventBody::ComponentSpawned(ComponentLifecycleEvent::new(component)),
+        })
+    }
+
+    fn unimplemented_event(engine: EngineId, component: &str) -> EngineEventDraft {
+        let component = ComponentName::new(component);
+        EngineEventDraft::from_input(EngineEventDraftInput {
+            engine,
+            source: EngineEventSource::Component(component.clone()),
+            body: EngineEventBody::ComponentUnimplemented(ComponentUnimplemented::from_input(
+                ComponentUnimplementedInput {
+                    component,
+                    operation: ComponentOperation::new("DeliverToHarness"),
+                    reason: UnimplementedReason::NotBuiltYet,
+                },
+            )),
+        })
     }
 }
 
@@ -145,6 +175,83 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
     EngineManager::stop(manager)
         .await
         .expect("engine manager stops");
+    store.stop_gracefully().await.expect("manager store stops");
+    store.wait_for_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_engine_event_log_records_typed_manager_events() {
+    let fixture = StoreFixture::new("persona-manager-event-log");
+    let engine = EngineId::new("engine-event-log");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+
+    let first = store
+        .ask(AppendEngineEvent::new(StoreFixture::spawned_event(
+            engine.clone(),
+            "persona-router",
+        )))
+        .await
+        .expect("component spawned event appends through store actor");
+    assert_eq!(first.sequence().into_u64(), 1);
+    assert_eq!(first.write_count(), 1);
+
+    let second = store
+        .ask(AppendEngineEvent::new(StoreFixture::unimplemented_event(
+            engine.clone(),
+            "persona-harness",
+        )))
+        .await
+        .expect("component unimplemented event appends through store actor");
+    assert_eq!(second.sequence().into_u64(), 2);
+
+    let events = store
+        .ask(ReadEngineEvents::new(engine.clone()))
+        .await
+        .expect("events read through store actor");
+    assert_eq!(events.len(), 2);
+    assert!(matches!(
+        events[0].body(),
+        EngineEventBody::ComponentSpawned(_)
+    ));
+    assert!(matches!(
+        events[1].body(),
+        EngineEventBody::ComponentUnimplemented(_)
+    ));
+
+    store.stop_gracefully().await.expect("manager store stops");
+    store.wait_for_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_engine_event_log_nota_projection_is_view() {
+    let fixture = StoreFixture::new("persona-manager-event-log-projection");
+    let engine = EngineId::new("engine-event-projection");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+
+    store
+        .ask(AppendEngineEvent::new(StoreFixture::spawned_event(
+            engine.clone(),
+            "persona-router",
+        )))
+        .await
+        .expect("component spawned event appends through store actor");
+    let events = store
+        .ask(ReadEngineEvents::new(engine.clone()))
+        .await
+        .expect("events read through store actor");
+    let projection = EngineEventReport::from_event(&events[0]);
+    let nota = projection.to_nota().expect("event projection encodes");
+    let recovered = EngineEventReport::from_nota(&nota).expect("event projection decodes");
+
+    assert_eq!(recovered, projection);
+    assert_eq!(projection.sequence, 1);
+    assert_eq!(projection.engine.as_str(), "engine-event-projection");
+    assert_eq!(projection.source, EngineEventSourceKind::Manager);
+    assert_eq!(projection.body, EngineEventBodyKind::ComponentSpawned);
+    assert!(
+        nota.starts_with("(EngineEventReport 1 engine-event-projection Manager ComponentSpawned)")
+    );
+
     store.stop_gracefully().await.expect("manager store stops");
     store.wait_for_shutdown().await;
 }
