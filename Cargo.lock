@@ -252,7 +252,7 @@ dependencies = [
 [[package]]
 name = "nota-codec"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/nota-codec.git?branch=main#6aed60d970f796a6920f8cdd011f128ca0939126"
+source = "git+https://github.com/LiGoldragon/nota-codec.git?branch=main#2618adbfc140d856723a729c316203d006af8207"
 dependencies = [
  "nota-derive",
  "thiserror",
@@ -462,8 +462,9 @@ dependencies = [
 [[package]]
 name = "signal-persona"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona.git#32ebd68df417a93806f48c4f837cd5906371cbad"
+source = "git+https://github.com/LiGoldragon/signal-persona.git#1c7338618936ad26a938c8cbd509a7d982ff2466"
 dependencies = [
+ "nota-codec",
  "rkyv",
  "signal-core",
 ]

@@ -94,7 +94,7 @@ fn constraint_persona_cli_talks_to_persona_daemon_over_socket() {
 
     let status = fixture.persona("(ComponentStatusQuery persona-terminal)");
     assert!(status.contains("(ComponentStatusReport "));
-    assert!(status.contains("(ComponentStatusRecord persona-terminal Terminal Stopped Stopped)"));
+    assert!(status.contains("(ComponentStatus persona-terminal Terminal Stopped Stopped)"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

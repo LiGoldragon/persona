@@ -953,11 +953,11 @@
         "nixpkgs": "nixpkgs_9"
       },
       "locked": {
-        "lastModified": 1778579606,
-        "narHash": "sha256-DsZCM3tGkGt4hg9hHRzNTLr+mR63bX4mj+mkevkeZ9o=",
+        "lastModified": 1778584486,
+        "narHash": "sha256-ktXRsrTil8dEcDD0Q++XE8tvR5oGc8E1ONNMVLl5tOY=",
         "owner": "LiGoldragon",
         "repo": "signal-persona",
-        "rev": "32ebd68df417a93806f48c4f837cd5906371cbad",
+        "rev": "1c7338618936ad26a938c8cbd509a7d982ff2466",
         "type": "github"
       },
       "original": {

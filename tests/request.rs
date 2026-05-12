@@ -1,7 +1,7 @@
 use persona::request::{
     CommandLine, EngineStatusQuery, EngineStatusScope, PersonaOutput, PersonaRequest,
 };
-use persona::schema::{ComponentStatusRecord, EngineStatusReport, TextComponentName};
+use persona::schema::EngineStatusReport;
 use signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, ComponentStatus,
     EngineGeneration, EnginePhase, EngineReply, EngineStatus,
@@ -55,7 +55,7 @@ fn inline_nota_request_decodes_after_shell_token_join() {
 #[test]
 fn persona_request_lowers_to_signal_persona_engine_request() {
     let request = PersonaRequest::ComponentStatusQuery(persona::request::ComponentStatusQuery {
-        component: TextComponentName::new("persona-system"),
+        component: ComponentName::new("persona-system"),
     });
     let engine_request = request.into_engine_request();
 
@@ -82,19 +82,19 @@ fn engine_status_reply_renders_as_nota() {
     let output = PersonaOutput::from_engine_reply(reply).to_nota().unwrap();
 
     assert!(output.starts_with("(EngineStatusReport 2 Starting ["));
-    assert!(output.contains("(ComponentStatusRecord persona-mind Mind Running Starting)"));
+    assert!(output.contains("(ComponentStatus persona-mind Mind Running Starting)"));
 }
 
 #[test]
 fn output_round_trips_through_nota() {
     let output = PersonaOutput::EngineStatusReport(EngineStatusReport {
-        generation: 1,
-        phase: persona::schema::EnginePhase::Starting,
-        components: vec![ComponentStatusRecord {
-            name: TextComponentName::new("persona-router"),
-            kind: persona::schema::ComponentKind::Router,
-            desired_state: persona::schema::ComponentDesiredState::Running,
-            health: persona::schema::ComponentHealth::Starting,
+        generation: EngineGeneration::new(1),
+        phase: EnginePhase::Starting,
+        components: vec![ComponentStatus {
+            name: ComponentName::new("persona-router"),
+            kind: ComponentKind::Router,
+            desired_state: ComponentDesiredState::Running,
+            health: ComponentHealth::Starting,
         }],
     });
     let encoded = output.to_nota().unwrap();

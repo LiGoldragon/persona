@@ -6,9 +6,8 @@ use signal_persona as contract;
 
 use crate::error::{Error, Result};
 use crate::schema::{
-    ComponentDesiredState, ComponentStatusMissingReport, ComponentStatusRecord,
-    ComponentStatusReport, EngineStatusReport, SupervisorActionAcceptedReport,
-    SupervisorActionRejectedReport, SupervisorActionRejectionReason, TextComponentName,
+    ComponentStatusMissingReport, ComponentStatusReport, EngineStatusReport,
+    SupervisorActionAcceptedReport, SupervisorActionRejectedReport,
 };
 
 #[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,17 +22,17 @@ pub struct EngineStatusQuery {
 
 #[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStatusQuery {
-    pub component: TextComponentName,
+    pub component: contract::ComponentName,
 }
 
 #[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStartup {
-    pub component: TextComponentName,
+    pub component: contract::ComponentName,
 }
 
 #[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentShutdown {
-    pub component: TextComponentName,
+    pub component: contract::ComponentName,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,17 +66,17 @@ impl PersonaRequest {
             },
             Self::ComponentStatusQuery(request) => {
                 contract::EngineRequest::ComponentStatusQuery(contract::ComponentStatusQuery {
-                    component: request.component.into_contract(),
+                    component: request.component,
                 })
             }
             Self::ComponentStartup(request) => {
                 contract::EngineRequest::ComponentStartup(contract::ComponentStartup {
-                    component: request.component.into_contract(),
+                    component: request.component,
                 })
             }
             Self::ComponentShutdown(request) => {
                 contract::EngineRequest::ComponentShutdown(contract::ComponentShutdown {
-                    component: request.component.into_contract(),
+                    component: request.component,
                 })
             }
         }
@@ -129,25 +128,23 @@ impl PersonaOutput {
                 Self::EngineStatusReport(EngineStatusReport::from_contract(status))
             }
             contract::EngineReply::ComponentStatus(status) => {
-                Self::ComponentStatusReport(ComponentStatusReport {
-                    component: ComponentStatusRecord::from_contract(status),
-                })
+                Self::ComponentStatusReport(ComponentStatusReport { component: status })
             }
             contract::EngineReply::ComponentStatusMissing(missing) => {
                 Self::ComponentStatusMissingReport(ComponentStatusMissingReport {
-                    component: TextComponentName::from_contract(&missing.component),
+                    component: missing.component,
                 })
             }
             contract::EngineReply::SupervisorActionAccepted(acceptance) => {
                 Self::SupervisorActionAcceptedReport(SupervisorActionAcceptedReport {
-                    component: TextComponentName::from_contract(&acceptance.component),
-                    desired_state: ComponentDesiredState::from_contract(acceptance.desired_state),
+                    component: acceptance.component,
+                    desired_state: acceptance.desired_state,
                 })
             }
             contract::EngineReply::SupervisorActionRejected(rejection) => {
                 Self::SupervisorActionRejectedReport(SupervisorActionRejectedReport {
-                    component: TextComponentName::from_contract(&rejection.component),
-                    reason: SupervisorActionRejectionReason::from_contract(rejection.reason),
+                    component: rejection.component,
+                    reason: rejection.reason,
                 })
             }
         }
