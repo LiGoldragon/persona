@@ -539,6 +539,22 @@
               cargoTestExtraArgs = "--test manager_store constraint_engine_event_log_nota_projection_is_view -- --exact";
             }
           );
+          persona-component-launcher-does-not-block-manager-mailbox = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+              cargoTestExtraArgs = "--test direct_process constraint_component_launcher_does_not_block_manager_mailbox -- --exact";
+            }
+          );
+          persona-component-launcher-reaps-process-group = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+              cargoTestExtraArgs = "--test direct_process constraint_component_launcher_reaps_process_group -- --exact";
+            }
+          );
           persona-daemon-persists-cli-mutation-to-manager-store = context.craneLib.cargoTest (
             context.commonArgs
             // {

@@ -1,14 +1,17 @@
 use persona::engine_event::{
     ComponentLifecycleEvent, ComponentOperation, ComponentUnimplemented,
     ComponentUnimplementedInput, EngineEventBody, EngineEventDraft, EngineEventDraftInput,
-    EngineEventSource, UnimplementedReason,
+    EngineEventSource, HarnessOperationKind, UnimplementedReason,
 };
 use persona::manager::EngineManager;
 use persona::manager_store::{
     AppendEngineEvent, ManagerStore, ManagerStoreLocation, PersistEngineRecord, ReadEngineEvents,
     ReadEngineRecord, ReadManagerStoreWriteCount,
 };
-use persona::schema::{EngineEventBodyKind, EngineEventReport, EngineEventSourceKind};
+use persona::schema::{
+    ComponentOperationReport, EngineEventBodyReport, EngineEventReport, EngineEventSourceKind,
+    HarnessOperationKindReport, UnimplementedReasonReport,
+};
 use persona::state::EngineState;
 use signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, ComponentStatusQuery,
@@ -54,7 +57,7 @@ impl StoreFixture {
             body: EngineEventBody::ComponentUnimplemented(ComponentUnimplemented::from_input(
                 ComponentUnimplementedInput {
                     component,
-                    operation: ComponentOperation::new("DeliverToHarness"),
+                    operation: ComponentOperation::Harness(HarnessOperationKind::MessageDelivery),
                     reason: UnimplementedReason::NotBuiltYet,
                 },
             )),
@@ -215,7 +218,9 @@ async fn constraint_engine_event_log_records_typed_manager_events() {
     ));
     assert!(matches!(
         events[1].body(),
-        EngineEventBody::ComponentUnimplemented(_)
+        EngineEventBody::ComponentUnimplemented(unimplemented)
+            if unimplemented.operation()
+                == &ComponentOperation::Harness(HarnessOperationKind::MessageDelivery)
     ));
 
     store.stop_gracefully().await.expect("manager store stops");
@@ -229,9 +234,9 @@ async fn constraint_engine_event_log_nota_projection_is_view() {
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
 
     store
-        .ask(AppendEngineEvent::new(StoreFixture::spawned_event(
+        .ask(AppendEngineEvent::new(StoreFixture::unimplemented_event(
             engine.clone(),
-            "persona-router",
+            "persona-harness",
         )))
         .await
         .expect("component spawned event appends through store actor");
@@ -246,10 +251,27 @@ async fn constraint_engine_event_log_nota_projection_is_view() {
     assert_eq!(recovered, projection);
     assert_eq!(projection.sequence, 1);
     assert_eq!(projection.engine.as_str(), "engine-event-projection");
-    assert_eq!(projection.source, EngineEventSourceKind::Manager);
-    assert_eq!(projection.body, EngineEventBodyKind::ComponentSpawned);
+    assert_eq!(projection.source, EngineEventSourceKind::Component);
+    assert_eq!(
+        projection
+            .source_component
+            .as_ref()
+            .expect("component source projected")
+            .as_str(),
+        "persona-harness"
+    );
+    assert!(matches!(
+        projection.body,
+        EngineEventBodyReport::ComponentUnimplemented(ref unimplemented)
+            if unimplemented.component.as_str() == "persona-harness"
+                && unimplemented.operation
+                    == (ComponentOperationReport::Harness {
+                        operation: HarnessOperationKindReport::MessageDelivery,
+                    })
+                && unimplemented.reason == UnimplementedReasonReport::NotBuiltYet
+    ));
     assert!(
-        nota.starts_with("(EngineEventReport 1 engine-event-projection Manager ComponentSpawned)")
+        nota.starts_with("(EngineEventReport 1 engine-event-projection Component persona-harness (ComponentUnimplemented")
     );
 
     store.stop_gracefully().await.expect("manager store stops");

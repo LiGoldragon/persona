@@ -558,16 +558,32 @@ Migration rules:
 - A daemon skeleton accepts its component Signal boundary, answers
   health/status/readiness, and returns typed unfinished-state replies for
   valid requests whose behavior is not built yet.
+- `ComponentReady` means the manager observed a successful health/status
+  round-trip from that component. It is not emitted merely because
+  `spawn(2)` returned a child PID.
 - Unfinished-state replies are closed typed records such as `Unimplemented`,
   `Unsupported`, `Unavailable`, or `Failed`; they are never plain strings or
   catch-all text errors.
+- `Unimplemented` records carry a closed `ComponentOperation` variant. Tests
+  pattern-match the operation; they never grep operation strings.
+- Component skeletons decode every request variant in their Signal contract.
+  Unbuilt valid variants return `Unimplemented(<operation>)`; `Unsupported`
+  is reserved for requests delivered to the wrong component boundary.
 - The engine manager owns a typed engine event log in the manager catalog,
   written through the manager writer path.
+- Components do not write the engine event log. Component-sourced event
+  records are manager observations about that component.
+- Engine event sequences are per-manager monotonic keys, not per-engine
+  counters.
 - Engine events record management facts such as component spawned, component
   ready, component returned `Unimplemented`, component exited, restart
   scheduled, restart exhausted, component stopped, and engine state changed.
 - NOTA log output is a projection of typed engine events, not the durable
   source of truth.
+- The default NOTA event projection carries event payloads such as component
+  name, operation, unimplemented reason, exit code, restart attempt, and phase.
+  Kind-only summaries may exist as compact views but are not the truth
+  projection.
 - The engine event log is not a terminal transcript. Terminal and harness
   transcript data remains owned by terminal/harness components.
 - Component process supervision is owned by data-bearing Kameo launcher /
@@ -712,11 +728,17 @@ The apex repo owns tests that prove cross-component shape:
 | full topology starts every first-stack daemon skeleton | `nix flake check .#persona-daemon-spawns-first-stack-skeletons` |
 | component skeletons answer health/status/readiness | `nix flake check .#persona-component-skeletons-answer-health-status-readiness` |
 | unfinished component behavior is typed | `nix flake check .#persona-component-skeleton-returns-typed-unimplemented` |
+| skeleton decodes every contract variant | `nix flake check .#persona-component-skeleton-decodes-every-contract-variant` |
 | engine events are typed manager state | `nix flake check .#persona-engine-event-log-records-typed-manager-events` |
 | NOTA event logs are projections | `nix flake check .#persona-engine-event-log-nota-projection-is-view` |
 | component launcher does not block manager request handling | `nix flake check .#persona-component-launcher-does-not-block-manager-mailbox` |
 | component stop cleans up the child process tree | `nix flake check .#persona-component-launcher-reaps-process-group` |
 | sandbox credential roots remain visible under home hiding | `nix flake check .#persona-engine-sandbox-binds-dedicated-credential-root` |
+
+The launcher checks above are primitive-level witnesses for the direct
+process backend. They do not replace the pending full-topology daemon
+witnesses that wire the launcher through `persona-daemon` and the engine
+manager.
 
 ## Code Map
 
@@ -733,6 +755,7 @@ src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
 src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records
 src/engine_event.rs  typed engine-management event records
+src/direct_process.rs  direct child-process launcher actor
 src/launch/      launch configuration, resolved commands, command resolver actor
 src/transport.rs Unix-socket Signal codec, client, daemon, endpoint, caller
 src/manager.rs   Kameo EngineManager actor scaffold and trace witness

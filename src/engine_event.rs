@@ -1,6 +1,12 @@
+use nota_codec::NotaEnum;
 use signal_persona::{ComponentName, EnginePhase};
 use signal_persona_auth::EngineId;
+use strum::EnumDiscriminants;
 
+/// Monotonic event key scoped to one manager catalog.
+///
+/// The sequence is not per engine. It gives the manager log one total order
+/// across every engine whose events are stored in the same `manager.redb`.
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EngineEventSequence(u64);
 
@@ -98,13 +104,36 @@ pub struct EngineEventDraftInput {
     pub body: EngineEventBody,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    EnumDiscriminants,
+)]
+#[strum_discriminants(name(EngineEventSourceKind))]
+#[strum_discriminants(derive(NotaEnum))]
 pub enum EngineEventSource {
     Manager,
+    /// Manager-observed component fact. The component does not write the log.
     Component(ComponentName),
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    EnumDiscriminants,
+)]
+#[strum_discriminants(name(EngineEventBodyKind))]
+#[strum_discriminants(derive(NotaEnum))]
 pub enum EngineEventBody {
     ComponentSpawned(ComponentLifecycleEvent),
     ComponentReady(ComponentLifecycleEvent),
@@ -167,22 +196,92 @@ pub struct ComponentUnimplementedInput {
     pub reason: UnimplementedReason,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct ComponentOperation(String);
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComponentOperation {
+    Engine(EngineOperationKind),
+    Message(MessageOperationKind),
+    Mind(MindOperationKind),
+    System(SystemOperationKind),
+    Harness(HarnessOperationKind),
+    Terminal(TerminalOperationKind),
+}
 
-impl ComponentOperation {
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EngineOperationKind {
+    EngineStatusQuery,
+    ComponentStatusQuery,
+    ComponentStartup,
+    ComponentShutdown,
+}
 
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageOperationKind {
+    MessageSubmission,
+    InboxQuery,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MindOperationKind {
+    RoleClaim,
+    RoleRelease,
+    RoleHandoff,
+    RoleObservation,
+    ActivitySubmission,
+    ActivityQuery,
+    Opening,
+    NoteSubmission,
+    Link,
+    StatusChange,
+    AliasAssignment,
+    Query,
+    AdjudicationRequest,
+    ChannelGrant,
+    ChannelExtend,
+    ChannelRetract,
+    AdjudicationDeny,
+    ChannelList,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SystemOperationKind {
+    FocusSubscription,
+    FocusUnsubscription,
+    FocusSnapshot,
+    InputBufferSubscription,
+    InputBufferUnsubscription,
+    InputBufferSnapshot,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HarnessOperationKind {
+    MessageDelivery,
+    InteractionPrompt,
+    DeliveryCancellation,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TerminalOperationKind {
+    TerminalConnection,
+    TerminalInput,
+    TerminalResize,
+    TerminalDetachment,
+    TerminalCapture,
+    RegisterPromptPattern,
+    UnregisterPromptPattern,
+    ListPromptPatterns,
+    AcquireInputGate,
+    ReleaseInputGate,
+    WriteInjection,
+    SubscribeTerminalWorkerLifecycle,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnimplementedReason {
     NotBuiltYet,
+    /// Cross-cutting prerequisite work is not landed in the current stack.
+    ///
+    /// This does not mean a downstream component rejected the request; use a
+    /// future component-specific variant if that runtime fact becomes needed.
     DependencyTrackNotLanded,
 }
 

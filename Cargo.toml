@@ -21,6 +21,7 @@ path = "src/bin/persona_daemon.rs"
 
 [dependencies]
 kameo                  = { version = "0.20", default-features = false }
+libc                   = "0.2"
 nota-codec             = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }
 rkyv                   = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
 sema                   = { git = "https://github.com/LiGoldragon/sema.git" }
@@ -28,8 +29,9 @@ signal-core            = { git = "https://github.com/LiGoldragon/signal-core.git
 signal-persona         = { git = "https://github.com/LiGoldragon/signal-persona.git" }
 signal-persona-auth    = { git = "https://github.com/LiGoldragon/signal-persona-auth.git" }
 signal-persona-message = { git = "https://github.com/LiGoldragon/signal-persona-message.git" }
+strum                  = { version = "0.28", features = ["derive"] }
 thiserror              = "2"
-tokio                  = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net"] }
+tokio                  = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "process", "time"] }
 
 # ─── Wire-test shim binaries (for nix-chained tests) ──────
 # These exercise signal-persona-message end-to-end through

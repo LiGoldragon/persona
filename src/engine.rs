@@ -198,6 +198,17 @@ impl EngineComponent {
         }
     }
 
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Mind => "mind",
+            Self::Router => "router",
+            Self::System => "system",
+            Self::Harness => "harness",
+            Self::Terminal => "terminal",
+            Self::MessageProxy => "message-proxy",
+        }
+    }
+
     pub const fn socket_mode(self) -> SocketMode {
         match self {
             Self::MessageProxy => SocketMode::message_proxy(),
