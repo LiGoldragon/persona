@@ -78,3 +78,25 @@ fn signal_persona_message_proxy_kind_projects_to_nota() {
     assert_eq!(component.kind, ComponentKind::MessageProxy);
     assert!(encoded.contains("MessageProxy"));
 }
+
+#[test]
+fn persona_meta_schema_cannot_restore_system_prompt_gate_operations() {
+    let engine_event_source = include_str!("../src/engine_event.rs");
+    let schema_source = include_str!("../src/schema.rs");
+
+    for forbidden in [
+        "InputBuffer",
+        "input-buffer",
+        "prompt/input-buffer",
+        "prompt-buffer",
+    ] {
+        assert!(
+            !engine_event_source.contains(forbidden),
+            "engine event schema must not own terminal prompt gate vocabulary: {forbidden}"
+        );
+        assert!(
+            !schema_source.contains(forbidden),
+            "NOTA schema projection must not own terminal prompt gate vocabulary: {forbidden}"
+        );
+    }
+}

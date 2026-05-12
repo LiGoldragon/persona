@@ -247,9 +247,6 @@ pub enum SystemOperationKind {
     FocusSubscription,
     FocusUnsubscription,
     FocusSnapshot,
-    InputBufferSubscription,
-    InputBufferUnsubscription,
-    InputBufferSnapshot,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]

@@ -255,9 +255,6 @@ pub enum SystemOperationKindReport {
     FocusSubscription,
     FocusUnsubscription,
     FocusSnapshot,
-    InputBufferSubscription,
-    InputBufferUnsubscription,
-    InputBufferSnapshot,
 }
 
 #[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -562,9 +559,6 @@ impl SystemOperationKindReport {
             SystemOperationKind::FocusSubscription => Self::FocusSubscription,
             SystemOperationKind::FocusUnsubscription => Self::FocusUnsubscription,
             SystemOperationKind::FocusSnapshot => Self::FocusSnapshot,
-            SystemOperationKind::InputBufferSubscription => Self::InputBufferSubscription,
-            SystemOperationKind::InputBufferUnsubscription => Self::InputBufferUnsubscription,
-            SystemOperationKind::InputBufferSnapshot => Self::InputBufferSnapshot,
         }
     }
 }

@@ -113,7 +113,7 @@ identity) lives in the criome ecosystem.
 | `signal-persona-mind` | Typed contract for role coordination, activity, and work graph operations. |
 | `persona-router` | Message routing, delivery state, gate state, and pending-delivery decisions. |
 | `persona-message` | Stateless message proxy: NOTA/Nexus CLI surface to router Signal frames and router replies back to NOTA. |
-| `persona-system` | System/window/input observation adapters. |
+| `persona-system` | System/window focus observation adapters. |
 | `persona-harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
 | `persona-terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. |
 | `terminal-cell` | Low-level daemon-owned PTY/transcript primitive consumed by `persona-terminal`. |
@@ -446,7 +446,7 @@ The central split:
 |---|---|---|
 | `persona-mind` | role state, activity, work graph, decisions, aliases, ready/blocked views. | message delivery, terminal sessions, system focus facts. |
 | `persona-router` | message routing, delivery queue, delivery gate state, message durability. | role claims, work graph, harness process lifecycle. |
-| `persona-system` | OS/window/input observations. | router decisions, mind state, harness delivery. |
+| `persona-system` | OS/window focus observations. | router decisions, mind state, harness delivery, terminal prompt/input gates. |
 | `persona-harness` | harness identity, lifecycle, injection/observation adapter boundary. | router policy, central work graph. |
 | `persona-terminal` | durable PTY/session ownership, visible viewer adapters, and raw terminal byte transport. | Persona delivery policy or role state. |
 
