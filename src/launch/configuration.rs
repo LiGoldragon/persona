@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::engine::EngineComponent;
 
-use super::command::ComponentCommand;
+use super::command::{ComponentCommand, ExecutablePath};
 
 #[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentCommandEntry {
@@ -42,6 +42,62 @@ pub struct ComponentCommandCatalog {
 impl ComponentCommandCatalog {
     pub fn from_entries(entries: Vec<ComponentCommandEntry>) -> Self {
         Self { entries }
+    }
+
+    pub fn from_repeated_executable(executable_path: impl Into<String>) -> Self {
+        let executable_path = executable_path.into();
+        Self::from_entries(
+            EngineComponent::first_stack()
+                .into_iter()
+                .map(|component| {
+                    ComponentCommandEntry::from_input(ComponentCommandEntryInput {
+                        component,
+                        command: ComponentCommand::executable(ExecutablePath::new(
+                            executable_path.clone(),
+                        )),
+                    })
+                })
+                .collect(),
+        )
+    }
+
+    pub fn from_environment() -> std::result::Result<Option<Self>, CommandResolutionFailure> {
+        if let Some(executable_path) = std::env::var_os("PERSONA_FIRST_STACK_EXECUTABLE") {
+            return Ok(Some(Self::from_repeated_executable(
+                executable_path.to_string_lossy().into_owned(),
+            )));
+        }
+
+        let mut entries = Vec::new();
+        let mut saw_environment = false;
+        for component in EngineComponent::first_stack() {
+            match std::env::var_os(component.executable_environment_variable()) {
+                Some(path) => {
+                    saw_environment = true;
+                    entries.push(ComponentCommandEntry::from_input(
+                        ComponentCommandEntryInput {
+                            component,
+                            command: ComponentCommand::executable(ExecutablePath::new(
+                                path.to_string_lossy().into_owned(),
+                            )),
+                        },
+                    ));
+                }
+                None => {}
+            }
+        }
+
+        if !saw_environment {
+            return Ok(None);
+        }
+
+        let catalog = Self::from_entries(entries);
+        for component in EngineComponent::first_stack() {
+            if catalog.command_for(component)?.is_none() {
+                return Err(CommandResolutionFailure::MissingRequiredCommand { component });
+            }
+        }
+        Ok(Some(catalog))
     }
 
     pub fn entries(&self) -> &[ComponentCommandEntry] {

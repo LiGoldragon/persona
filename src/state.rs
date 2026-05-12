@@ -5,6 +5,8 @@ use signal_persona::{
     SupervisorActionRejection, SupervisorActionRejectionReason,
 };
 
+use crate::engine::EngineComponent;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineState {
     status: EngineStatus,
@@ -18,32 +20,38 @@ impl EngineState {
                 phase: EnginePhase::Starting,
                 components: vec![
                     ComponentStatus {
-                        name: ComponentName::new("persona-mind"),
+                        name: EngineComponent::Mind.component_name(),
                         kind: ComponentKind::Mind,
                         desired_state: ComponentDesiredState::Running,
                         health: ComponentHealth::Starting,
                     },
                     ComponentStatus {
-                        name: ComponentName::new("persona-router"),
+                        name: EngineComponent::Router.component_name(),
                         kind: ComponentKind::Router,
                         desired_state: ComponentDesiredState::Running,
                         health: ComponentHealth::Starting,
                     },
                     ComponentStatus {
-                        name: ComponentName::new("persona-system"),
+                        name: EngineComponent::System.component_name(),
                         kind: ComponentKind::System,
                         desired_state: ComponentDesiredState::Running,
                         health: ComponentHealth::Starting,
                     },
                     ComponentStatus {
-                        name: ComponentName::new("persona-harness"),
+                        name: EngineComponent::Harness.component_name(),
                         kind: ComponentKind::Harness,
                         desired_state: ComponentDesiredState::Running,
                         health: ComponentHealth::Starting,
                     },
                     ComponentStatus {
-                        name: ComponentName::new("persona-terminal"),
+                        name: EngineComponent::Terminal.component_name(),
                         kind: ComponentKind::Terminal,
+                        desired_state: ComponentDesiredState::Running,
+                        health: ComponentHealth::Starting,
+                    },
+                    ComponentStatus {
+                        name: EngineComponent::MessageProxy.component_name(),
+                        kind: ComponentKind::MessageProxy,
                         desired_state: ComponentDesiredState::Running,
                         health: ComponentHealth::Starting,
                     },

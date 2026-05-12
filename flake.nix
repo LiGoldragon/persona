@@ -600,6 +600,16 @@
               cargoTestExtraArgs = "--test direct_process constraint_component_launcher_reaps_process_group -- --exact";
             }
           );
+          persona-engine-supervisor-launches-first-stack-through-process-launcher =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+                  cargoTestExtraArgs = "--test supervisor constraint_engine_supervisor_launches_first_stack_through_process_launcher -- --exact";
+                }
+              );
           persona-daemon-persists-cli-mutation-to-manager-store = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -607,6 +617,16 @@
               cargoTestExtraArgs = "--test daemon constraint_persona_daemon_persists_cli_mutation_to_manager_store -- --exact";
             }
           );
+          persona-daemon-launches-first-stack-through-engine-supervisor =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+                  cargoTestExtraArgs = "--test daemon constraint_persona_daemon_launches_first_stack_through_engine_supervisor -- --exact";
+                }
+              );
         }
       );
 

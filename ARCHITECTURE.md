@@ -97,7 +97,7 @@ live in `lojix-cli` / `CriomOS`; declarative cluster data lives in
 identity) lives in the criome ecosystem.
 
 > **Scope.** Today's Persona sits on today's stack — Rust on Linux,
-> direct Kameo, `sema-db` storage, signal-* wire. The
+> direct Kameo, component-owned Sema/redb storage, signal-* wire. The
 > eventually-self-hosting stack is one Sema-on-Sema substrate that
 > subsumes these pieces; today's Persona is a realization step
 > toward it, built rightly for the scope it serves now. See
@@ -338,10 +338,19 @@ starts the Kameo `EngineManager`, accepts one Signal frame per connection,
 dispatches through `HandleEngineRequest`, writes one Signal reply frame, and
 keeps manager state across CLI invocations. The manager redb path is present
 through a dedicated `ManagerStore` Kameo actor backed by Sema; manager
-mutations persist by sending typed messages to that actor. The full
-multi-engine catalog, component launcher/supervisor, origin tagging, socket
-ACL application, and privileged-user deployment witnesses are the next
-engine-manager layers.
+mutations persist by sending typed messages to that actor.
+
+The first supervision slice is also present. When the daemon receives an
+explicit launch plan from environment, it starts the data-bearing
+`EngineSupervisor` actor, resolves first-stack component commands through
+`ComponentCommandResolver`, prepares EngineId-scoped state/run directories,
+creates spawn envelopes, launches every first-stack process through
+`DirectProcessLauncher`, and records typed `ComponentSpawned` events in
+`manager.redb`. The default manager-only mode remains available for tests and
+for hosts that have not yet supplied component commands. The remaining
+engine-manager layers are restore-on-restart, socket ACL application,
+component readiness/exit subscriptions, restart policy, multi-engine catalog,
+origin tagging, and privileged-user deployment witnesses.
 
 ## 2 · Command-line Mind
 
@@ -729,7 +738,9 @@ The apex repo owns tests that prove cross-component shape:
 | component command resolution is Nix-owned | `nix flake check .#persona-component-commands-resolve-from-nix-closure` |
 | launch config overrides are narrow | `nix flake check .#persona-launch-config-overrides-one-component-command` |
 | spawn envelope carries the resolved command | `nix flake check .#persona-spawn-envelope-carries-resolved-component-command` |
-| full topology starts every first-stack daemon skeleton | `nix flake check .#persona-daemon-spawns-first-stack-skeletons` |
+| engine supervisor starts every first-stack process through the launcher actor | `nix flake check .#persona-engine-supervisor-launches-first-stack-through-process-launcher` |
+| persona-daemon launch plan reaches the engine supervisor and manager event log | `nix flake check .#persona-daemon-launches-first-stack-through-engine-supervisor` |
+| full topology starts every first-stack daemon skeleton | pending component-readiness witness |
 | component skeletons answer health/status/readiness | `nix flake check .#persona-component-skeletons-answer-health-status-readiness` |
 | unfinished component behavior is typed | `nix flake check .#persona-component-skeleton-returns-typed-unimplemented` |
 | skeleton decodes every contract variant | `nix flake check .#persona-component-skeleton-decodes-every-contract-variant` |
@@ -740,10 +751,9 @@ The apex repo owns tests that prove cross-component shape:
 | component stop cleans up the child process tree | `nix flake check .#persona-component-launcher-reaps-process-group` |
 | sandbox credential roots remain visible under home hiding | `nix flake check .#persona-engine-sandbox-binds-dedicated-credential-root` |
 
-The launcher checks above are primitive-level witnesses for the direct
-process backend. They do not replace the pending full-topology daemon
-witnesses that wire the launcher through `persona-daemon` and the engine
-manager.
+The launcher checks above now cover both the primitive direct-process backend
+and the `persona-daemon` launch-plan path. They do not yet prove component
+readiness, socket ACLs, restart policy, or real router/mind/harness behavior.
 
 ## Code Map
 
@@ -762,6 +772,7 @@ src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records
 src/engine_event.rs  typed engine-management event records
 src/direct_process.rs  direct child-process launcher actor
 src/launch/      launch configuration, resolved commands, command resolver actor
+src/supervisor.rs  Kameo EngineSupervisor actor that starts/stops first-stack processes
 src/transport.rs Unix-socket Signal codec, client, daemon, endpoint, caller
 src/manager.rs   Kameo EngineManager actor scaffold and trace witness
 src/manager_store.rs  Kameo ManagerStore actor and manager.redb Sema tables

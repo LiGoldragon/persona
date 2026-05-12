@@ -29,7 +29,7 @@ pub struct LaunchedComponent {
 }
 
 impl LaunchedComponent {
-    fn new(component: EngineComponent, process: ChildProcessId) -> Self {
+    pub(crate) fn new(component: EngineComponent, process: ChildProcessId) -> Self {
         Self { component, process }
     }
 

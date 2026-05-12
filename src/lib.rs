@@ -14,6 +14,7 @@ pub mod manager_store;
 pub mod request;
 pub mod schema;
 pub mod state;
+pub mod supervisor;
 pub mod transport;
 
 pub use error::{Error, Result};

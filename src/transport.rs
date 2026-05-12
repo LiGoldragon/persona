@@ -11,8 +11,10 @@ use tokio::net::{UnixListener, UnixStream};
 
 use crate::engine::PersonaDaemonPaths;
 use crate::error::{Error, Result};
+use crate::launch::{ComponentCommandCatalog, EngineLaunchConfiguration};
 use crate::manager::{EngineManager, HandleEngineRequest};
 use crate::manager_store::{ManagerStore, ManagerStoreLocation};
+use crate::supervisor::{EngineSupervisor, EngineSupervisorInput, StartFirstStack};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaEndpoint {
@@ -156,6 +158,7 @@ impl PersonaClient {
 pub struct PersonaDaemon {
     endpoint: PersonaEndpoint,
     manager_store: ManagerStoreLocation,
+    launch_plan: Option<PersonaLaunchPlan>,
     codec: PersonaFrameCodec,
 }
 
@@ -173,27 +176,61 @@ impl PersonaDaemon {
         Self {
             endpoint,
             manager_store,
+            launch_plan: None,
             codec: PersonaFrameCodec::default(),
         }
+    }
+
+    pub fn with_launch_plan(mut self, launch_plan: Option<PersonaLaunchPlan>) -> Self {
+        self.launch_plan = launch_plan;
+        self
     }
 
     pub async fn serve(self) -> Result<()> {
         self.endpoint.unlink_existing_socket()?;
         let listener = UnixListener::bind(self.endpoint.as_path())?;
         let store = ManagerStore::start(self.manager_store.clone())?;
-        let manager = EngineManager::start_with_store(EngineId::new("default"), store).await?;
+        let manager =
+            EngineManager::start_with_store(EngineId::new("default"), store.clone()).await?;
+        let supervisor = self.start_supervisor(store).await?;
 
         println!(
             "persona-daemon socket={}",
             self.endpoint.as_path().display()
         );
 
+        let _supervisor_lifetime = supervisor;
         loop {
             let (stream, _) = listener.accept().await?;
             if let Err(error) = self.handle_stream(stream, &manager).await {
                 eprintln!("persona-daemon connection error: {error}");
             }
         }
+    }
+
+    async fn start_supervisor(
+        &self,
+        store: kameo::actor::ActorRef<ManagerStore>,
+    ) -> Result<Option<kameo::actor::ActorRef<EngineSupervisor>>> {
+        let Some(launch_plan) = &self.launch_plan else {
+            return Ok(None);
+        };
+        let supervisor = EngineSupervisor::start(EngineSupervisorInput {
+            layout: launch_plan.layout(),
+            command_catalog: launch_plan.command_catalog.clone(),
+            launch_configuration: EngineLaunchConfiguration::empty(),
+            store: Some(store),
+        });
+        match supervisor.ask(StartFirstStack).await {
+            Ok(_) => {}
+            Err(kameo::error::SendError::HandlerError(error)) => {
+                return Err(Error::engine_supervisor("start first stack", error));
+            }
+            Err(error) => {
+                return Err(Error::actor("start first stack supervisor", error));
+            }
+        }
+        Ok(Some(supervisor))
     }
 
     async fn handle_stream(
@@ -216,24 +253,88 @@ impl PersonaDaemon {
 pub struct PersonaDaemonCommand {
     endpoint: PersonaEndpoint,
     manager_store: ManagerStoreLocation,
+    launch_plan: Option<PersonaLaunchPlan>,
 }
 
 impl PersonaDaemonCommand {
-    pub fn from_environment() -> Self {
+    pub fn from_environment() -> Result<Self> {
         let endpoint = PersonaEndpoint::from_argument_or_environment(std::env::args_os().nth(1));
         let manager_store = ManagerStoreLocation::from_environment().unwrap_or_else(|| {
             ManagerStoreLocation::from_endpoint(endpoint.as_path())
                 .unwrap_or_else(|_| ManagerStoreLocation::new("manager.redb"))
         });
-        Self {
+        let launch_plan = PersonaLaunchPlan::from_environment(&endpoint)?;
+        Ok(Self {
             endpoint,
             manager_store,
-        }
+            launch_plan,
+        })
     }
 
     pub async fn run(self) -> Result<()> {
         PersonaDaemon::with_manager_store(self.endpoint, self.manager_store)
+            .with_launch_plan(self.launch_plan)
             .serve()
             .await
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersonaLaunchPlan {
+    engine: EngineId,
+    paths: PersonaDaemonPaths,
+    command_catalog: ComponentCommandCatalog,
+}
+
+impl PersonaLaunchPlan {
+    pub fn from_environment(endpoint: &PersonaEndpoint) -> Result<Option<Self>> {
+        let Some(command_catalog) = ComponentCommandCatalog::from_environment()? else {
+            return Ok(None);
+        };
+        let engine = std::env::var("PERSONA_MANAGER_ENGINE_ID")
+            .map(EngineId::new)
+            .unwrap_or_else(|_| EngineId::new("default"));
+        let paths = Self::paths_from_environment(endpoint)?;
+        Ok(Some(Self {
+            engine,
+            paths,
+            command_catalog,
+        }))
+    }
+
+    pub fn from_input(input: PersonaLaunchPlanInput) -> Self {
+        Self {
+            engine: input.engine,
+            paths: input.paths,
+            command_catalog: input.command_catalog,
+        }
+    }
+
+    fn paths_from_environment(endpoint: &PersonaEndpoint) -> Result<PersonaDaemonPaths> {
+        let endpoint_parent =
+            endpoint
+                .as_path()
+                .parent()
+                .ok_or_else(|| Error::ManagerStorePathMissingParent {
+                    path: endpoint.as_path().to_path_buf(),
+                })?;
+        let state_root = std::env::var_os("PERSONA_STATE_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| endpoint_parent.join("state"));
+        let run_root = std::env::var_os("PERSONA_RUN_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| endpoint_parent.join("run"));
+        Ok(PersonaDaemonPaths::new(state_root, run_root))
+    }
+
+    pub fn layout(&self) -> crate::engine::EngineLayout {
+        self.paths.engine_layout(self.engine.clone())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersonaLaunchPlanInput {
+    pub engine: EngineId,
+    pub paths: PersonaDaemonPaths,
+    pub command_catalog: ComponentCommandCatalog,
 }

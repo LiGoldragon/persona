@@ -28,6 +28,12 @@ pub enum Error {
         detail: String,
     },
 
+    #[error("engine supervisor failed during {operation}: {detail}")]
+    EngineSupervisor {
+        operation: &'static str,
+        detail: String,
+    },
+
     #[error("signal frame: {0}")]
     SignalFrame(#[from] signal_core::FrameError),
 
@@ -42,6 +48,9 @@ pub enum Error {
 
     #[error("manager store path is missing a parent directory: {path}")]
     ManagerStorePathMissingParent { path: PathBuf },
+
+    #[error("component command resolution: {0}")]
+    CommandResolution(#[from] crate::launch::CommandResolutionFailure),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -49,6 +58,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 impl Error {
     pub fn actor(operation: &'static str, error: impl std::fmt::Debug) -> Self {
         Self::Actor {
+            operation,
+            detail: format!("{error:?}"),
+        }
+    }
+
+    pub fn engine_supervisor(operation: &'static str, error: impl std::fmt::Debug) -> Self {
+        Self::EngineSupervisor {
             operation,
             detail: format!("{error:?}"),
         }

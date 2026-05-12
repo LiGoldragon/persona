@@ -165,6 +165,22 @@ impl EngineComponent {
         ]
     }
 
+    pub fn component_name(self) -> signal_persona::ComponentName {
+        signal_persona::ComponentName::new(self.as_component_name())
+    }
+
+    pub fn from_component_name(component: &signal_persona::ComponentName) -> Option<Self> {
+        match component.as_str() {
+            "persona-mind" => Some(Self::Mind),
+            "persona-router" => Some(Self::Router),
+            "persona-system" => Some(Self::System),
+            "persona-harness" => Some(Self::Harness),
+            "persona-terminal" => Some(Self::Terminal),
+            "persona-message" => Some(Self::MessageProxy),
+            _ => None,
+        }
+    }
+
     pub const fn signal_name(self) -> SignalComponentName {
         match self {
             Self::Mind => SignalComponentName::Mind,
@@ -206,6 +222,28 @@ impl EngineComponent {
             Self::Harness => "harness",
             Self::Terminal => "terminal",
             Self::MessageProxy => "message-proxy",
+        }
+    }
+
+    pub const fn as_component_name(self) -> &'static str {
+        match self {
+            Self::Mind => "persona-mind",
+            Self::Router => "persona-router",
+            Self::System => "persona-system",
+            Self::Harness => "persona-harness",
+            Self::Terminal => "persona-terminal",
+            Self::MessageProxy => "persona-message",
+        }
+    }
+
+    pub const fn executable_environment_variable(self) -> &'static str {
+        match self {
+            Self::Mind => "PERSONA_MIND_EXECUTABLE",
+            Self::Router => "PERSONA_ROUTER_EXECUTABLE",
+            Self::System => "PERSONA_SYSTEM_EXECUTABLE",
+            Self::Harness => "PERSONA_HARNESS_EXECUTABLE",
+            Self::Terminal => "PERSONA_TERMINAL_EXECUTABLE",
+            Self::MessageProxy => "PERSONA_MESSAGE_PROXY_EXECUTABLE",
         }
     }
 
