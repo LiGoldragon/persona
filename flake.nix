@@ -19,7 +19,13 @@
     signal-persona.url = "github:LiGoldragon/signal-persona";
     signal-persona-mind.url = "github:LiGoldragon/signal-persona-mind";
     signal-persona-system.url = "github:LiGoldragon/signal-persona-system";
+    signal-persona-system.inputs.nixpkgs.follows = "nixpkgs";
+    signal-persona-system.inputs.fenix.follows = "fenix";
+    signal-persona-system.inputs.crane.follows = "crane";
     persona-system.url = "github:LiGoldragon/persona-system";
+    persona-system.inputs.nixpkgs.follows = "nixpkgs";
+    persona-system.inputs.fenix.follows = "fenix";
+    persona-system.inputs.crane.follows = "crane";
     persona-terminal.url = "github:LiGoldragon/persona-terminal";
     terminal-cell = {
       url = "github:LiGoldragon/terminal-cell";
