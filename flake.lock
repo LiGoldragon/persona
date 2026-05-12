@@ -637,11 +637,11 @@
         "nixpkgs": "nixpkgs_6"
       },
       "locked": {
-        "lastModified": 1778597453,
-        "narHash": "sha256-FToTd4jJ7W4FE6Kn8S+uwfwqertWHwZGlRlktZXi4cU=",
+        "lastModified": 1778598325,
+        "narHash": "sha256-r3lH841DcWde9cQcYdaJ7bm0UYEuucrU355LMmDZzP8=",
         "owner": "LiGoldragon",
         "repo": "persona-terminal",
-        "rev": "d79a1afa71aace052e5838d1eb6bed30b7c60a0d",
+        "rev": "5a11428478eb86ef73e130f9ba683fb7642268ae",
         "type": "github"
       },
       "original": {
