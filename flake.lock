@@ -897,11 +897,11 @@
         "nixpkgs": "nixpkgs_9"
       },
       "locked": {
-        "lastModified": 1778489438,
-        "narHash": "sha256-Kq3aqM11bstSyLEGEGGabmYczPASTRQLvwh8QNIVYq4=",
+        "lastModified": 1778579606,
+        "narHash": "sha256-DsZCM3tGkGt4hg9hHRzNTLr+mR63bX4mj+mkevkeZ9o=",
         "owner": "LiGoldragon",
         "repo": "signal-persona",
-        "rev": "f2c6483872ecdcfc40a74890dfefe36349557944",
+        "rev": "32ebd68df417a93806f48c4f837cd5906371cbad",
         "type": "github"
       },
       "original": {

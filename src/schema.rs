@@ -58,7 +58,7 @@ pub enum EnginePhase {
 pub enum ComponentKind {
     Mind,
     Router,
-    Message,
+    MessageProxy,
     System,
     Harness,
     Terminal,
@@ -390,7 +390,7 @@ impl ComponentKind {
         match kind {
             contract::ComponentKind::Mind => Self::Mind,
             contract::ComponentKind::Router => Self::Router,
-            contract::ComponentKind::Message => Self::Message,
+            contract::ComponentKind::MessageProxy => Self::MessageProxy,
             contract::ComponentKind::System => Self::System,
             contract::ComponentKind::Harness => Self::Harness,
             contract::ComponentKind::Terminal => Self::Terminal,

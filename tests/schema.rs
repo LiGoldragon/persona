@@ -27,6 +27,21 @@ impl SchemaFixture {
         }
     }
 
+    fn message_proxy_engine() -> Self {
+        Self {
+            status: EngineStatus {
+                generation: EngineGeneration::new(4),
+                phase: ContractPhase::Running,
+                components: vec![ComponentStatus {
+                    name: ComponentName::new("persona-message"),
+                    kind: ContractKind::MessageProxy,
+                    desired_state: ContractDesiredState::Running,
+                    health: ContractHealth::Running,
+                }],
+            },
+        }
+    }
+
     fn report(&self) -> EngineStatusReport {
         EngineStatusReport::from_contract(self.status.clone())
     }
@@ -52,4 +67,14 @@ fn signal_persona_status_projects_to_nota_enums() {
     assert_eq!(component.desired_state, ComponentDesiredState::Running);
     assert_eq!(component.health, ComponentHealth::Starting);
     assert_eq!(component.name.as_str(), "persona-system");
+}
+
+#[test]
+fn signal_persona_message_proxy_kind_projects_to_nota() {
+    let report = SchemaFixture::message_proxy_engine().report();
+    let component = report.components.first().unwrap();
+    let encoded = report.to_nota().unwrap();
+
+    assert_eq!(component.kind, ComponentKind::MessageProxy);
+    assert!(encoded.contains("MessageProxy"));
 }
