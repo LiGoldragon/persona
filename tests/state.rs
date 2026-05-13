@@ -23,6 +23,7 @@ fn default_catalog_names_engine_components() {
             "persona-harness",
             "persona-terminal",
             "persona-message",
+            "persona-introspect",
         ]
     );
 }

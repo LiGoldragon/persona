@@ -13,6 +13,10 @@
     persona-harness.inputs.nixpkgs.follows = "nixpkgs";
     persona-harness.inputs.fenix.follows = "fenix";
     persona-harness.inputs.crane.follows = "crane";
+    persona-introspect.url = "github:LiGoldragon/persona-introspect";
+    persona-introspect.inputs.nixpkgs.follows = "nixpkgs";
+    persona-introspect.inputs.fenix.follows = "fenix";
+    persona-introspect.inputs.crane.follows = "crane";
     persona-message.url = "github:LiGoldragon/persona-message";
     persona-mind.url = "github:LiGoldragon/persona-mind";
     persona-router.url = "github:LiGoldragon/persona-router";
@@ -224,6 +228,7 @@
             }
           );
           persona-harness = inputs.persona-harness.packages.${system}.default;
+          persona-introspect = inputs.persona-introspect.packages.${system}.default;
           persona-message = inputs.persona-message.packages.${system}.default;
           persona-mind = inputs.persona-mind.packages.${system}.default;
           persona-router = inputs.persona-router.packages.${system}.default;
@@ -600,14 +605,14 @@
               cargoTestExtraArgs = "--test direct_process constraint_component_launcher_reaps_process_group -- --exact";
             }
           );
-          persona-engine-supervisor-launches-first-stack-through-process-launcher =
+          persona-engine-supervisor-launches-prototype-supervised-components-through-process-launcher =
             context.craneLib.cargoTest
               (
                 context.commonArgs
                 // {
                   inherit (context) cargoArtifacts;
                   PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
-                  cargoTestExtraArgs = "--test supervisor constraint_engine_supervisor_launches_first_stack_through_process_launcher -- --exact";
+                  cargoTestExtraArgs = "--test supervisor constraint_engine_supervisor_launches_prototype_supervised_components_through_process_launcher -- --exact";
                 }
               );
           persona-daemon-persists-cli-mutation-to-manager-store = context.craneLib.cargoTest (
@@ -617,14 +622,14 @@
               cargoTestExtraArgs = "--test daemon constraint_persona_daemon_persists_cli_mutation_to_manager_store -- --exact";
             }
           );
-          persona-daemon-launches-first-stack-through-engine-supervisor =
+          persona-daemon-launches-prototype-supervised-components-through-engine-supervisor =
             context.craneLib.cargoTest
               (
                 context.commonArgs
                 // {
                   inherit (context) cargoArtifacts;
                   PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
-                  cargoTestExtraArgs = "--test daemon constraint_persona_daemon_launches_first_stack_through_engine_supervisor -- --exact";
+                  cargoTestExtraArgs = "--test daemon constraint_persona_daemon_launches_prototype_supervised_components_through_engine_supervisor -- --exact";
                 }
               );
         }

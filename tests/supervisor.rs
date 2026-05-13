@@ -8,8 +8,8 @@ use persona::engine_event::EngineEventBody;
 use persona::launch::{ComponentCommandCatalog, EngineLaunchConfiguration};
 use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadEngineEvents};
 use persona::supervisor::{
-    EngineSupervisor, EngineSupervisorInput, ReadEngineSupervisorSnapshot, StartFirstStack,
-    StopFirstStack,
+    EngineSupervisor, EngineSupervisorInput, ReadEngineSupervisorSnapshot,
+    StartPrototypeSupervision, StopPrototypeSupervision,
 };
 use signal_persona_auth::EngineId;
 
@@ -115,8 +115,9 @@ impl Drop for SupervisorFixture {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn constraint_engine_supervisor_launches_first_stack_through_process_launcher() {
-    let fixture = SupervisorFixture::new("first-stack");
+async fn constraint_engine_supervisor_launches_prototype_supervised_components_through_process_launcher()
+ {
+    let fixture = SupervisorFixture::new("prototype-supervision");
     let store = ManagerStore::start(ManagerStoreLocation::new(fixture.manager_store()))
         .expect("manager store starts");
     let supervisor = EngineSupervisor::spawn(EngineSupervisor::new(EngineSupervisorInput {
@@ -127,12 +128,12 @@ async fn constraint_engine_supervisor_launches_first_stack_through_process_launc
     }));
 
     let report = supervisor
-        .ask(StartFirstStack)
+        .ask(StartPrototypeSupervision)
         .await
-        .expect("first stack launches");
+        .expect("prototype supervision starts");
     assert_eq!(
         report.components().len(),
-        EngineComponent::first_stack().len()
+        EngineComponent::prototype_supervised_components().len()
     );
 
     let snapshot = supervisor
@@ -141,24 +142,27 @@ async fn constraint_engine_supervisor_launches_first_stack_through_process_launc
         .expect("supervisor snapshot succeeds");
     assert_eq!(
         snapshot.running().len(),
-        EngineComponent::first_stack().len()
+        EngineComponent::prototype_supervised_components().len()
     );
-    assert_eq!(snapshot.started_stack_count(), 1);
+    assert_eq!(snapshot.started_supervision_count(), 1);
 
-    for component in EngineComponent::first_stack() {
+    for component in EngineComponent::prototype_supervised_components() {
         let capture =
             SupervisorFixture::wait_for_capture(&fixture.component_capture(component)).await;
         assert!(capture.contains("engine=supervisor-test"));
         assert!(capture.contains(&format!("component={}", component.as_str())));
         assert!(capture.contains(&format!("mode={:o}", component.socket_mode().as_octal())));
-        assert!(capture.contains("peer_count=5"));
+        assert!(capture.contains("peer_count=6"));
     }
 
     let events = store
         .ask(ReadEngineEvents::new(fixture.engine.clone()))
         .await
         .expect("engine events read");
-    assert_eq!(events.len(), EngineComponent::first_stack().len());
+    assert_eq!(
+        events.len(),
+        EngineComponent::prototype_supervised_components().len()
+    );
     assert!(
         events
             .iter()
@@ -166,25 +170,28 @@ async fn constraint_engine_supervisor_launches_first_stack_through_process_launc
     );
 
     let stopped = supervisor
-        .ask(StopFirstStack)
+        .ask(StopPrototypeSupervision)
         .await
-        .expect("first stack stops");
+        .expect("prototype supervision stops");
     assert_eq!(
         stopped.components().len(),
-        EngineComponent::first_stack().len()
+        EngineComponent::prototype_supervised_components().len()
     );
 
     let events = store
         .ask(ReadEngineEvents::new(fixture.engine.clone()))
         .await
         .expect("engine events read");
-    assert_eq!(events.len(), EngineComponent::first_stack().len() * 2);
+    assert_eq!(
+        events.len(),
+        EngineComponent::prototype_supervised_components().len() * 2
+    );
     assert_eq!(
         events
             .iter()
             .filter(|event| matches!(event.body(), EngineEventBody::ComponentStopped(_)))
             .count(),
-        EngineComponent::first_stack().len()
+        EngineComponent::prototype_supervised_components().len()
     );
 
     supervisor

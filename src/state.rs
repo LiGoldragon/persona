@@ -1,8 +1,8 @@
 use signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, ComponentShutdown,
-    ComponentStartup, ComponentStatus, ComponentStatusMissing, ComponentStatusQuery,
-    EngineGeneration, EnginePhase, EngineReply, EngineStatus, SupervisorActionAcceptance,
-    SupervisorActionRejection, SupervisorActionRejectionReason,
+    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, ComponentStartup,
+    ComponentStatus, ComponentStatusMissing, ComponentStatusQuery, EngineGeneration, EnginePhase,
+    EngineReply, EngineStatus, SupervisorActionAcceptance, SupervisorActionRejection,
+    SupervisorActionRejectionReason,
 };
 
 use crate::engine::EngineComponent;
@@ -18,44 +18,15 @@ impl EngineState {
             status: EngineStatus {
                 generation: EngineGeneration::new(0),
                 phase: EnginePhase::Starting,
-                components: vec![
-                    ComponentStatus {
-                        name: EngineComponent::Mind.component_name(),
-                        kind: ComponentKind::Mind,
+                components: EngineComponent::prototype_supervised_components()
+                    .into_iter()
+                    .map(|component| ComponentStatus {
+                        name: component.component_name(),
+                        kind: component.component_kind(),
                         desired_state: ComponentDesiredState::Running,
                         health: ComponentHealth::Starting,
-                    },
-                    ComponentStatus {
-                        name: EngineComponent::Router.component_name(),
-                        kind: ComponentKind::Router,
-                        desired_state: ComponentDesiredState::Running,
-                        health: ComponentHealth::Starting,
-                    },
-                    ComponentStatus {
-                        name: EngineComponent::System.component_name(),
-                        kind: ComponentKind::System,
-                        desired_state: ComponentDesiredState::Running,
-                        health: ComponentHealth::Starting,
-                    },
-                    ComponentStatus {
-                        name: EngineComponent::Harness.component_name(),
-                        kind: ComponentKind::Harness,
-                        desired_state: ComponentDesiredState::Running,
-                        health: ComponentHealth::Starting,
-                    },
-                    ComponentStatus {
-                        name: EngineComponent::Terminal.component_name(),
-                        kind: ComponentKind::Terminal,
-                        desired_state: ComponentDesiredState::Running,
-                        health: ComponentHealth::Starting,
-                    },
-                    ComponentStatus {
-                        name: EngineComponent::Message.component_name(),
-                        kind: ComponentKind::Message,
-                        desired_state: ComponentDesiredState::Running,
-                        health: ComponentHealth::Starting,
-                    },
-                ],
+                    })
+                    .collect(),
             },
         }
     }

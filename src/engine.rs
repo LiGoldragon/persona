@@ -35,7 +35,7 @@ impl PersonaDaemonPaths {
     pub fn engine_layout(&self, engine: EngineId) -> EngineLayout {
         let state_dir = self.state_root.join(engine.as_str());
         let run_dir = self.run_root.join(engine.as_str());
-        let components = EngineComponent::first_stack()
+        let components = EngineComponent::prototype_supervised_components()
             .into_iter()
             .map(|component| {
                 ComponentLayout::new(component, state_dir.as_path(), run_dir.as_path())
@@ -151,10 +151,11 @@ pub enum EngineComponent {
     Harness,
     Terminal,
     Message,
+    Introspect,
 }
 
 impl EngineComponent {
-    pub const fn first_stack() -> [Self; 6] {
+    pub const fn operational_delivery_components() -> [Self; 6] {
         [
             Self::Mind,
             Self::Router,
@@ -163,6 +164,30 @@ impl EngineComponent {
             Self::Terminal,
             Self::Message,
         ]
+    }
+
+    pub const fn prototype_supervised_components() -> [Self; 7] {
+        [
+            Self::Mind,
+            Self::Router,
+            Self::System,
+            Self::Harness,
+            Self::Terminal,
+            Self::Message,
+            Self::Introspect,
+        ]
+    }
+
+    pub const fn component_kind(self) -> signal_persona::ComponentKind {
+        match self {
+            Self::Mind => signal_persona::ComponentKind::Mind,
+            Self::Router => signal_persona::ComponentKind::Router,
+            Self::System => signal_persona::ComponentKind::System,
+            Self::Harness => signal_persona::ComponentKind::Harness,
+            Self::Terminal => signal_persona::ComponentKind::Terminal,
+            Self::Message => signal_persona::ComponentKind::Message,
+            Self::Introspect => signal_persona::ComponentKind::Introspect,
+        }
     }
 
     pub fn component_name(self) -> signal_persona::ComponentName {
@@ -177,6 +202,7 @@ impl EngineComponent {
             "persona-harness" => Some(Self::Harness),
             "persona-terminal" => Some(Self::Terminal),
             "persona-message" => Some(Self::Message),
+            "persona-introspect" => Some(Self::Introspect),
             _ => None,
         }
     }
@@ -189,6 +215,7 @@ impl EngineComponent {
             Self::Harness => SignalComponentName::Harness,
             Self::Terminal => SignalComponentName::Terminal,
             Self::Message => SignalComponentName::Message,
+            Self::Introspect => SignalComponentName::Introspect,
         }
     }
 
@@ -200,6 +227,7 @@ impl EngineComponent {
             Self::Harness => "harness.sock",
             Self::Terminal => "terminal.sock",
             Self::Message => "message.sock",
+            Self::Introspect => "introspect.sock",
         }
     }
 
@@ -211,6 +239,7 @@ impl EngineComponent {
             Self::Harness => "harness.redb",
             Self::Terminal => "terminal.redb",
             Self::Message => "message.redb",
+            Self::Introspect => "introspect.redb",
         }
     }
 
@@ -222,6 +251,7 @@ impl EngineComponent {
             Self::Harness => "harness",
             Self::Terminal => "terminal",
             Self::Message => "message",
+            Self::Introspect => "introspect",
         }
     }
 
@@ -233,6 +263,7 @@ impl EngineComponent {
             Self::Harness => "persona-harness",
             Self::Terminal => "persona-terminal",
             Self::Message => "persona-message",
+            Self::Introspect => "persona-introspect",
         }
     }
 
@@ -244,15 +275,19 @@ impl EngineComponent {
             Self::Harness => "PERSONA_HARNESS_EXECUTABLE",
             Self::Terminal => "PERSONA_TERMINAL_EXECUTABLE",
             Self::Message => "PERSONA_MESSAGE_DAEMON_EXECUTABLE",
+            Self::Introspect => "PERSONA_INTROSPECT_DAEMON_EXECUTABLE",
         }
     }
 
     pub const fn socket_mode(self) -> SocketMode {
         match self {
             Self::Message => SocketMode::message_ingress(),
-            Self::Mind | Self::Router | Self::System | Self::Harness | Self::Terminal => {
-                SocketMode::internal_component()
-            }
+            Self::Mind
+            | Self::Router
+            | Self::System
+            | Self::Harness
+            | Self::Terminal
+            | Self::Introspect => SocketMode::internal_component(),
         }
     }
 }

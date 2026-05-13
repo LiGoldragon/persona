@@ -64,7 +64,7 @@ impl DirectProcessFixture {
             arguments: vec![
                 CommandArgument::new("-c"),
                 CommandArgument::new(
-                    "trap 'exit 0' TERM; (trap 'exit 0' TERM; echo \"$BASHPID\" > \"$PERSONA_TEST_CHILD_PID_FILE\"; while true; do sleep 1; done) & wait",
+                    "trap 'exit 0' TERM; (trap 'exit 0' TERM; while true; do sleep 1; done) & echo \"$!\" > \"$PERSONA_TEST_CHILD_PID_FILE\"; wait",
                 ),
             ],
             environment: vec![EnvironmentVariable::from_input(EnvironmentVariableInput {
@@ -106,7 +106,7 @@ exec sleep 3600",
 
     fn command_catalog(&self) -> ComponentCommandCatalog {
         ComponentCommandCatalog::from_entries(
-            EngineComponent::first_stack()
+            EngineComponent::prototype_supervised_components()
                 .into_iter()
                 .map(|component| {
                     ComponentCommandEntry::from_input(ComponentCommandEntryInput {
@@ -150,20 +150,21 @@ exec sleep 3600",
         layout
             .prepare_directories()
             .expect("engine directories prepared");
-        let mut entries: Vec<ComponentCommandEntry> = EngineComponent::first_stack()
-            .into_iter()
-            .map(|entry_component| {
-                let entry_command = if entry_component == component {
-                    command.clone()
-                } else {
-                    self.long_running_command()
-                };
-                ComponentCommandEntry::from_input(ComponentCommandEntryInput {
-                    component: entry_component,
-                    command: entry_command,
+        let mut entries: Vec<ComponentCommandEntry> =
+            EngineComponent::prototype_supervised_components()
+                .into_iter()
+                .map(|entry_component| {
+                    let entry_command = if entry_component == component {
+                        command.clone()
+                    } else {
+                        self.long_running_command()
+                    };
+                    ComponentCommandEntry::from_input(ComponentCommandEntryInput {
+                        component: entry_component,
+                        command: entry_command,
+                    })
                 })
-            })
-            .collect();
+                .collect();
         entries.sort_by_key(|entry| entry.component().as_str());
         let catalog = ComponentCommandCatalog::from_entries(entries);
         let resolver = ComponentCommandResolver::spawn(ComponentCommandResolver::new(catalog));
@@ -229,12 +230,15 @@ exec sleep 3600",
 
     async fn read_envelope_capture(&self) -> String {
         for _attempt in 0..40 {
-            if let Ok(text) = std::fs::read_to_string(self.envelope_capture_file()) {
+            if let Ok(text) = std::fs::read_to_string(self.envelope_capture_file())
+                && text.contains("peer_count=")
+                && text.contains("peer_0_socket=")
+            {
                 return text;
             }
             tokio::time::sleep(std::time::Duration::from_millis(25)).await;
         }
-        panic!("spawn envelope capture file was not written");
+        panic!("spawn envelope capture file was not fully written");
     }
 }
 
@@ -333,7 +337,11 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
     assert!(captured.contains("socket="));
     assert!(captured.contains("router.sock"));
     assert!(captured.contains("mode=600"));
-    assert!(captured.contains("peer_count=5"));
+    let expected_peer_count = EngineComponent::prototype_supervised_components().len() - 1;
+    assert!(
+        captured.contains(&format!("peer_count={expected_peer_count}")),
+        "capture did not contain expected peer count: {captured}"
+    );
     assert!(captured.contains("peer_0_component="));
     assert!(captured.contains("peer_0_socket="));
 

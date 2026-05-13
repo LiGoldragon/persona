@@ -52,6 +52,7 @@ impl TemporaryEngineRoot {
             EngineComponent::Harness => "persona-harness-daemon",
             EngineComponent::Terminal => "persona-terminal-daemon",
             EngineComponent::Message => "persona-message-daemon",
+            EngineComponent::Introspect => "persona-introspect-daemon",
         };
         ComponentCommand::executable(ExecutablePath::new(format!(
             "{}/nix-closure/{command_name}/bin/{command_name}",
@@ -81,7 +82,7 @@ impl TemporaryEngineRoot {
 
     fn command_catalog() -> ComponentCommandCatalog {
         ComponentCommandCatalog::from_entries(
-            EngineComponent::first_stack()
+            EngineComponent::prototype_supervised_components()
                 .into_iter()
                 .map(Self::command_entry)
                 .collect(),
@@ -155,6 +156,18 @@ fn constraint_engine_layout_uses_engine_id_scoped_paths() {
 }
 
 #[test]
+fn constraint_prototype_supervision_includes_introspect_but_delivery_does_not() {
+    assert_eq!(EngineComponent::operational_delivery_components().len(), 6);
+    assert_eq!(EngineComponent::prototype_supervised_components().len(), 7);
+    assert!(
+        !EngineComponent::operational_delivery_components().contains(&EngineComponent::Introspect)
+    );
+    assert!(
+        EngineComponent::prototype_supervised_components().contains(&EngineComponent::Introspect)
+    );
+}
+
+#[test]
 fn constraint_engine_layout_assigns_socket_modes_by_component_boundary() {
     let root = TemporaryEngineRoot::new("socket-mode");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
@@ -166,6 +179,7 @@ fn constraint_engine_layout_assigns_socket_modes_by_component_boundary() {
         EngineComponent::System,
         EngineComponent::Harness,
         EngineComponent::Terminal,
+        EngineComponent::Introspect,
     ] {
         let socket = layout
             .component(component)
@@ -197,7 +211,7 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     assert!(envelope.state_path().ends_with("router.redb"));
     assert!(envelope.socket_path().ends_with("router.sock"));
     assert_eq!(envelope.socket_mode().as_octal(), 0o600);
-    assert_eq!(envelope.peers().len(), 5);
+    assert_eq!(envelope.peers().len(), 6);
     assert!(
         envelope
             .peers()
@@ -211,6 +225,13 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
             .iter()
             .any(|peer| peer.component() == EngineComponent::Message
                 && peer.socket_path().ends_with("message.sock"))
+    );
+    assert!(
+        envelope
+            .peers()
+            .iter()
+            .any(|peer| peer.component() == EngineComponent::Introspect
+                && peer.socket_path().ends_with("introspect.sock"))
     );
 }
 
@@ -274,11 +295,11 @@ async fn constraint_component_commands_resolve_from_nix_closure() {
         EngineLaunchConfiguration::empty(),
     )
     .await
-    .expect("all first-stack commands resolve from explicit catalog");
+    .expect("all prototype-supervised commands resolve from explicit catalog");
 
     assert_eq!(
         resolved.entries().len(),
-        EngineComponent::first_stack().len()
+        EngineComponent::prototype_supervised_components().len()
     );
     let router = resolved
         .command_for(EngineComponent::Router)
@@ -321,7 +342,7 @@ async fn constraint_launch_config_overrides_one_component_command() {
 #[tokio::test]
 async fn constraint_component_command_resolution_fails_without_host_path_fallback() {
     let catalog = ComponentCommandCatalog::from_entries(
-        EngineComponent::first_stack()
+        EngineComponent::prototype_supervised_components()
             .into_iter()
             .filter(|component| *component != EngineComponent::Router)
             .map(TemporaryEngineRoot::command_entry)

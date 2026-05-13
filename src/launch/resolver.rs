@@ -29,7 +29,7 @@ impl ComponentCommandResolver {
     ) -> std::result::Result<ResolvedComponentCommands, CommandResolutionFailure> {
         self.resolution_count += 1;
         let mut entries = Vec::new();
-        for component in EngineComponent::first_stack() {
+        for component in EngineComponent::prototype_supervised_components() {
             let command = match configuration.command_override_for(component)? {
                 Some(command) => command,
                 None => self

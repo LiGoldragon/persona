@@ -48,7 +48,7 @@ impl DaemonFixture {
         }
     }
 
-    fn start_with_first_stack() -> Self {
+    fn start_with_prototype_supervised_components() -> Self {
         let root = Self::unique_root();
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("test root created");
@@ -60,7 +60,7 @@ impl DaemonFixture {
             .env("PERSONA_MANAGER_STORE", &manager_store)
             .env("PERSONA_STATE_ROOT", root.join("state"))
             .env("PERSONA_RUN_ROOT", root.join("run"))
-            .env("PERSONA_FIRST_STACK_EXECUTABLE", script)
+            .env("PERSONA_PROTOTYPE_STACK_EXECUTABLE", script)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -170,7 +170,7 @@ while true; do sleep 1; done
     }
 
     fn stop_component_process_groups(&self) {
-        for component in EngineComponent::first_stack() {
+        for component in EngineComponent::prototype_supervised_components() {
             let Ok(text) = std::fs::read_to_string(self.component_capture(component)) else {
                 continue;
             };
@@ -245,10 +245,11 @@ async fn constraint_persona_daemon_persists_cli_mutation_to_manager_store() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn constraint_persona_daemon_launches_first_stack_through_engine_supervisor() {
-    let mut fixture = DaemonFixture::start_with_first_stack();
+async fn constraint_persona_daemon_launches_prototype_supervised_components_through_engine_supervisor()
+ {
+    let mut fixture = DaemonFixture::start_with_prototype_supervised_components();
 
-    for component in EngineComponent::first_stack() {
+    for component in EngineComponent::prototype_supervised_components() {
         let capture = fixture.wait_for_component_capture(component);
         assert!(
             capture.contains("engine=default"),
@@ -263,7 +264,7 @@ async fn constraint_persona_daemon_launches_first_stack_through_engine_superviso
             "capture for {component:?}: {capture}"
         );
         assert!(
-            capture.contains("peer_count=5"),
+            capture.contains("peer_count=6"),
             "capture for {component:?}: {capture}"
         );
     }
@@ -280,7 +281,10 @@ async fn constraint_persona_daemon_launches_first_stack_through_engine_superviso
         ))
         .await
         .expect("default engine events read through manager store actor");
-    assert_eq!(events.len(), EngineComponent::first_stack().len());
+    assert_eq!(
+        events.len(),
+        EngineComponent::prototype_supervised_components().len()
+    );
     assert!(
         events
             .iter()

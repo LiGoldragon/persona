@@ -14,7 +14,7 @@ use crate::error::{Error, Result};
 use crate::launch::{ComponentCommandCatalog, EngineLaunchConfiguration};
 use crate::manager::{EngineManager, HandleEngineRequest};
 use crate::manager_store::{ManagerStore, ManagerStoreLocation};
-use crate::supervisor::{EngineSupervisor, EngineSupervisorInput, StartFirstStack};
+use crate::supervisor::{EngineSupervisor, EngineSupervisorInput, StartPrototypeSupervision};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaEndpoint {
@@ -221,13 +221,19 @@ impl PersonaDaemon {
             launch_configuration: EngineLaunchConfiguration::empty(),
             store: Some(store),
         });
-        match supervisor.ask(StartFirstStack).await {
+        match supervisor.ask(StartPrototypeSupervision).await {
             Ok(_) => {}
             Err(kameo::error::SendError::HandlerError(error)) => {
-                return Err(Error::engine_supervisor("start first stack", error));
+                return Err(Error::engine_supervisor(
+                    "start prototype supervision",
+                    error,
+                ));
             }
             Err(error) => {
-                return Err(Error::actor("start first stack supervisor", error));
+                return Err(Error::actor(
+                    "start prototype supervision supervisor",
+                    error,
+                ));
             }
         }
         Ok(Some(supervisor))

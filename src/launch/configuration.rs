@@ -47,7 +47,7 @@ impl ComponentCommandCatalog {
     pub fn from_repeated_executable(executable_path: impl Into<String>) -> Self {
         let executable_path = executable_path.into();
         Self::from_entries(
-            EngineComponent::first_stack()
+            EngineComponent::prototype_supervised_components()
                 .into_iter()
                 .map(|component| {
                     ComponentCommandEntry::from_input(ComponentCommandEntryInput {
@@ -62,7 +62,7 @@ impl ComponentCommandCatalog {
     }
 
     pub fn from_environment() -> std::result::Result<Option<Self>, CommandResolutionFailure> {
-        if let Some(executable_path) = std::env::var_os("PERSONA_FIRST_STACK_EXECUTABLE") {
+        if let Some(executable_path) = std::env::var_os("PERSONA_PROTOTYPE_STACK_EXECUTABLE") {
             return Ok(Some(Self::from_repeated_executable(
                 executable_path.to_string_lossy().into_owned(),
             )));
@@ -70,7 +70,7 @@ impl ComponentCommandCatalog {
 
         let mut entries = Vec::new();
         let mut saw_environment = false;
-        for component in EngineComponent::first_stack() {
+        for component in EngineComponent::prototype_supervised_components() {
             match std::env::var_os(component.executable_environment_variable()) {
                 Some(path) => {
                     saw_environment = true;
@@ -92,7 +92,7 @@ impl ComponentCommandCatalog {
         }
 
         let catalog = Self::from_entries(entries);
-        for component in EngineComponent::first_stack() {
+        for component in EngineComponent::prototype_supervised_components() {
             if catalog.command_for(component)?.is_none() {
                 return Err(CommandResolutionFailure::MissingRequiredCommand { component });
             }

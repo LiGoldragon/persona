@@ -25,8 +25,8 @@ pub struct EngineSupervisor {
     resolver: ActorRef<ComponentCommandResolver>,
     launcher: ActorRef<DirectProcessLauncher>,
     store: Option<ActorRef<ManagerStore>>,
-    started_stack_count: u64,
-    stopped_stack_count: u64,
+    started_supervision_count: u64,
+    stopped_supervision_count: u64,
 }
 
 impl EngineSupervisor {
@@ -39,8 +39,8 @@ impl EngineSupervisor {
             )),
             launcher: DirectProcessLauncher::spawn(DirectProcessLauncher::new()),
             store: input.store,
-            started_stack_count: 0,
-            stopped_stack_count: 0,
+            started_supervision_count: 0,
+            stopped_supervision_count: 0,
         }
     }
 
@@ -49,7 +49,9 @@ impl EngineSupervisor {
         reference
     }
 
-    async fn start_first_stack(&mut self) -> Result<FirstStackReport, EngineSupervisorFailure> {
+    async fn start_prototype_supervision(
+        &mut self,
+    ) -> Result<PrototypeSupervisionReport, EngineSupervisorFailure> {
         self.layout
             .prepare_directories()
             .map_err(EngineSupervisorFailure::PrepareEngineLayout)?;
@@ -73,7 +75,7 @@ impl EngineSupervisor {
         };
 
         let mut launched = Vec::new();
-        for component in EngineComponent::first_stack() {
+        for component in EngineComponent::prototype_supervised_components() {
             let envelope = self
                 .layout
                 .spawn_envelope(component, &resolved)
@@ -100,11 +102,13 @@ impl EngineSupervisor {
             ));
         }
 
-        self.started_stack_count = self.started_stack_count.saturating_add(1);
-        Ok(FirstStackReport::new(launched))
+        self.started_supervision_count = self.started_supervision_count.saturating_add(1);
+        Ok(PrototypeSupervisionReport::new(launched))
     }
 
-    async fn stop_first_stack(&mut self) -> Result<FirstStackReport, EngineSupervisorFailure> {
+    async fn stop_prototype_supervision(
+        &mut self,
+    ) -> Result<PrototypeSupervisionReport, EngineSupervisorFailure> {
         let snapshot = self
             .launcher
             .ask(ReadLauncherSnapshot)
@@ -140,8 +144,8 @@ impl EngineSupervisor {
                 receipt.process(),
             ));
         }
-        self.stopped_stack_count = self.stopped_stack_count.saturating_add(1);
-        Ok(FirstStackReport::new(stopped))
+        self.stopped_supervision_count = self.stopped_supervision_count.saturating_add(1);
+        Ok(PrototypeSupervisionReport::new(stopped))
     }
 
     async fn append_component_event(
@@ -184,8 +188,8 @@ impl EngineSupervisor {
             })?;
         Ok(EngineSupervisorSnapshot {
             running: launcher.running().to_vec(),
-            started_stack_count: self.started_stack_count,
-            stopped_stack_count: self.stopped_stack_count,
+            started_supervision_count: self.started_supervision_count,
+            stopped_supervision_count: self.stopped_supervision_count,
         })
     }
 }
@@ -211,11 +215,11 @@ impl Actor for EngineSupervisor {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FirstStackReport {
+pub struct PrototypeSupervisionReport {
     components: Vec<LaunchedComponent>,
 }
 
-impl FirstStackReport {
+impl PrototypeSupervisionReport {
     fn new(components: Vec<LaunchedComponent>) -> Self {
         Self { components }
     }
@@ -225,31 +229,31 @@ impl FirstStackReport {
     }
 }
 
-pub struct StartFirstStack;
+pub struct StartPrototypeSupervision;
 
-impl Message<StartFirstStack> for EngineSupervisor {
-    type Reply = Result<FirstStackReport, EngineSupervisorFailure>;
+impl Message<StartPrototypeSupervision> for EngineSupervisor {
+    type Reply = Result<PrototypeSupervisionReport, EngineSupervisorFailure>;
 
     async fn handle(
         &mut self,
-        _message: StartFirstStack,
+        _message: StartPrototypeSupervision,
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.start_first_stack().await
+        self.start_prototype_supervision().await
     }
 }
 
-pub struct StopFirstStack;
+pub struct StopPrototypeSupervision;
 
-impl Message<StopFirstStack> for EngineSupervisor {
-    type Reply = Result<FirstStackReport, EngineSupervisorFailure>;
+impl Message<StopPrototypeSupervision> for EngineSupervisor {
+    type Reply = Result<PrototypeSupervisionReport, EngineSupervisorFailure>;
 
     async fn handle(
         &mut self,
-        _message: StopFirstStack,
+        _message: StopPrototypeSupervision,
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.stop_first_stack().await
+        self.stop_prototype_supervision().await
     }
 }
 
@@ -271,8 +275,8 @@ impl Message<ReadEngineSupervisorSnapshot> for EngineSupervisor {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineSupervisorSnapshot {
     running: Vec<LaunchedComponent>,
-    started_stack_count: u64,
-    stopped_stack_count: u64,
+    started_supervision_count: u64,
+    stopped_supervision_count: u64,
 }
 
 impl EngineSupervisorSnapshot {
@@ -280,12 +284,12 @@ impl EngineSupervisorSnapshot {
         self.running.as_slice()
     }
 
-    pub fn started_stack_count(&self) -> u64 {
-        self.started_stack_count
+    pub fn started_supervision_count(&self) -> u64 {
+        self.started_supervision_count
     }
 
-    pub fn stopped_stack_count(&self) -> u64 {
-        self.stopped_stack_count
+    pub fn stopped_supervision_count(&self) -> u64 {
+        self.stopped_supervision_count
     }
 }
 

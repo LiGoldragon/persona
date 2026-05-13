@@ -54,25 +54,10 @@ fn main() {
             assert_eq!(verb, SemaVerb::Assert, "expected Assert verb");
             match payload {
                 MessageRequest::MessageSubmission(submission) => {
-                    assert_eq!(
-                        submission.recipient.as_str(),
-                        expect.recipient.as_str(),
-                        "recipient mismatch (expected {}, got {})",
-                        expect.recipient,
-                        submission.recipient.as_str()
-                    );
-                    assert_eq!(
-                        submission.body.as_str(),
-                        expect.body.as_str(),
-                        "body mismatch (expected {}, got {})",
-                        expect.body,
-                        submission.body.as_str()
-                    );
-                    eprintln!(
-                        "decoded MessageSubmission {{ recipient: {}, body: {} }}",
-                        submission.recipient.as_str(),
-                        submission.body.as_str()
-                    );
+                    expect.assert_submission(&submission);
+                }
+                MessageRequest::StampedMessageSubmission(stamped) => {
+                    expect.assert_submission(&stamped.submission);
                 }
                 MessageRequest::InboxQuery(_) => {
                     panic!("expected MessageSubmission variant, got InboxQuery")
@@ -80,5 +65,29 @@ fn main() {
             }
         }
         other => panic!("expected Operation request frame, got {other:?}"),
+    }
+}
+
+impl Expectations {
+    fn assert_submission(&self, submission: &signal_persona_message::MessageSubmission) {
+        assert_eq!(
+            submission.recipient.as_str(),
+            self.recipient.as_str(),
+            "recipient mismatch (expected {}, got {})",
+            self.recipient,
+            submission.recipient.as_str()
+        );
+        assert_eq!(
+            submission.body.as_str(),
+            self.body.as_str(),
+            "body mismatch (expected {}, got {})",
+            self.body,
+            submission.body.as_str()
+        );
+        eprintln!(
+            "decoded MessageSubmission {{ recipient: {}, body: {} }}",
+            submission.recipient.as_str(),
+            submission.body.as_str()
+        );
     }
 }

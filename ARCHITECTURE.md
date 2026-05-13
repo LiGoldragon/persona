@@ -104,17 +104,20 @@ identity) lives in the criome ecosystem.
 > `~/primary/ESSENCE.md` §"Today and eventually — different things,
 > different names".
 
-## 0.6 · Introspection (planned)
+## 0.6 · Introspection
 
-A planned high-privilege component, **`persona-introspect`**,
-sits next to (not inside) the supervised first-stack federation.
-It asks each supervised component daemon for typed inspectable
-records over Signal and projects them to NOTA at the edge.
+`persona-introspect` is the supervised inspection-plane component.
+It sits next to the six-component operational delivery path instead
+of inside that path. It asks each supervised component daemon for
+typed inspectable records over Signal and projects them to NOTA at
+the edge.
 Per `~/primary/reports/designer/146-introspection-component-and-contract-layer.md`:
 
 - `persona-introspect` is **not** part of the six-component
-  first stack; the prototype-one acceptance per `/144` §4
-  does not require it.
+  operational delivery path.
+- `persona-introspect` **is** part of the prototype-supervised
+  component set, so the manager can launch and observe it with the
+  rest of the engine skeletons.
 - `persona-introspect` does **not** directly open any other
   component's redb. Live introspection asks the owning
   component daemon through a Signal relation; the component
@@ -582,9 +585,9 @@ mutations persist by sending typed messages to that actor.
 
 The first supervision slice is also present. When the daemon receives an
 explicit launch plan from environment, it starts the data-bearing
-`EngineSupervisor` actor, resolves first-stack component commands through
+`EngineSupervisor` actor, resolves prototype-supervised component commands through
 `ComponentCommandResolver`, prepares EngineId-scoped state/run directories,
-creates spawn envelopes, launches every first-stack process through
+creates spawn envelopes, launches every prototype-supervised component process through
 `DirectProcessLauncher`, and records typed `ComponentSpawned` events in
 `manager.redb`. The default manager-only mode remains available for tests and
 for hosts that have not yet supplied component commands. The remaining
@@ -865,9 +868,9 @@ Migration rules:
   guess.
 - Resolved spawn envelopes carry executable path, argv, environment, state
   path, socket path, socket mode, and peer sockets.
-- The first engine-supervision witness starts every first-stack component, not
+- The first engine-supervision witness starts every prototype-supervised component, not
   only the components with useful behavior already implemented.
-- Every first-stack component has a runnable daemon skeleton before the
+- Every prototype-supervised component has a runnable daemon skeleton before the
   full-topology witness is considered real.
 - A daemon skeleton accepts its component Signal boundary, answers
   health/status/readiness, and returns typed unfinished-state replies for
@@ -922,10 +925,10 @@ Migration rules:
   declarations.
 - Per-engine state and socket paths include the engine id; cross-engine state
   lives only in the manager catalog.
-- Engine layout planning names every first-stack component socket and state
+- Engine layout planning names every prototype-supervised component socket and state
   file before a component is spawned.
 - Internal component sockets are private to the Persona authority boundary;
-  the `message.sock` is group-writable for owner ingress (bound by `persona-message-daemon`, the supervised first-stack message-ingress component). `router.sock` (mode 0600) is bound by `persona-router` for internal traffic. The "proxy" name retires per `~/primary/reports/designer/142-supervision-in-signal-persona-no-message-proxy-daemon.md`; the daemon itself stays.
+  the `message.sock` is group-writable for owner ingress (bound by `persona-message-daemon`, the supervised prototype message-ingress component). `router.sock` (mode 0600) is bound by `persona-router` for internal traffic. The "proxy" name retires per `~/primary/reports/designer/142-supervision-in-signal-persona-no-message-proxy-daemon.md`; the daemon itself stays.
 - Spawn envelopes carry the component's own state/socket paths and every peer
   socket path; components do not derive peers by scanning directories.
 - Local engine trust is created by manager-owned sockets, ownership, modes, and
@@ -1003,7 +1006,7 @@ Migration rules:
   The write path is a data-bearing Kameo `ManagerStore` actor, not a CLI
   helper or direct redb call in request decoding.
 - The engine manager event log is typed manager state; text logs are views.
-- Full-engine supervision proves all first-stack daemon skeletons as real
+- Full-engine supervision proves all prototype-supervised daemon skeletons as real
   processes and sockets before it proves deep component behavior.
 - Component skeletons must be honest: valid unfinished operations return typed
   unfinished-state replies instead of hanging, crashing, or printing untyped
@@ -1075,9 +1078,9 @@ The apex repo owns tests that prove cross-component shape:
 | component command resolution is Nix-owned | `nix flake check .#persona-component-commands-resolve-from-nix-closure` |
 | launch config overrides are narrow | `nix flake check .#persona-launch-config-overrides-one-component-command` |
 | spawn envelope carries the resolved command | `nix flake check .#persona-spawn-envelope-carries-resolved-component-command` |
-| engine supervisor starts every first-stack process through the launcher actor | `nix flake check .#persona-engine-supervisor-launches-first-stack-through-process-launcher` |
-| persona-daemon launch plan reaches the engine supervisor and manager event log | `nix flake check .#persona-daemon-launches-first-stack-through-engine-supervisor` |
-| full topology starts every first-stack daemon skeleton | pending component-readiness witness |
+| engine supervisor starts every prototype-supervised process through the launcher actor | `nix flake check .#persona-engine-supervisor-launches-prototype-supervised-components-through-process-launcher` |
+| persona-daemon launch plan reaches the engine supervisor and manager event log | `nix flake check .#persona-daemon-launches-prototype-supervised-components-through-engine-supervisor` |
+| full topology starts every prototype-supervised daemon skeleton | pending component-readiness witness |
 | component skeletons answer health/status/readiness | `nix flake check .#persona-component-skeletons-answer-health-status-readiness` |
 | unfinished component behavior is typed | `nix flake check .#persona-component-skeleton-returns-typed-unimplemented` |
 | skeleton decodes every contract variant | `nix flake check .#persona-component-skeleton-decodes-every-contract-variant` |
@@ -1109,7 +1112,7 @@ src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records
 src/engine_event.rs  typed engine-management event records
 src/direct_process.rs  direct child-process launcher actor
 src/launch/      launch configuration, resolved commands, command resolver actor
-src/supervisor.rs  Kameo EngineSupervisor actor that starts/stops first-stack processes
+src/supervisor.rs  Kameo EngineSupervisor actor that starts/stops prototype-supervised processes
 src/transport.rs Unix-socket Signal codec, client, daemon, endpoint, caller
 src/manager.rs   Kameo EngineManager actor scaffold and trace witness
 src/manager_store.rs  Kameo ManagerStore actor and manager.redb Sema tables

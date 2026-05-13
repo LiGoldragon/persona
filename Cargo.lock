@@ -466,17 +466,18 @@ dependencies = [
 [[package]]
 name = "signal-persona"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona.git#5e064ecdfc4dde21bd2322a1660014ab75838716"
+source = "git+https://github.com/LiGoldragon/signal-persona.git#79a5ee6b22e8ef5a7028f1ab7e9b090a4c2e86ab"
 dependencies = [
  "nota-codec",
  "rkyv",
  "signal-core",
+ "signal-persona-auth",
 ]
 
 [[package]]
 name = "signal-persona-auth"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-auth.git#11bb66a8fb17366f28ee7938199220d4ae170013"
+source = "git+https://github.com/LiGoldragon/signal-persona-auth.git#f06c0a22553a8d4db775948344f0c3c4266d01b0"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -486,7 +487,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-harness"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-harness.git#283eacf183934809337c7f83dfa88d565ad5787b"
+source = "git+https://github.com/LiGoldragon/signal-persona-harness.git#a5978423723b3c96acfc3e6d505d4461d65defe8"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -497,18 +498,20 @@ dependencies = [
 [[package]]
 name = "signal-persona-message"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-message.git#3dc218d59f0db424b0ee1335f25f520f8d8154dc"
+source = "git+https://github.com/LiGoldragon/signal-persona-message.git#117c067c91022883a8a21c88507f3ffc023b2775"
 dependencies = [
  "nota-codec",
  "rkyv",
  "signal-core",
+ "signal-persona",
+ "signal-persona-auth",
  "thiserror",
 ]
 
 [[package]]
 name = "signal-persona-mind"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-mind.git#2b451670478abc0dfd6ff8c630059f8daca50f97"
+source = "git+https://github.com/LiGoldragon/signal-persona-mind.git#611c4e69348b2ed43e6684e8db0d15df4e0e4e2c"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -531,7 +534,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-terminal"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-terminal.git#ea5e2174f3a623e247575cb052a79d86df28dff2"
+source = "git+https://github.com/LiGoldragon/signal-persona-terminal.git#fa342d0148e8ea16c3716e9db2da092f9723bca8"
 dependencies = [
  "nota-codec",
  "rkyv",

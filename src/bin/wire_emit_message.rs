@@ -16,7 +16,7 @@ use std::io::Write;
 
 use signal_core::{FrameBody, Request};
 use signal_persona_message::{
-    Frame, MessageBody, MessageRecipient, MessageRequest, MessageSubmission,
+    Frame, MessageBody, MessageKind, MessageRecipient, MessageRequest, MessageSubmission,
 };
 
 struct Cli {
@@ -45,6 +45,7 @@ impl Cli {
     fn message_submission(self) -> MessageSubmission {
         MessageSubmission {
             recipient: MessageRecipient::new(self.recipient),
+            kind: MessageKind::Send,
             body: MessageBody::new(self.body),
         }
     }
