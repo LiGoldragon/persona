@@ -93,6 +93,108 @@
               meta.mainProgram = "terminal-cell-daemon";
             }
           );
+          mkPrototypeLauncher =
+            {
+              name,
+              actual,
+              command,
+              runtimeInputs ? [ ],
+            }:
+            pkgs.writeShellApplication {
+              inherit name;
+              runtimeInputs = [
+                pkgs.bash
+                pkgs.coreutils
+              ]
+              ++ runtimeInputs;
+              text = ''
+                state_dir="$(dirname "''${PERSONA_STATE_PATH:?}")"
+                mkdir -p "$state_dir"
+                {
+                  printf 'engine=%s\n' "''${PERSONA_ENGINE_ID:?}"
+                  printf 'component=%s\n' "''${PERSONA_COMPONENT:?}"
+                  printf 'process=%s\n' "$$"
+                  printf 'socket=%s\n' "''${PERSONA_SOCKET_PATH:?}"
+                  printf 'mode=%s\n' "''${PERSONA_SOCKET_MODE:?}"
+                  printf 'peer_count=%s\n' "''${PERSONA_PEER_SOCKET_COUNT:?}"
+                  printf 'actual=%s\n' '${actual}'
+                } > "$state_dir/$PERSONA_COMPONENT.env"
+                ${command}
+              '';
+            };
+          prototypeMindLauncher = mkPrototypeLauncher {
+            name = "persona-mind-prototype-launcher";
+            actual = "${inputs.persona-mind.packages.${system}.default}/bin/mind";
+            command = ''
+              exec ${inputs.persona-mind.packages.${system}.default}/bin/mind daemon \
+                --socket "$PERSONA_SOCKET_PATH" \
+                --store "$PERSONA_STATE_PATH"
+            '';
+          };
+          prototypeRouterLauncher = mkPrototypeLauncher {
+            name = "persona-router-prototype-launcher";
+            actual = "${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon";
+            command = ''
+              exec ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon daemon \
+                --socket "$PERSONA_SOCKET_PATH" \
+                --store "$PERSONA_STATE_PATH"
+            '';
+          };
+          prototypeSystemLauncher = mkPrototypeLauncher {
+            name = "persona-system-prototype-launcher";
+            actual = "${inputs.persona-system.packages.${system}.default}/bin/persona-system-daemon";
+            command = ''
+              exec ${inputs.persona-system.packages.${system}.default}/bin/persona-system-daemon \
+                "$PERSONA_SOCKET_PATH"
+            '';
+          };
+          prototypeHarnessLauncher = mkPrototypeLauncher {
+            name = "persona-harness-prototype-launcher";
+            actual = "${inputs.persona-harness.packages.${system}.default}/bin/persona-harness-daemon";
+            command = ''
+              exec ${inputs.persona-harness.packages.${system}.default}/bin/persona-harness-daemon \
+                "$PERSONA_SOCKET_PATH" \
+                "$PERSONA_COMPONENT"
+            '';
+          };
+          prototypeTerminalLauncher = mkPrototypeLauncher {
+            name = "persona-terminal-prototype-launcher";
+            actual = "${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-daemon";
+            command = ''
+              exec ${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-daemon \
+                --socket "$PERSONA_SOCKET_PATH" \
+                --store "$PERSONA_STATE_PATH" \
+                --terminal "$PERSONA_COMPONENT" \
+                -- ${pkgs.bash}/bin/bash -lc 'trap "exit 0" TERM; while :; do sleep 1; done'
+            '';
+          };
+          prototypeMessageLauncher = mkPrototypeLauncher {
+            name = "persona-message-prototype-launcher";
+            actual = "${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon";
+            command = ''
+              exec ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon
+            '';
+          };
+          prototypeIntrospectLauncher = mkPrototypeLauncher {
+            name = "persona-introspect-prototype-launcher";
+            actual = "${inputs.persona-introspect.packages.${system}.default}/bin/persona-introspect-daemon";
+            command = ''
+              ${inputs.persona-introspect.packages.${system}.default}/bin/persona-introspect-daemon
+              exec ${pkgs.coreutils}/bin/sleep infinity
+            '';
+          };
+          prototypeComponentLaunchers = pkgs.symlinkJoin {
+            name = "persona-prototype-component-launchers";
+            paths = [
+              prototypeMindLauncher
+              prototypeRouterLauncher
+              prototypeSystemLauncher
+              prototypeHarnessLauncher
+              prototypeTerminalLauncher
+              prototypeMessageLauncher
+              prototypeIntrospectLauncher
+            ];
+          };
           personaDevStack =
             mode:
             pkgs.writeShellApplication {
@@ -118,9 +220,7 @@
             text = ''
               export PERSONA_BASH=${pkgs.bash}/bin/bash
               export PERSONA_DEV_STACK_SMOKE=${personaDevStack "smoke"}/bin/persona-dev-stack-smoke
-              export PERSONA_TERMINAL_CELL_SMOKE=${
-                personaEngineSandboxTerminalCellSmoke
-              }/bin/persona-engine-sandbox-terminal-cell-smoke
+              export PERSONA_TERMINAL_CELL_SMOKE=${personaEngineSandboxTerminalCellSmoke}/bin/persona-engine-sandbox-terminal-cell-smoke
               exec ${pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox} "$@"
             '';
           };
@@ -148,9 +248,7 @@
               export TERMINAL_CELL_WAIT=${terminalCellBinaries}/bin/terminal-cell-wait
               export TERMINAL_CELL_CAPTURE=${terminalCellBinaries}/bin/terminal-cell-capture
               export TERMINAL_CELL_VIEW=${terminalCellBinaries}/bin/terminal-cell-view
-              export PERSONA_ENGINE_SANDBOX_ATTACH=${
-                personaEngineSandboxAttach
-              }/bin/persona-engine-sandbox-attach
+              export PERSONA_ENGINE_SANDBOX_ATTACH=${personaEngineSandboxAttach}/bin/persona-engine-sandbox-attach
               exec ${pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox-terminal-cell-smoke} "$@"
             '';
           };
@@ -208,6 +306,7 @@
             personaEngineSandboxTerminalCellSmoke
             personaEngineSandboxTerminalCellPiSmoke
             personaEngineSandboxTerminalCellFixtureSmoke
+            prototypeComponentLaunchers
             terminalCellBinaries
             ;
         };
@@ -244,10 +343,10 @@
           persona-engine-sandbox-attach = context.personaEngineSandboxAttach;
           persona-engine-sandbox-dev-stack-smoke = context.personaEngineSandboxDevStackSmoke;
           persona-engine-sandbox-terminal-cell-smoke = context.personaEngineSandboxTerminalCellSmoke;
-          persona-engine-sandbox-terminal-cell-pi-smoke =
-            context.personaEngineSandboxTerminalCellPiSmoke;
+          persona-engine-sandbox-terminal-cell-pi-smoke = context.personaEngineSandboxTerminalCellPiSmoke;
           persona-engine-sandbox-terminal-cell-fixture-smoke =
             context.personaEngineSandboxTerminalCellFixtureSmoke;
+          persona-prototype-component-launchers = context.prototypeComponentLaunchers;
         }
       );
 
@@ -632,6 +731,123 @@
                   cargoTestExtraArgs = "--test daemon constraint_persona_daemon_launches_prototype_supervised_components_through_engine_supervisor -- --exact";
                 }
               );
+          persona-daemon-launches-nix-built-prototype-topology =
+            context.pkgs.runCommand "persona-daemon-launches-nix-built-prototype-topology"
+              {
+                nativeBuildInputs = [
+                  context.pkgs.bash
+                  context.pkgs.coreutils
+                  context.pkgs.gnugrep
+                ];
+              }
+              ''
+                set -eu
+                work="$TMPDIR/persona-daemon-nix-built-topology"
+                mkdir -p "$work/state" "$work/run" "$work/artifacts"
+                manager_socket="$work/persona.sock"
+
+                export PERSONA_MANAGER_STORE="$work/manager.redb"
+                export PERSONA_STATE_ROOT="$work/state"
+                export PERSONA_RUN_ROOT="$work/run"
+                export PERSONA_MIND_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-mind-prototype-launcher
+                export PERSONA_ROUTER_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-router-prototype-launcher
+                export PERSONA_SYSTEM_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-system-prototype-launcher
+                export PERSONA_HARNESS_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-harness-prototype-launcher
+                export PERSONA_TERMINAL_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-terminal-prototype-launcher
+                export PERSONA_MESSAGE_DAEMON_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-message-prototype-launcher
+                export PERSONA_INTROSPECT_DAEMON_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-introspect-prototype-launcher
+
+                ${self.packages.${system}.default}/bin/persona-daemon "$manager_socket" \
+                  > "$work/persona-daemon.stdout" \
+                  2> "$work/persona-daemon.stderr" &
+                daemon="$!"
+
+                cleanup() {
+                  kill "$daemon" 2>/dev/null || true
+                  if [ -d "$work/state/default" ]; then
+                    for capture in "$work/state/default"/*.env; do
+                      [ -e "$capture" ] || continue
+                      process="$(sed -n 's/^process=//p' "$capture" | head -n 1)"
+                      if [ -n "$process" ]; then
+                        kill -- "-$process" 2>/dev/null || true
+                      fi
+                    done
+                  fi
+                  wait "$daemon" 2>/dev/null || true
+                }
+                trap cleanup EXIT
+
+                for attempt in $(seq 1 100); do
+                  if grep -Fq "persona-daemon socket=$manager_socket" "$work/persona-daemon.stdout"; then
+                    break
+                  fi
+                  if ! kill -0 "$daemon" 2>/dev/null; then
+                    cat "$work/persona-daemon.stdout"
+                    cat "$work/persona-daemon.stderr" >&2
+                    exit 1
+                  fi
+                  sleep 0.1
+                done
+                grep -Fq "persona-daemon socket=$manager_socket" "$work/persona-daemon.stdout"
+
+                for component in mind router system harness terminal message introspect; do
+                  capture="$work/state/default/$component.env"
+                  for attempt in $(seq 1 100); do
+                    if [ -f "$capture" ]; then
+                      break
+                    fi
+                    sleep 0.1
+                  done
+                  test -f "$capture"
+                  grep -Fx "engine=default" "$capture"
+                  grep -Fx "component=$component" "$capture"
+                  grep -Fx "peer_count=6" "$capture"
+                done
+
+                grep -Fx "actual=${
+                  inputs.persona-mind.packages.${system}.default
+                }/bin/mind" "$work/state/default/mind.env"
+                grep -Fx "actual=${
+                  inputs.persona-router.packages.${system}.default
+                }/bin/persona-router-daemon" "$work/state/default/router.env"
+                grep -Fx "actual=${
+                  inputs.persona-system.packages.${system}.default
+                }/bin/persona-system-daemon" "$work/state/default/system.env"
+                grep -Fx "actual=${
+                  inputs.persona-harness.packages.${system}.default
+                }/bin/persona-harness-daemon" "$work/state/default/harness.env"
+                grep -Fx "actual=${
+                  inputs.persona-terminal.packages.${system}.default
+                }/bin/persona-terminal-daemon" "$work/state/default/terminal.env"
+                grep -Fx "actual=${
+                  inputs.persona-message.packages.${system}.default
+                }/bin/persona-message-daemon" "$work/state/default/message.env"
+                grep -Fx "actual=${
+                  inputs.persona-introspect.packages.${system}.default
+                }/bin/persona-introspect-daemon" "$work/state/default/introspect.env"
+
+                for socket in mind router system harness message; do
+                  path="$work/run/default/$socket.sock"
+                  for attempt in $(seq 1 100); do
+                    if [ -S "$path" ]; then
+                      break
+                    fi
+                    sleep 0.1
+                  done
+                  if [ ! -S "$path" ]; then
+                    echo "missing component socket: $path" >&2
+                    cat "$work/persona-daemon.stdout" >&2
+                    cat "$work/persona-daemon.stderr" >&2
+                    exit 1
+                  fi
+                done
+
+                mkdir -p "$out"
+                cp "$work/persona-daemon.stdout" "$out/persona-daemon.stdout"
+                cp "$work/persona-daemon.stderr" "$out/persona-daemon.stderr"
+                cp "$work/state/default"/*.env "$out/"
+                touch "$out/passed"
+              '';
         }
       );
 

@@ -411,6 +411,17 @@ Nix-owned environment and must be recorded in the runner artifacts. Production
 launch resolves every component command before spawn and fails closed if a
 required binary is missing or ambiguous.
 
+The current prototype bridge is
+`packages.<system>.persona-prototype-component-launchers`: seven Nix-built
+launcher scripts, one per prototype-supervised component. Each launcher adapts
+the manager's common spawn-envelope environment
+(`PERSONA_ENGINE_ID`, `PERSONA_COMPONENT`, `PERSONA_STATE_PATH`,
+`PERSONA_SOCKET_PATH`, `PERSONA_PEER_*`) to the component daemon's current CLI
+surface, records an inspectable capture file under the component state
+directory, then execs the real Nix-built component binary. This is integration
+glue, not a new component. It exists until the component daemon CLIs converge
+on the shared spawn-envelope contract.
+
 The engine launch configuration is the place for explicit component command
 overrides. A NOTA launch record may provide an override for one component
 command, for example a custom `persona-message` build during an integration
@@ -590,10 +601,20 @@ explicit launch plan from environment, it starts the data-bearing
 creates spawn envelopes, launches every prototype-supervised component process through
 `DirectProcessLauncher`, and records typed `ComponentSpawned` events in
 `manager.redb`. The default manager-only mode remains available for tests and
-for hosts that have not yet supplied component commands. The remaining
-engine-manager layers are restore-on-restart, socket ACL application,
-component readiness/exit subscriptions, restart policy, multi-engine catalog,
-origin tagging, and privileged-user deployment witnesses.
+for hosts that have not yet supplied component commands.
+
+`nix flake check
+.#persona-daemon-launches-nix-built-prototype-topology` now starts
+`persona-daemon` with the Nix-built prototype launcher set. In a pure Nix
+builder it proves every prototype-supervised component receives the spawn
+envelope and reaches its launcher, and it proves the non-PTY component sockets
+bind (`mind`, `router`, `system`, `harness`, `message`). `persona-terminal`
+still needs the stateful terminal-cell smoke lane for real PTY readiness,
+because pure Nix builders do not provide the PTY environment that terminal-cell
+needs. The remaining engine-manager layers are restore-on-restart, socket ACL
+application, component readiness/exit subscriptions, restart policy,
+multi-engine catalog, origin tagging, and privileged-user deployment
+witnesses.
 
 ## 2 · Command-line Mind
 
@@ -866,12 +887,15 @@ Migration rules:
 - Component command resolution fails closed when a required command is missing
   or ambiguous. A spawn request does not continue with a best-effort host PATH
   guess.
+- The prototype launcher set adapts the shared spawn-envelope environment to
+  the current component daemon CLIs and records which Nix-built binary it
+  executed.
 - Resolved spawn envelopes carry executable path, argv, environment, state
   path, socket path, socket mode, and peer sockets.
 - The first engine-supervision witness starts every prototype-supervised component, not
   only the components with useful behavior already implemented.
-- Every prototype-supervised component has a runnable daemon skeleton before the
-  full-topology witness is considered real.
+- Every prototype-supervised component has a Nix-built prototype launcher before
+  the full-topology witness is considered real.
 - A daemon skeleton accepts its component Signal boundary, answers
   health/status/readiness, and returns typed unfinished-state replies for
   valid requests whose behavior is not built yet.
@@ -1006,8 +1030,10 @@ Migration rules:
   The write path is a data-bearing Kameo `ManagerStore` actor, not a CLI
   helper or direct redb call in request decoding.
 - The engine manager event log is typed manager state; text logs are views.
-- Full-engine supervision proves all prototype-supervised daemon skeletons as real
-  processes and sockets before it proves deep component behavior.
+- Full-engine supervision first proves every prototype-supervised component is
+  launched from the Nix-built stack. Socket readiness is proved where pure
+  builders can observe it; PTY readiness stays in a stateful terminal-cell
+  witness.
 - Component skeletons must be honest: valid unfinished operations return typed
   unfinished-state replies instead of hanging, crashing, or printing untyped
   text errors.
@@ -1080,7 +1106,7 @@ The apex repo owns tests that prove cross-component shape:
 | spawn envelope carries the resolved command | `nix flake check .#persona-spawn-envelope-carries-resolved-component-command` |
 | engine supervisor starts every prototype-supervised process through the launcher actor | `nix flake check .#persona-engine-supervisor-launches-prototype-supervised-components-through-process-launcher` |
 | persona-daemon launch plan reaches the engine supervisor and manager event log | `nix flake check .#persona-daemon-launches-prototype-supervised-components-through-engine-supervisor` |
-| full topology starts every prototype-supervised daemon skeleton | pending component-readiness witness |
+| full topology starts from Nix-built prototype launchers | `nix flake check .#persona-daemon-launches-nix-built-prototype-topology` |
 | component skeletons answer health/status/readiness | `nix flake check .#persona-component-skeletons-answer-health-status-readiness` |
 | unfinished component behavior is typed | `nix flake check .#persona-component-skeleton-returns-typed-unimplemented` |
 | skeleton decodes every contract variant | `nix flake check .#persona-component-skeleton-decodes-every-contract-variant` |
