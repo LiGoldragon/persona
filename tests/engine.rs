@@ -51,7 +51,7 @@ impl TemporaryEngineRoot {
             EngineComponent::System => "persona-system-daemon",
             EngineComponent::Harness => "persona-harness-daemon",
             EngineComponent::Terminal => "persona-terminal-daemon",
-            EngineComponent::MessageProxy => "persona-message-daemon",
+            EngineComponent::Message => "persona-message-daemon",
         };
         ComponentCommand::executable(ExecutablePath::new(format!(
             "{}/nix-closure/{command_name}/bin/{command_name}",
@@ -175,11 +175,11 @@ fn constraint_engine_layout_assigns_socket_modes_by_component_boundary() {
         assert_eq!(socket.mode().as_octal(), 0o600);
     }
 
-    let message_proxy = layout
-        .component(EngineComponent::MessageProxy)
-        .expect("message proxy layout exists");
-    assert_eq!(message_proxy.socket().mode(), SocketMode::message_proxy());
-    assert_eq!(message_proxy.socket().mode().as_octal(), 0o660);
+    let message = layout
+        .component(EngineComponent::Message)
+        .expect("message layout exists");
+    assert_eq!(message.socket().mode(), SocketMode::message_ingress());
+    assert_eq!(message.socket().mode().as_octal(), 0o660);
 }
 
 #[tokio::test]
@@ -209,8 +209,8 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
         envelope
             .peers()
             .iter()
-            .any(|peer| peer.component() == EngineComponent::MessageProxy
-                && peer.socket_path().ends_with("message-proxy.sock"))
+            .any(|peer| peer.component() == EngineComponent::Message
+                && peer.socket_path().ends_with("message.sock"))
     );
 }
 

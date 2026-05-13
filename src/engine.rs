@@ -150,7 +150,7 @@ pub enum EngineComponent {
     System,
     Harness,
     Terminal,
-    MessageProxy,
+    Message,
 }
 
 impl EngineComponent {
@@ -161,7 +161,7 @@ impl EngineComponent {
             Self::System,
             Self::Harness,
             Self::Terminal,
-            Self::MessageProxy,
+            Self::Message,
         ]
     }
 
@@ -176,7 +176,7 @@ impl EngineComponent {
             "persona-system" => Some(Self::System),
             "persona-harness" => Some(Self::Harness),
             "persona-terminal" => Some(Self::Terminal),
-            "persona-message" => Some(Self::MessageProxy),
+            "persona-message" => Some(Self::Message),
             _ => None,
         }
     }
@@ -188,7 +188,7 @@ impl EngineComponent {
             Self::System => SignalComponentName::System,
             Self::Harness => SignalComponentName::Harness,
             Self::Terminal => SignalComponentName::Terminal,
-            Self::MessageProxy => SignalComponentName::MessageProxy,
+            Self::Message => SignalComponentName::Message,
         }
     }
 
@@ -199,7 +199,7 @@ impl EngineComponent {
             Self::System => "system.sock",
             Self::Harness => "harness.sock",
             Self::Terminal => "terminal.sock",
-            Self::MessageProxy => "message-proxy.sock",
+            Self::Message => "message.sock",
         }
     }
 
@@ -210,7 +210,7 @@ impl EngineComponent {
             Self::System => "system.redb",
             Self::Harness => "harness.redb",
             Self::Terminal => "terminal.redb",
-            Self::MessageProxy => "message-proxy.redb",
+            Self::Message => "message.redb",
         }
     }
 
@@ -221,7 +221,7 @@ impl EngineComponent {
             Self::System => "system",
             Self::Harness => "harness",
             Self::Terminal => "terminal",
-            Self::MessageProxy => "message-proxy",
+            Self::Message => "message",
         }
     }
 
@@ -232,7 +232,7 @@ impl EngineComponent {
             Self::System => "persona-system",
             Self::Harness => "persona-harness",
             Self::Terminal => "persona-terminal",
-            Self::MessageProxy => "persona-message",
+            Self::Message => "persona-message",
         }
     }
 
@@ -243,13 +243,13 @@ impl EngineComponent {
             Self::System => "PERSONA_SYSTEM_EXECUTABLE",
             Self::Harness => "PERSONA_HARNESS_EXECUTABLE",
             Self::Terminal => "PERSONA_TERMINAL_EXECUTABLE",
-            Self::MessageProxy => "PERSONA_MESSAGE_PROXY_EXECUTABLE",
+            Self::Message => "PERSONA_MESSAGE_DAEMON_EXECUTABLE",
         }
     }
 
     pub const fn socket_mode(self) -> SocketMode {
         match self {
-            Self::MessageProxy => SocketMode::message_proxy(),
+            Self::Message => SocketMode::message_ingress(),
             Self::Mind | Self::Router | Self::System | Self::Harness | Self::Terminal => {
                 SocketMode::internal_component()
             }
@@ -319,7 +319,7 @@ impl SocketMode {
         Self(0o600)
     }
 
-    pub const fn message_proxy() -> Self {
+    pub const fn message_ingress() -> Self {
         Self(0o660)
     }
 

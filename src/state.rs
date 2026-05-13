@@ -50,8 +50,8 @@ impl EngineState {
                         health: ComponentHealth::Starting,
                     },
                     ComponentStatus {
-                        name: EngineComponent::MessageProxy.component_name(),
-                        kind: ComponentKind::MessageProxy,
+                        name: EngineComponent::Message.component_name(),
+                        kind: ComponentKind::Message,
                         desired_state: ComponentDesiredState::Running,
                         health: ComponentHealth::Starting,
                     },

@@ -112,7 +112,7 @@ identity) lives in the criome ecosystem.
 | `persona-mind` | Central state component and command-line mind runtime. |
 | `signal-persona-mind` | Typed contract for role coordination, activity, and work graph operations. |
 | `persona-router` | Message routing, delivery state, gate state, and pending-delivery decisions. |
-| `persona-message` | Stateless message proxy: NOTA/Nexus CLI surface to router Signal frames and router replies back to NOTA. |
+| `persona-message` | Message ingress component: `message` NOTA CLI plus supervised `persona-message-daemon`; the daemon forwards typed message frames to the internal router socket. |
 | `persona-system` | System/window focus observation adapters. |
 | `persona-harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
 | `persona-terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. |
@@ -146,7 +146,7 @@ graph LR
 One host has one `persona` daemon. That daemon can supervise N engine
 instances. Each engine owns its own full component federation:
 `persona-mind`, `persona-router`, `persona-system`, `persona-harness`,
-`persona-terminal`, and the transitional `persona-message` proxy.
+`persona-terminal`, and `persona-message`.
 
 The daemon runs as the dedicated `persona` system user, not as `root` and not
 as the operator's user. The elevated position is for scoped OS authority:
@@ -232,6 +232,40 @@ envelope carries the executable path, argv, environment, state path, socket
 path, socket mode, and peer socket paths; components receive this envelope
 from the manager and do not discover binaries or peer sockets by scanning the
 filesystem.
+
+The typed wire shape for the envelope is **`signal-persona::SpawnEnvelope`**
+(per `~/primary/reports/designer/143-prototype-readiness-gap-audit.md` §4.1):
+the manager mints one envelope per child, writes it as an rkyv file under
+the per-engine runtime directory, and the child reads it via `signal-persona`'s
+typed decoder at startup. Per ESSENCE §"Infrastructure mints identity, time,
+and sender," the child does not invent its socket path or component name.
+
+**Manager state — two reducers and snapshots** (per
+`~/primary/reports/designer/142-supervision-in-signal-persona-no-message-proxy-daemon.md`
+§4 and `~/primary/reports/designer/143-prototype-readiness-gap-audit.md` §4.4–4.5):
+the manager runs **two reducers** over its append-only `engine-events` log:
+
+- **Engine-lifecycle reducer** — per `(EngineId, ComponentName)`, materialises
+  `ComponentProcessState` (closed enum: `Unspawned → Launched → SocketBound →
+  Ready → Stopping → Exited`). Snapshot table: `engine-lifecycle-snapshot`.
+- **Engine-status reducer** — per `(EngineId, ComponentName)`, materialises
+  `ComponentHealthState` (closed enum: `Starting | Running | Degraded |
+  Stopped | Failed`). Snapshot table: `engine-status-snapshot`.
+
+CLI status queries (`ComponentStatusQuery`, `EngineStatusQuery`) read the
+engine-status snapshot only. Audit/debug paths walk the event log or the
+engine-lifecycle snapshot.
+
+**Manager restore** (per /143 §4.5): on daemon startup the manager loads the
+latest `StoredEngineRecord` per engine from `manager.redb` and initialises
+both reducer snapshots from their stored state. Event replay is later
+strengthening; the prototype loads snapshots directly.
+
+**Socket-metadata verification** (per /142 §3.2 and DA/32 §3): each child
+binds its own socket from the envelope and applies the requested mode. The
+manager then verifies the socket *type*, *path*, and *mode* on disk **before**
+appending `ComponentReady` to the event log. A child that fails to bind or
+that binds the wrong mode does not progress to `Ready`.
 
 Component process supervision belongs behind an actor boundary. The manager
 may first use a direct child-process backend, but it should be driven by a
@@ -566,7 +600,7 @@ Migration rules:
   path, socket path, socket mode, and peer sockets.
 - The first engine-supervision witness starts every first-stack component, not
   only the components with useful behavior already implemented.
-- Every first-stack component has a runnable daemon/proxy skeleton before the
+- Every first-stack component has a runnable daemon skeleton before the
   full-topology witness is considered real.
 - A daemon skeleton accepts its component Signal boundary, answers
   health/status/readiness, and returns typed unfinished-state replies for
