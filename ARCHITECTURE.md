@@ -162,7 +162,7 @@ Per-engine resources are always scoped by engine id:
 | State directory | `/var/lib/persona/<engine-id>/` |
 | Component redb files | `/var/lib/persona/<engine-id>/{mind,router,harness,terminal}.redb` |
 | Socket directory | `/var/run/persona/<engine-id>/` |
-| Component sockets | `/var/run/persona/<engine-id>/{mind,router,router-public,system,harness,terminal}.sock` |
+| Component sockets | `/var/run/persona/<engine-id>/{mind,router,system,harness,terminal,message}.sock` |
 | Manager redb | `/var/lib/persona/manager.redb` |
 | Manager socket | `/var/run/persona/persona.sock` |
 
@@ -624,7 +624,7 @@ Migration rules:
 - Engine layout planning names every first-stack component socket and state
   file before a component is spawned.
 - Internal component sockets are private to the Persona authority boundary;
-  the router-public socket is group-writable for owner ingress (router binds two sockets: `router.sock` 0600 for internal traffic, `router-public.sock` 0660 for engine-owner CLI submissions). No separate message-proxy daemon; see `~/primary/reports/designer/142-supervision-in-signal-persona-no-message-proxy-daemon.md`.
+  the `message.sock` is group-writable for owner ingress (bound by `persona-message-daemon`, the supervised first-stack message-ingress component). `router.sock` (mode 0600) is bound by `persona-router` for internal traffic. The "proxy" name retires per `~/primary/reports/designer/142-supervision-in-signal-persona-no-message-proxy-daemon.md`; the daemon itself stays.
 - Spawn envelopes carry the component's own state/socket paths and every peer
   socket path; components do not derive peers by scanning directories.
 - Local engine trust is created by manager-owned sockets, ownership, modes, and
