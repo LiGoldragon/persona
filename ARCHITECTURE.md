@@ -227,18 +227,40 @@ required binary is missing or ambiguous.
 The engine launch configuration is the place for explicit component command
 overrides. A NOTA launch record may provide an override for one component
 command, for example a custom `persona-message` build during an integration
-test. Omitted components use the Nix-provided default. A resolved spawn
-envelope carries the executable path, argv, environment, state path, socket
-path, socket mode, and peer socket paths; components receive this envelope
-from the manager and do not discover binaries or peer sockets by scanning the
-filesystem.
+test. Omitted components use the Nix-provided default.
 
-The typed wire shape for the envelope is **`signal-persona::SpawnEnvelope`**
-(per `~/primary/reports/designer/143-prototype-readiness-gap-audit.md` §4.1):
-the manager mints one envelope per child, writes it as an rkyv file under
-the per-engine runtime directory, and the child reads it via `signal-persona`'s
-typed decoder at startup. Per ESSENCE §"Infrastructure mints identity, time,
-and sender," the child does not invent its socket path or component name.
+**Two distinct records** carry the spawn information (per
+`~/primary/reports/designer/144-prototype-architecture-final-cleanup-after-da36.md` §2.3):
+
+- **`persona::launch::ResolvedComponentLaunch`** — the **manager-internal**
+  Rust composite. Carries executable path, argv, environment,
+  working directory, process-group mode, restart policy, and an embedded
+  `SpawnEnvelope`. `DirectProcessLauncher` consumes
+  `ResolvedComponentLaunch`, forks/execs the executable, and writes the
+  embedded envelope to the per-component file. This record is
+  operator's lane; it is not on the wire.
+- **`signal-persona::SpawnEnvelope`** — the **child-readable typed
+  wire form**. Carries engine_id, component_kind, component_name,
+  state_dir, socket_path, socket_mode, peer_sockets,
+  manager_socket, supervision_protocol_version. The manager writes
+  the envelope file at
+  `/var/run/persona/<engine-id>/<component>.envelope` at spawn
+  time; the child reads it via `signal-persona`'s typed decoder
+  and proceeds. Per ESSENCE §"Infrastructure mints identity, time,
+  and sender," the child does not invent its socket path or
+  component name.
+
+The child reads only the `SpawnEnvelope`. It does not see executable
+path, argv, environment, restart state, or other manager-internal
+launch state — those stay inside `ResolvedComponentLaunch`.
+
+**State directory for stateless components** (per /144 §3.2):
+every component receives a `state_dir` via its `SpawnEnvelope`.
+Stateless components (today: `persona-message-daemon`,
+`persona-system` in skeleton mode) leave the directory empty and do
+not open a redb file until they own durable state. The manager
+prepares the directory at spawn-envelope mint time; the child opens
+it only if it has state to persist.
 
 **Manager state — two reducers and snapshots** (per
 `~/primary/reports/designer/142-supervision-in-signal-persona-no-message-proxy-daemon.md`
