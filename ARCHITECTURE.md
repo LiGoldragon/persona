@@ -104,6 +104,46 @@ identity) lives in the criome ecosystem.
 > `~/primary/ESSENCE.md` §"Today and eventually — different things,
 > different names".
 
+## 0.6 · Introspection (planned)
+
+A planned high-privilege component, **`persona-introspect`**,
+sits next to (not inside) the supervised first-stack federation.
+It asks each supervised component daemon for typed inspectable
+records over Signal and projects them to NOTA at the edge.
+Per `~/primary/reports/designer/146-introspection-component-and-contract-layer.md`:
+
+- `persona-introspect` is **not** part of the six-component
+  first stack; the prototype-one acceptance per `/144` §4
+  does not require it.
+- `persona-introspect` does **not** directly open any other
+  component's redb. Live introspection asks the owning
+  component daemon through a Signal relation; the component
+  decides which records to expose, how to read consistent
+  snapshots, and what to redact.
+- The contract layer split (per /146 §2):
+  - **Operational contracts** stay where they are
+    (`signal-persona-*` per existing pattern).
+  - **Component-specific introspection records** live
+    inside the existing `signal-persona-<X>` crate at first;
+    they split to a sibling `signal-persona-<X>-introspect`
+    when they're heavy / high-churn / unrelated to
+    operational consumers.
+  - **`signal-persona-introspect`** (planned) owns the
+    central query/projection envelope vocabulary
+    (`IntrospectionRequest`, `IntrospectionReply`,
+    `IntrospectionSubscription`, etc.).
+
+The first introspection slice is **terminal** (per /146 §5,
+DA/37 §7.4) — `persona-terminal` has the largest existing
+gap between durable local Sema records
+(`StoredTerminalSession`, `StoredDeliveryAttempt`,
+`StoredTerminalEvent`, `StoredViewerAttachment`,
+`StoredSessionHealth`, `StoredSessionArchive`) and
+contract-owned inspectable vocabulary. Manager event-log
+records are the second slice (likely promoted into
+`signal-persona`); router trace/table readouts are the
+third.
+
 ## 1 · Component Map
 
 | Repository | Role |
