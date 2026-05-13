@@ -144,6 +144,25 @@ records are the second slice (likely promoted into
 `signal-persona`); router trace/table readouts are the
 third.
 
+## 0.7 · Persona-system: paused (FocusTracker is real, plan is deferred)
+
+`persona-system` was originally scoped to push focus and prompt-buffer
+observations to the router for injection gating. That use case dissolves:
+the terminal-cell lock-and-cache input gate (see §5.1) handles
+non-interleaving locally without needing focus observation. The
+`FocusTracker` Kameo actor exists in code in `persona-system` and stays;
+plan substance does not grow until persona-system is unpaused by a real
+consumer.
+
+- The Niri focus observer + `FocusTracker` actor are real and tested.
+- `signal-persona-system` keeps its current observation shape; no new
+  variants land until a real consumer surfaces.
+- The privileged-action surface (`SystemPrivilegedRequest` with
+  `ForceFocus` / `SuppressDrift`) is deferred. When persona-system
+  returns, force-focus's naming is reopened.
+- Likely future consumers: window-focus-aware notifications,
+  multi-engine UI coordination, multi-monitor layout observations.
+
 ## 1 · Component Map
 
 | Repository | Role |
@@ -230,11 +249,136 @@ serving, the peer credentials it can observe, the manager-supplied spawn
 context, and the relevant contract. Persona-local components must not recreate
 an in-band proof or class gate inside their application payloads.
 
-Inter-engine routing remains a manager-level catalog concern. The manager may
-record typed route declarations between engines, owners, and hosts, but traffic
-flows only through explicitly configured component sockets and relation-specific
-Signal contracts. The exact cross-engine approval vocabulary belongs in the
-auth/route contract when that implementation wave starts.
+### 1.6.1 · Filesystem-ACL trust
+
+Local trust is security through correctness within the privileged group plus
+filesystem ACL at the boundary. The kernel enforces the ACL on every
+`connect()`; counterfeit credentials are impossible because the credential
+check happens before bytes flow. Inside the engine, every connected peer
+is by definition either the `persona` daemon or another component running
+as `persona`. The crypto-first alternative (every component holds keys,
+signs every request) was rejected: it solves a problem the filesystem
+ACL already solves, and adds key-management complexity that doesn't
+buy reciprocal trust the OS doesn't already give.
+
+| Socket | Path | Mode | Owner |
+|---|---|---|---|
+| Engine manager | `/var/run/persona/persona.sock` | `0600` | `persona` |
+| Per-engine mind/router/system/harness/terminal | `/var/run/persona/<engine-id>/<comp>.sock` | `0600` | `persona` |
+| Per-engine message ingress | `/var/run/persona/<engine-id>/message.sock` | `0660` (group = engine owner's group) | `persona` |
+
+Two boundaries still need in-band classification: the `message.sock`
+(user submission stamped with `MessageOrigin::External(...)`) and any
+future network component. Both stamp origin at accept time using
+`SO_PEERCRED`.
+
+### 1.6.2 · ConnectionClass and MessageOrigin
+
+Origin is provenance, not authority. Two closed enums type the boundary:
+
+```
+ConnectionClass (minted from SO_PEERCRED at accept):
+    Owner | NonOwnerUser(Uid) | System(SystemPrincipal)
+  | OtherPersona { engine_id, host } | Network(NetworkSource)
+
+MessageOrigin (stamped on each accepted message):
+    Internal(ComponentName) | External(ConnectionClass)
+```
+
+These live in the `signal-persona-auth` contract crate (the kernel
+extracted from `signal-persona` once cross-domain demand fired). Every
+domain contract (`signal-persona-message`, `signal-persona-mind`,
+`signal-persona-system`, `signal-persona-harness`,
+`signal-persona-terminal`) depends on it. `signal-persona` itself keeps
+its narrow surface — engine catalog operations — and no longer owns
+the auth vocabulary.
+
+Authority does **not** come from `MessageOrigin`. Authority comes from
+**channel state** (§1.6.3).
+
+### 1.6.3 · Channel choreography (router holds, mind decides)
+
+Router holds the live `authorized-channel` state in its sema-db, keyed
+by `(source, destination, kind)`. Messages on an active channel
+deliver directly; messages without a matching active channel park and
+forward to mind for adjudication. **Mind decides; router enforces.**
+
+The `Channel` record shape:
+
+```
+Channel {
+    id,
+    source:       ChannelEndpoint,
+    destination:  ChannelEndpoint,
+    kinds:        Set<MessageKind>,
+    duration:     ChannelDuration,
+    granted_by:   GrantSource,
+    granted_at,
+    status,
+}
+
+ChannelEndpoint  = Internal(ComponentName) | External(ConnectionClass)
+ChannelDuration  = OneShot | Permanent | TimeBound { until }
+ChannelStatus    = Active | Expired | Retracted{...} | Consumed
+GrantSource      = Mind | EngineSetup
+```
+
+Mind's choreography ops (in `signal-persona-mind`): `ChannelGrant`,
+`ChannelExtend`, `ChannelRetract`, `ChannelList`, `AdjudicationDeny`.
+
+**Structural channels** are pre-installed at engine setup. The
+federation can't function without them, so `persona-daemon` writes
+them into the router's redb at engine-creation time with
+`GrantSource::EngineSetup`:
+
+| Source | Destination | Kinds | Duration |
+|---|---|---|---|
+| `Internal(Message)` | `Internal(Router)` | message submission, inbox query | `Permanent` |
+| `Internal(System)` | `Internal(Router)` | focus, prompt-buffer observations | `Permanent` |
+| `Internal(Router)` | `Internal(Harness)` | message delivery | `Permanent` |
+| `Internal(Harness)` | `Internal(Terminal)` | terminal input, capture, resize | `Permanent` |
+| `Internal(Terminal)` | `Internal(Harness)` | transcript events | `Permanent` |
+| `Internal(Router)` | `Internal(Mind)` | adjudication request, delivery notification | `Permanent` |
+| `Internal(Mind)` | `Internal(Router)` | channel grant/extend/retract | `Permanent` |
+| `External(Owner)` | `Internal(Router)` | message submission via `persona-message-daemon` | `Permanent` |
+
+Unknown-channel messages park in router's `adjudication_pending` table
+and emit `AdjudicationRequest` to mind. Mind decides:
+
+```mermaid
+sequenceDiagram
+    participant src as source
+    participant router as persona-router
+    participant mind as persona-mind
+    src->>router: message on unknown channel
+    router->>router: park in adjudication_pending
+    router->>mind: AdjudicationRequest
+    mind->>mind: decide (grant / extend / retract / deny)
+    mind->>router: ChannelGrant or AdjudicationDeny
+    router->>router: install channel; release parked message
+    router->>src: delivery or rejection
+```
+
+### 1.6.4 · Cross-engine routes collapse into channels
+
+An `EngineRoute` is a `Channel` whose `source` is
+`External(OtherPersona { engine_id })`. The multi-engine work uses the
+same choreography contract: engine B's mind adjudicates incoming
+traffic from engine A the same way it adjudicates external owner
+submissions. Cross-engine implementation today is **minimal-mode** —
+path scoping is baked in (every per-engine resource is keyed by
+engine id; see §1.5), but cross-engine ops are deferred until a
+second engine is demonstrated alive.
+
+### 1.6.5 · Multi-engine as upgrade substrate
+
+Engine-level upgrade replaces component-level hot-swap. `persona-daemon`
+spawns engine v2 alongside engine v1; mind grants temporary migration
+channels; typed records migrate over the channels (not byte copies);
+when v2's health checks pass, the daemon retires v1 via graceful
+shutdown. Engine-level upgrade sidesteps redb's single-writer-per-file
+constraint that forbids concurrent same-redb writes — v2 owns its
+own redb files under `/var/lib/persona/<engine-id-v2>/`.
 
 ## 1.7 · Startup Strategy
 
@@ -567,11 +711,72 @@ Runtime authorization and origin handling are component-owned:
 
 | Component | Boundary behavior |
 |---|---|
-| `persona-router` | Applies router-owned authorized-channel state. Unknown or inactive channels park and ask `persona-mind` for adjudication. |
-| `persona-system` | Publishes system observations through its contract; privileged focus actions are deferred to a later system authority design. |
-| `persona-harness` | Owns harness identity and lifecycle records; visibility policy is expressed through typed requests/replies, not string class checks. |
-| `persona-terminal` | Owns terminal input safety and prompt cleanliness. Its gate prevents human/programmatic interleaving; it is not an auth-proof gate. |
-| `persona-mind` | Adjudicates work graph, role, decision, and suggestion state through its own contract and durable store. |
+| `persona-router` | Holds live authorized-channel state in `channels` sema-db table. Parked messages awaiting mind adjudication live in `adjudication_pending`. `OneShot` channels mark `Consumed` after delivery; `TimeBound` channels expire by deadline; `Retract` writes `Retracted` before re-adjudication. |
+| `persona-system` | Currently paused (see §0.7). When active, exposes the observation surface as `signal-persona-system::SystemRequest` / `SystemEvent`. Privileged-action surface deferred. |
+| `persona-harness` | Owns harness identity and lifecycle records. **`HarnessKind` is a closed enum** — variants `Codex`, `Claude`, `Pi`, `Fixture`. No `Other` variant. New harness types are coordinated schema bumps. |
+| `persona-terminal` | Owns terminal input safety, prompt cleanliness, and the lock-and-cache injection mechanism (§5.1). The gate is for non-interleaving, not auth. `MessageBody(String)` is the durable freeform body shape; typing grows by adding `MessageKind` variants additively, not by retroactive body migration. |
+| `persona-mind` | Owns choreography (`ChannelGrant`/`Extend`/`Retract`/`Deny`). Non-`Owner` messages arrive as typed `ThirdPartySuggestion` records; the owner explicitly `AdoptSuggestion` for them to become claims. The `OwnerApprovalInbox` (formerly proposed as router-owned) lives in mind. |
+
+### 5.1 · Terminal injection: lock-and-cache
+
+When the router or harness needs to inject a programmatic message into
+a terminal where a human may be typing, the mechanism is local to
+`persona-terminal`: lock the input gate; cache human keystrokes during
+the lock; check prompt cleanliness against a pre-registered
+`PromptPattern`; if clean, inject; on release, the cache replays as
+human input. Focus observation is **not** required — the gate solves
+non-interleaving locally.
+
+Key pieces:
+
+- `PromptPattern` typed record registered by `persona-terminal` with
+  `terminal-cell` at session-create time, identified by
+  `PromptPatternId`. Variants: `LiteralSuffix(bytes)`,
+  `RegexSuffix(pattern_bytes)`. `terminal-cell` runs literal/regex
+  byte matches; it doesn't know what harness it's hosting.
+- `AcquireInputGate { reason, prompt_pattern_uid }` returns
+  `GateAcquired { lease, prompt_state: Clean | Dirty | NotChecked }`
+  in one round-trip — the check happens inside lock-acquisition.
+- Default policy on `Dirty`: **defer**. Clean-then-inject (send
+  backspaces, save chars, inject, replay) is deferred — multi-line and
+  history-search prompts misbehave.
+
+This mechanism replaces the originally-proposed router-side join of
+`FocusObservation` + `InputBufferObservation` from
+`signal-persona-system`.
+
+### 5.2 · Transcript fanout: typed observations, not raw bytes
+
+Router and mind subscribe to **typed observations + sequence pointers**
+from terminal/harness — not raw transcript bytes. Raw bytes stay in
+persona-terminal storage. Direct authorized queries can read sequence
+ranges by request. A future move (not designed today): a **transcript
+inspection agent**, a persona-mind-resident role with direct typed
+range-query access to terminal transcript storage. Range-shaped, not
+stream-shaped.
+
+### 5.3 · terminal-cell speaks signal-persona-terminal (control plane only)
+
+`terminal-cell` is a Persona component, not a general abduco-shaped
+tool. Its **control plane** speaks `signal-persona-terminal` Signal
+frames (length-prefixed rkyv) over a privileged-only socket — gate ops,
+prompt registration, lifecycle subscriptions, injection requests. Its
+**data plane** (attached viewer keyboard ↔ child PTY) stays raw byte
+stream with minimal framing for attach/detach/resize — **never**
+routed through actor mailboxes, signal encoding, or transcript
+subscription. The non-negotiable invariant: keystrokes from the
+attached viewer reach the child PTY without traversing an actor
+mailbox.
+
+| Plane | Wire shape | Why |
+|---|---|---|
+| Control | Signal frames | Commands and observations; latency-tolerant |
+| Data | Raw byte stream | Human keystroke latency must not pass through application-level relay |
+
+Open question: one socket per cell with mode-shift vs two sockets
+(`control.sock` + `data.sock`); resolution at refactor time.
+`terminal-cell` stays its own repo (the seam is clean; the
+micro-components discipline favors it).
 
 ## 6 · Lock Files and BEADS
 
@@ -744,9 +949,34 @@ Migration rules:
 - Existing transitional shims in this repo remain visibly marked as shims until
   component-owned implementations replace them.
 - The Persona ecosystem owns durable-agent runtime work. Auth/security/identity
-  infrastructure (host trust, cluster identity) is criome-shaped, not
-  persona-shaped. One-shot deploy actions live in `lojix-cli` / `CriomOS`.
-  Declarative cluster proposals live in `goldragon`.
+  infrastructure (host trust, cluster identity) is **not in persona** — it
+  lives in the auth/security ecosystem as a new sibling component to
+  ClaviFaber (cluster-trust runtime; name TBD by system-specialist). It is
+  **not inside ClaviFaber** (ClaviFaber stays narrow: per-host key-generation
+  shim for legacy systems; deliberate non-expansion). It is **not inside
+  today's `criome` daemon** (today's criome is the sema-ecosystem records
+  validator). The eventual-Criome shape eventually subsumes both, but today
+  they are separate components. One-shot deploy actions live in `lojix-cli`
+  / `CriomOS`. Declarative cluster proposals live in `goldragon`.
+- Internal sockets are mode `0600`, owner `persona`; `message.sock` is mode
+  `0660`, group matches engine owner's group.
+- `MessageOrigin` is stamped on every router-accepted message before commit.
+- The router never delivers on an inactive channel; unknown-channel
+  messages park and emit `AdjudicationRequest` to mind.
+- Mind's `ChannelGrant` installs a channel into router's sema-db before
+  the parked message delivers.
+- `OneShot` channels mark `Consumed` after delivery; `TimeBound` channels
+  with `until` in the past fail the active-channel check.
+- Engine setup pre-installs the federation's structural channels.
+- Engine v2 upgrade uses typed migration over channels, not filesystem copy.
+- The terminal injection cannot write to PTY without a current gate lease;
+  human bytes are cached during a locked gate and replay in original order
+  on release; dirty prompts defer injection by default.
+- `terminal-cell`'s data plane (viewer keystrokes → PTY) does not traverse
+  a Kameo mailbox.
+- `HarnessKind` is a closed enum; no `Other` variant.
+- `MessageBody(String)` is the durable freeform body shape; typing grows
+  by adding `MessageKind` variants.
 
 ## 8 · Invariants
 
@@ -794,6 +1024,17 @@ Migration rules:
   One-shot agent CLIs and reconciliation-stack controllers are not
   persona-shaped. Auth/security/identity is criome-shaped, not
   persona-shaped.
+- Local engine trust comes from filesystem ACL on `persona`-owned sockets,
+  not from in-band crypto proofs.
+- `ConnectionClass` and `MessageOrigin` live in the `signal-persona-auth`
+  contract crate, depended on by every domain contract; they describe
+  origin/provenance, not authority.
+- Authority comes from channel state, not from message origin.
+- The router holds the authorized-channel table; mind owns
+  grant/extend/retract decisions.
+- `HarnessKind` is closed.
+- `terminal-cell`'s control plane is signal-framed; its data plane is raw
+  byte stream and never routed through actor mailboxes.
 
 ## 9 · Architectural-Truth Tests
 
