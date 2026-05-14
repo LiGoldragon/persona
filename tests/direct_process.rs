@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use kameo::actor::{ActorRef, Spawn};
 use kameo::error::SendError;
+use nota_codec::{Decoder, NotaDecode};
 use persona::direct_process::{
     DirectProcessFailure, DirectProcessLauncher, LaunchComponent, LaunchComponentReceipt,
     ReadLauncherSnapshot, StopComponentProcess, StopComponentReceipt,
@@ -87,6 +88,8 @@ impl DirectProcessFixture {
   printf 'component=%s\n' \"$PERSONA_COMPONENT\";
   printf 'state=%s\n' \"$PERSONA_STATE_PATH\";
   printf 'socket=%s\n' \"$PERSONA_SOCKET_PATH\";
+  printf 'spawn_envelope=%s\n' \"$PERSONA_SPAWN_ENVELOPE\";
+  printf 'manager_socket=%s\n' \"$PERSONA_MANAGER_SOCKET\";
   printf 'mode=%s\n' \"$PERSONA_SOCKET_MODE\";
   printf 'peer_count=%s\n' \"$PERSONA_PEER_SOCKET_COUNT\";
   printf 'peer_0_component=%s\n' \"$PERSONA_PEER_0_COMPONENT\";
@@ -233,6 +236,7 @@ exec sleep 3600",
             if let Ok(text) = std::fs::read_to_string(self.envelope_capture_file())
                 && text.contains("peer_count=")
                 && text.contains("peer_0_socket=")
+                && text.contains("spawn_envelope=")
             {
                 return text;
             }
@@ -325,6 +329,7 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
     let envelope = fixture
         .envelope_with_command(EngineComponent::Router, fixture.envelope_capture_command())
         .await;
+    let envelope_path = envelope.envelope_path().to_path_buf();
 
     DirectProcessFixture::launch(&launcher, envelope)
         .await
@@ -336,6 +341,10 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
     assert!(captured.contains("router.redb"));
     assert!(captured.contains("socket="));
     assert!(captured.contains("router.sock"));
+    assert!(captured.contains("spawn_envelope="));
+    assert!(captured.contains("router.envelope"));
+    assert!(captured.contains("manager_socket="));
+    assert!(captured.contains("persona.sock"));
     assert!(captured.contains("mode=600"));
     let expected_peer_count = EngineComponent::prototype_supervised_components().len() - 1;
     assert!(
@@ -344,6 +353,35 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
     );
     assert!(captured.contains("peer_0_component="));
     assert!(captured.contains("peer_0_socket="));
+
+    let envelope_text =
+        std::fs::read_to_string(&envelope_path).expect("typed spawn envelope file exists");
+    let mut decoder = Decoder::new(&envelope_text);
+    let signal_envelope =
+        signal_persona::SpawnEnvelope::decode(&mut decoder).expect("spawn envelope decodes");
+    assert_eq!(signal_envelope.engine_id.as_str(), "engine-direct-process");
+    assert_eq!(
+        signal_envelope.component_kind,
+        signal_persona::ComponentKind::Router
+    );
+    assert_eq!(
+        signal_envelope.component_name,
+        signal_persona_auth::ComponentName::Router
+    );
+    assert!(
+        signal_envelope
+            .state_dir
+            .as_str()
+            .ends_with("state/engine-direct-process")
+    );
+    assert!(
+        signal_envelope
+            .socket_path
+            .as_str()
+            .ends_with("router.sock")
+    );
+    assert_eq!(signal_envelope.socket_mode.into_u32(), 0o600);
+    assert_eq!(signal_envelope.supervision_protocol_version.into_u16(), 1);
 
     DirectProcessFixture::stop(&launcher, EngineComponent::Router)
         .await

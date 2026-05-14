@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use kameo::actor::Spawn;
 use kameo::error::SendError;
+use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
 use persona::engine::{EngineComponent, PersonaDaemonPaths, SocketMode};
 use persona::launch::{
     CommandArgument, CommandResolutionFailure, ComponentCommand, ComponentCommandCatalog,
@@ -144,10 +145,15 @@ fn constraint_engine_layout_uses_engine_id_scoped_paths() {
         .component(EngineComponent::Router)
         .expect("router component layout exists");
     assert!(router.state_path().ends_with("router.redb"));
+    assert!(router.envelope_path().ends_with("router.envelope"));
     assert!(router.socket().path().ends_with("router.sock"));
     assert!(TemporaryEngineRoot::contains(
         router.state_path(),
         "state/engine-alpha"
+    ));
+    assert!(TemporaryEngineRoot::contains(
+        router.envelope_path(),
+        "run/engine-alpha"
     ));
     assert!(TemporaryEngineRoot::contains(
         router.socket().path(),
@@ -208,8 +214,11 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
 
     assert_eq!(envelope.engine().as_str(), "engine-gamma");
     assert_eq!(envelope.component(), EngineComponent::Router);
+    assert!(envelope.state_dir().ends_with("engine-gamma"));
     assert!(envelope.state_path().ends_with("router.redb"));
     assert!(envelope.socket_path().ends_with("router.sock"));
+    assert!(envelope.envelope_path().ends_with("router.envelope"));
+    assert!(envelope.manager_socket().ends_with("persona.sock"));
     assert_eq!(envelope.socket_mode().as_octal(), 0o600);
     assert_eq!(envelope.peers().len(), 6);
     assert!(
@@ -233,6 +242,41 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
             .any(|peer| peer.component() == EngineComponent::Introspect
                 && peer.socket_path().ends_with("introspect.sock"))
     );
+
+    let signal_envelope = envelope.signal_spawn_envelope();
+    assert_eq!(signal_envelope.engine_id.as_str(), "engine-gamma");
+    assert_eq!(
+        signal_envelope.component_kind,
+        signal_persona::ComponentKind::Router
+    );
+    assert_eq!(
+        signal_envelope.component_name,
+        signal_persona_auth::ComponentName::Router
+    );
+    assert!(
+        signal_envelope
+            .state_dir
+            .as_str()
+            .ends_with("state/engine-gamma")
+    );
+    assert!(
+        signal_envelope
+            .socket_path
+            .as_str()
+            .ends_with("router.sock")
+    );
+    assert_eq!(signal_envelope.socket_mode.into_u32(), 0o600);
+    assert_eq!(signal_envelope.peer_sockets.len(), 6);
+
+    let mut encoder = Encoder::new();
+    signal_envelope
+        .encode(&mut encoder)
+        .expect("encode signal spawn envelope");
+    let text = encoder.into_string();
+    let mut decoder = Decoder::new(&text);
+    let recovered =
+        signal_persona::SpawnEnvelope::decode(&mut decoder).expect("decode signal spawn envelope");
+    assert_eq!(recovered, signal_envelope);
 }
 
 #[tokio::test]

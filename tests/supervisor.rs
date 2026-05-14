@@ -68,6 +68,8 @@ mkdir -p "$state_dir"
   printf 'component=%s\n' "$PERSONA_COMPONENT"
   printf 'state=%s\n' "$PERSONA_STATE_PATH"
   printf 'socket=%s\n' "$PERSONA_SOCKET_PATH"
+  printf 'spawn_envelope=%s\n' "$PERSONA_SPAWN_ENVELOPE"
+  printf 'manager_socket=%s\n' "$PERSONA_MANAGER_SOCKET"
   printf 'mode=%s\n' "$PERSONA_SOCKET_MODE"
   printf 'peer_count=%s\n' "$PERSONA_PEER_SOCKET_COUNT"
 } > "$state_dir/$PERSONA_COMPONENT.env"
@@ -151,6 +153,16 @@ async fn constraint_engine_supervisor_launches_prototype_supervised_components_t
             SupervisorFixture::wait_for_capture(&fixture.component_capture(component)).await;
         assert!(capture.contains("engine=supervisor-test"));
         assert!(capture.contains(&format!("component={}", component.as_str())));
+        assert!(capture.contains(&format!(
+            "spawn_envelope={}",
+            fixture
+                .run_root()
+                .join(fixture.engine.as_str())
+                .join(component.envelope_file())
+                .display()
+        )));
+        assert!(capture.contains("manager_socket="));
+        assert!(capture.contains("persona.sock"));
         assert!(capture.contains(&format!("mode={:o}", component.socket_mode().as_octal())));
         assert!(capture.contains("peer_count=6"));
     }

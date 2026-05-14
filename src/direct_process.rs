@@ -1,9 +1,11 @@
 use std::collections::HashMap;
+use std::os::unix::fs::PermissionsExt;
 use std::time::Duration;
 
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
+use nota_codec::{Encoder, NotaEncode};
 use thiserror::Error;
 use tokio::process::{Child, Command};
 
@@ -140,6 +142,7 @@ impl DirectProcessLauncher {
         if self.children.contains_key(&component) {
             return Err(DirectProcessFailure::ComponentAlreadyRunning { component });
         }
+        Self::write_spawn_envelope_file(&envelope)?;
         let mut command = Self::command_from_envelope(&envelope);
         let mut child = command.spawn().map_err(|source| DirectProcessFailure::Io {
             operation: "spawn component process",
@@ -155,6 +158,42 @@ impl DirectProcessLauncher {
         );
         self.launch_count = self.launch_count.saturating_add(1);
         Ok(LaunchComponentReceipt::new(component, process))
+    }
+
+    fn write_spawn_envelope_file(
+        envelope: &ComponentSpawnEnvelope,
+    ) -> Result<(), DirectProcessFailure> {
+        let Some(parent) = envelope.envelope_path().parent() else {
+            return Err(DirectProcessFailure::EnvelopePathMissingParent {
+                component: envelope.component(),
+            });
+        };
+        std::fs::create_dir_all(parent).map_err(|source| DirectProcessFailure::Io {
+            operation: "create spawn envelope directory",
+            source,
+        })?;
+        let mut encoder = Encoder::new();
+        envelope
+            .signal_spawn_envelope()
+            .encode(&mut encoder)
+            .map_err(DirectProcessFailure::Nota)?;
+        let mut text = encoder.into_string();
+        text.push('\n');
+        std::fs::write(envelope.envelope_path(), text).map_err(|source| {
+            DirectProcessFailure::Io {
+                operation: "write spawn envelope file",
+                source,
+            }
+        })?;
+        std::fs::set_permissions(
+            envelope.envelope_path(),
+            std::fs::Permissions::from_mode(0o600),
+        )
+        .map_err(|source| DirectProcessFailure::Io {
+            operation: "set spawn envelope file mode",
+            source,
+        })?;
+        Ok(())
     }
 
     async fn stop(
@@ -216,6 +255,8 @@ impl DirectProcessLauncher {
         command.env("PERSONA_COMPONENT", envelope.component().as_str());
         command.env("PERSONA_STATE_PATH", envelope.state_path());
         command.env("PERSONA_SOCKET_PATH", envelope.socket_path());
+        command.env("PERSONA_SPAWN_ENVELOPE", envelope.envelope_path());
+        command.env("PERSONA_MANAGER_SOCKET", envelope.manager_socket());
         command.env(
             "PERSONA_SOCKET_MODE",
             format!("{:o}", envelope.socket_mode().as_octal()),
@@ -405,6 +446,10 @@ pub enum DirectProcessFailure {
     ComponentNotRunning { component: EngineComponent },
     #[error("spawned component {component:?} did not expose a child pid")]
     ChildPidMissing { component: EngineComponent },
+    #[error("spawn envelope path for component {component:?} has no parent directory")]
+    EnvelopePathMissingParent { component: EngineComponent },
+    #[error("spawn envelope nota: {0}")]
+    Nota(#[from] nota_codec::Error),
     #[error("{operation}: {source}")]
     Io {
         operation: &'static str,

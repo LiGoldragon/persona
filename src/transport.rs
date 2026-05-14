@@ -289,6 +289,7 @@ impl PersonaDaemonCommand {
 pub struct PersonaLaunchPlan {
     engine: EngineId,
     paths: PersonaDaemonPaths,
+    manager_socket: PathBuf,
     command_catalog: ComponentCommandCatalog,
 }
 
@@ -304,6 +305,7 @@ impl PersonaLaunchPlan {
         Ok(Some(Self {
             engine,
             paths,
+            manager_socket: endpoint.as_path().to_path_buf(),
             command_catalog,
         }))
     }
@@ -312,6 +314,7 @@ impl PersonaLaunchPlan {
         Self {
             engine: input.engine,
             paths: input.paths,
+            manager_socket: input.manager_socket,
             command_catalog: input.command_catalog,
         }
     }
@@ -334,7 +337,8 @@ impl PersonaLaunchPlan {
     }
 
     pub fn layout(&self) -> crate::engine::EngineLayout {
-        self.paths.engine_layout(self.engine.clone())
+        self.paths
+            .engine_layout_with_manager_socket(self.engine.clone(), self.manager_socket.clone())
     }
 }
 
@@ -342,5 +346,6 @@ impl PersonaLaunchPlan {
 pub struct PersonaLaunchPlanInput {
     pub engine: EngineId,
     pub paths: PersonaDaemonPaths,
+    pub manager_socket: PathBuf,
     pub command_catalog: ComponentCommandCatalog,
 }

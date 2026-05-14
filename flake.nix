@@ -115,6 +115,8 @@
                   printf 'component=%s\n' "''${PERSONA_COMPONENT:?}"
                   printf 'process=%s\n' "$$"
                   printf 'socket=%s\n' "''${PERSONA_SOCKET_PATH:?}"
+                  printf 'spawn_envelope=%s\n' "''${PERSONA_SPAWN_ENVELOPE:?}"
+                  printf 'manager_socket=%s\n' "''${PERSONA_MANAGER_SOCKET:?}"
                   printf 'mode=%s\n' "''${PERSONA_SOCKET_MODE:?}"
                   printf 'peer_count=%s\n' "''${PERSONA_PEER_SOCKET_COUNT:?}"
                   printf 'actual=%s\n' '${actual}'
@@ -802,6 +804,12 @@
                   grep -Fx "engine=default" "$capture"
                   grep -Fx "component=$component" "$capture"
                   grep -Fx "peer_count=6" "$capture"
+                  grep -Fx "spawn_envelope=$work/run/default/$component.envelope" "$capture"
+                  grep -Fx "manager_socket=$work/persona.sock" "$capture"
+                  test -f "$work/run/default/$component.envelope"
+                  grep -Fq "(SpawnEnvelope default" "$work/run/default/$component.envelope"
+                  grep -Fq "$component.sock" "$work/run/default/$component.envelope"
+                  grep -Fq "\"$work/persona.sock\"" "$work/run/default/$component.envelope"
                 done
 
                 grep -Fx "actual=${

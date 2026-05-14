@@ -111,6 +111,8 @@ mkdir -p "$state_dir"
   printf 'component=%s\n' "$PERSONA_COMPONENT"
   printf 'process=%s\n' "$$"
   printf 'socket=%s\n' "$PERSONA_SOCKET_PATH"
+  printf 'spawn_envelope=%s\n' "$PERSONA_SPAWN_ENVELOPE"
+  printf 'manager_socket=%s\n' "$PERSONA_MANAGER_SOCKET"
   printf 'mode=%s\n' "$PERSONA_SOCKET_MODE"
   printf 'peer_count=%s\n' "$PERSONA_PEER_SOCKET_COUNT"
 } > "$state_dir/$PERSONA_COMPONENT.env"
@@ -257,6 +259,18 @@ async fn constraint_persona_daemon_launches_prototype_supervised_components_thro
         );
         assert!(
             capture.contains(&format!("component={}", component.as_str())),
+            "capture for {component:?}: {capture}"
+        );
+        assert!(
+            capture.contains("spawn_envelope="),
+            "capture for {component:?}: {capture}"
+        );
+        assert!(
+            capture.contains(component.envelope_file()),
+            "capture for {component:?}: {capture}"
+        );
+        assert!(
+            capture.contains("manager_socket="),
             "capture for {component:?}: {capture}"
         );
         assert!(
