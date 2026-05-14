@@ -2,9 +2,11 @@ use persona::request::{
     CommandLine, EngineStatusQuery, EngineStatusScope, PersonaOutput, PersonaRequest,
 };
 use persona::schema::EngineStatusReport;
+use persona::transport::PersonaFrameCodec;
+use signal_core::{FrameBody, Request, SignalVerb};
 use signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, ComponentStatus,
-    EngineGeneration, EnginePhase, EngineReply, EngineStatus,
+    EngineGeneration, EnginePhase, EngineReply, EngineStatus, Frame as PersonaFrame,
 };
 
 struct RequestFixture {
@@ -65,6 +67,21 @@ fn persona_request_lowers_to_signal_persona_engine_request() {
         }
         other => panic!("expected signal component status query, got {other:?}"),
     }
+}
+
+#[test]
+fn persona_frame_codec_rejects_mismatched_signal_verb() {
+    let frame = PersonaFrame::new(FrameBody::Request(Request::unchecked_operation(
+        SignalVerb::Assert,
+        signal_persona::EngineRequest::EngineStatusQuery(
+            signal_persona::EngineStatusQuery::whole_engine(),
+        ),
+    )));
+    let error = PersonaFrameCodec::default()
+        .request_from_frame(frame)
+        .expect_err("mismatched verb is rejected");
+
+    assert!(error.to_string().contains("signal verb mismatch"));
 }
 
 #[test]

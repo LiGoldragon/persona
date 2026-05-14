@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
-use signal_core::{FrameBody, Reply, Request};
+use signal_core::{FrameBody, Reply};
 use signal_persona::{
     ComponentHealth, ComponentHealthQuery, ComponentHealthReport, ComponentHello,
     ComponentIdentity, ComponentKind, ComponentName, ComponentReadinessQuery, ComponentReady,
@@ -262,8 +262,8 @@ impl BlockingSupervisionCodec {
     ) -> std::io::Result<SupervisionRequest> {
         let frame = self.read_frame(stream)?;
         match frame.into_body() {
-            FrameBody::Request(Request::Operation { payload, .. }) => Ok(payload),
-            other => panic!("unexpected supervision frame: {other:?}"),
+            FrameBody::Request(request) => request.into_payload_checked().map_err(io_error),
+            other => Err(io_error(format!("unexpected supervision frame: {other:?}"))),
         }
     }
 
@@ -309,6 +309,10 @@ impl BlockingSupervisionCodec {
         stream.write_all(&bytes)?;
         stream.flush()
     }
+}
+
+fn io_error(error: impl std::fmt::Display) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string())
 }
 
 fn main() {

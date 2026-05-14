@@ -357,7 +357,11 @@ impl SupervisionFrameCodec {
         stream: &mut UnixStream,
     ) -> Result<SupervisionRequest, ComponentSupervisionReadinessFailure> {
         match self.read_frame(stream).await?.into_body() {
-            FrameBody::Request(Request::Operation { payload, .. }) => Ok(payload),
+            FrameBody::Request(request) => request.into_payload_checked().map_err(|error| {
+                ComponentSupervisionReadinessFailure::UnexpectedFrame {
+                    got: error.to_string(),
+                }
+            }),
             other => Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
                 got: format!("{other:?}"),
             }),

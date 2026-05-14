@@ -104,7 +104,13 @@ impl PersonaFrameCodec {
 
     pub fn request_from_frame(&self, frame: Frame) -> Result<EngineRequest> {
         match frame.into_body() {
-            FrameBody::Request(Request::Operation { payload, .. }) => Ok(payload),
+            FrameBody::Request(request) => {
+                request
+                    .into_payload_checked()
+                    .map_err(|error| Error::UnexpectedSignalFrame {
+                        got: error.to_string(),
+                    })
+            }
             other => Err(Error::UnexpectedSignalFrame {
                 got: format!("{other:?}"),
             }),
