@@ -111,7 +111,6 @@ It sits next to the six-component operational delivery path instead
 of inside that path. It asks each supervised component daemon for
 typed inspectable records over Signal and projects them to NOTA at
 the edge.
-Per `~/primary/reports/designer/146-introspection-component-and-contract-layer.md`:
 
 - `persona-introspect` is **not** part of the six-component
   operational delivery path.
@@ -123,7 +122,7 @@ Per `~/primary/reports/designer/146-introspection-component-and-contract-layer.m
   component daemon through a Signal relation; the component
   decides which records to expose, how to read consistent
   snapshots, and what to redact.
-- The contract layer split (per /146 §2):
+- The contract layer split:
   - **Operational contracts** stay where they are
     (`signal-persona-*` per existing pattern).
   - **Component-specific introspection records** live
@@ -136,9 +135,8 @@ Per `~/primary/reports/designer/146-introspection-component-and-contract-layer.m
     (`IntrospectionRequest`, `IntrospectionReply`,
     `IntrospectionSubscription`, etc.).
 
-The first introspection slice is **terminal** (per /146 §5,
-DA/37 §7.4) — `persona-terminal` has the largest existing
-gap between durable local Sema records
+The first introspection slice is **terminal** — `persona-terminal`
+has the largest existing gap between durable local Sema records
 (`StoredTerminalSession`, `StoredDeliveryAttempt`,
 `StoredTerminalEvent`, `StoredViewerAttachment`,
 `StoredSessionHealth`, `StoredSessionArchive`) and
@@ -427,8 +425,7 @@ overrides. A NOTA launch record may provide an override for one component
 command, for example a custom `persona-message` build during an integration
 test. Omitted components use the Nix-provided default.
 
-**Two distinct records** carry the spawn information (per
-`~/primary/reports/designer/144-prototype-architecture-final-cleanup-after-da36.md` §2.3):
+**Two distinct records** carry the spawn information:
 
 - **`persona::launch::ResolvedComponentLaunch`** — the **manager-internal**
   Rust composite. Carries executable path, argv, environment,
@@ -452,18 +449,16 @@ The child reads only the `SpawnEnvelope`. It does not see executable
 path, argv, environment, restart state, or other manager-internal
 launch state — those stay inside `ResolvedComponentLaunch`.
 
-**State directory for stateless components** (per /144 §3.2):
-every component receives a `state_dir` via its `SpawnEnvelope`.
-Stateless components (today: `persona-message-daemon`,
-`persona-system` in skeleton mode) leave the directory empty and do
-not open a redb file until they own durable state. The manager
-prepares the directory at spawn-envelope mint time; the child opens
-it only if it has state to persist.
+**State directory for stateless components**: every component
+receives a `state_dir` via its `SpawnEnvelope`. Stateless
+components (today: `persona-message-daemon`, `persona-system` in
+skeleton mode) leave the directory empty and do not open a redb
+file until they own durable state. The manager prepares the
+directory at spawn-envelope mint time; the child opens it only if
+it has state to persist.
 
-**Manager state — two reducers and snapshots** (per
-`~/primary/reports/designer/142-supervision-in-signal-persona-no-message-proxy-daemon.md`
-§4 and `~/primary/reports/designer/143-prototype-readiness-gap-audit.md` §4.4–4.5):
-the manager runs **two reducers** over its append-only `engine-events` log:
+**Manager state — two reducers and snapshots**: the manager runs
+**two reducers** over its append-only `engine-events` log:
 
 - **Engine-lifecycle reducer** — per `(EngineId, ComponentName)`, materialises
   `ComponentProcessState` (closed enum: `Unspawned → Launched → SocketBound →
@@ -476,14 +471,14 @@ CLI status queries (`ComponentStatusQuery`, `EngineStatusQuery`) read the
 engine-status snapshot only. Audit/debug paths walk the event log or the
 engine-lifecycle snapshot.
 
-**Manager restore** (per /143 §4.5): on daemon startup the manager loads the
+**Manager restore**: on daemon startup the manager loads the
 latest `StoredEngineRecord` per engine from `manager.redb` and initialises
 both reducer snapshots from their stored state. Event replay is later
 strengthening; the prototype loads snapshots directly.
 
-**Socket-metadata verification** (per /142 §3.2 and DA/32 §3): each child
-binds its own socket from the envelope and applies the requested mode. The
-manager then verifies the socket *type*, *path*, and *mode* on disk **before**
+**Socket-metadata verification**: each child binds its own socket
+from the envelope and applies the requested mode. The manager then
+verifies the socket *type*, *path*, and *mode* on disk **before**
 appending `ComponentReady` to the event log. A child that fails to bind or
 that binds the wrong mode does not progress to `Ready`.
 
@@ -952,7 +947,7 @@ Migration rules:
 - Engine layout planning names every prototype-supervised component socket and state
   file before a component is spawned.
 - Internal component sockets are private to the Persona authority boundary;
-  the `message.sock` is group-writable for owner ingress (bound by `persona-message-daemon`, the supervised prototype message-ingress component). `router.sock` (mode 0600) is bound by `persona-router` for internal traffic. The "proxy" name retires per `~/primary/reports/designer/142-supervision-in-signal-persona-no-message-proxy-daemon.md`; the daemon itself stays.
+  the `message.sock` is group-writable for owner ingress (bound by `persona-message-daemon`, the supervised prototype message-ingress component). `router.sock` (mode 0600) is bound by `persona-router` for internal traffic. The "proxy" name retires; the daemon itself stays.
 - Spawn envelopes carry the component's own state/socket paths and every peer
   socket path; components do not derive peers by scanning directories.
 - Local engine trust is created by manager-owned sockets, ownership, modes, and
@@ -1151,8 +1146,5 @@ tests/           daemon, manager, request, projection, and state tests
 ## See Also
 
 - `~/primary/protocols/active-repositories.md`
-- `~/primary/reports/operator/105-command-line-mind-architecture-survey.md`
-- `~/primary/reports/designer/115-persona-engine-manager-architecture.md`
-- `~/primary/reports/1-gas-city-fiasco.md` — failure mode persona is contrasting against
 - `../persona-mind/ARCHITECTURE.md`
 - `../signal-persona-mind/ARCHITECTURE.md`
