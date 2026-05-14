@@ -21,6 +21,10 @@ use crate::readiness::{
     ComponentSocketExpectation, ComponentSocketReadiness, ComponentSocketReadinessFailure,
     VerifyComponentSocket,
 };
+use crate::supervision_readiness::{
+    ComponentSupervisionExpectation, ComponentSupervisionReadiness,
+    ComponentSupervisionReadinessFailure, VerifyComponentSupervision,
+};
 
 #[derive(Debug)]
 pub struct EngineSupervisor {
@@ -29,6 +33,7 @@ pub struct EngineSupervisor {
     resolver: ActorRef<ComponentCommandResolver>,
     launcher: ActorRef<DirectProcessLauncher>,
     readiness: ActorRef<ComponentSocketReadiness>,
+    supervision_readiness: ActorRef<ComponentSupervisionReadiness>,
     store: Option<ActorRef<ManagerStore>>,
     started_supervision_count: u64,
     stopped_supervision_count: u64,
@@ -44,6 +49,9 @@ impl EngineSupervisor {
             )),
             launcher: DirectProcessLauncher::spawn(DirectProcessLauncher::new()),
             readiness: ComponentSocketReadiness::spawn(ComponentSocketReadiness::default()),
+            supervision_readiness: ComponentSupervisionReadiness::spawn(
+                ComponentSupervisionReadiness::default(),
+            ),
             store: input.store,
             started_supervision_count: 0,
             stopped_supervision_count: 0,
@@ -87,6 +95,9 @@ impl EngineSupervisor {
                 .spawn_envelope(component, &resolved)
                 .ok_or(EngineSupervisorFailure::MissingSpawnEnvelope { component })?;
             let readiness_expectation = ComponentSocketExpectation::from_envelope(&envelope);
+            let supervision_socket_expectation =
+                ComponentSocketExpectation::from_supervision_envelope(&envelope);
+            let supervision_expectation = ComponentSupervisionExpectation::from_envelope(&envelope);
             let receipt = match self.launcher.ask(LaunchComponent::new(envelope)).await {
                 Ok(receipt) => receipt,
                 Err(SendError::HandlerError(failure)) => {
@@ -104,6 +115,10 @@ impl EngineSupervisor {
             ))
             .await?;
             self.verify_component_socket(readiness_expectation).await?;
+            self.verify_component_socket(supervision_socket_expectation)
+                .await?;
+            self.verify_component_supervision(supervision_expectation)
+                .await?;
             self.append_component_event(EngineEventBody::ComponentReady(
                 ComponentLifecycleEvent::new(receipt.component().component_name()),
             ))
@@ -204,6 +219,26 @@ impl EngineSupervisor {
             }
             Err(error) => Err(EngineSupervisorFailure::Actor {
                 operation: "verify component socket readiness",
+                detail: format!("{error:?}"),
+            }),
+        }
+    }
+
+    async fn verify_component_supervision(
+        &self,
+        expectation: ComponentSupervisionExpectation,
+    ) -> Result<(), EngineSupervisorFailure> {
+        match self
+            .supervision_readiness
+            .ask(VerifyComponentSupervision::new(expectation))
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(SendError::HandlerError(error)) => Err(
+                EngineSupervisorFailure::ComponentSupervisionReadiness(error),
+            ),
+            Err(error) => Err(EngineSupervisorFailure::Actor {
+                operation: "verify component supervision relation",
                 detail: format!("{error:?}"),
             }),
         }
@@ -341,6 +376,9 @@ pub enum EngineSupervisorFailure {
 
     #[error("component socket readiness: {0}")]
     ComponentSocketReadiness(#[from] ComponentSocketReadinessFailure),
+
+    #[error("component supervision readiness: {0}")]
+    ComponentSupervisionReadiness(#[from] ComponentSupervisionReadinessFailure),
 
     #[error("manager store: {detail}")]
     ManagerStore { detail: String },

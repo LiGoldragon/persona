@@ -421,11 +421,13 @@ The current prototype bridge is
 launcher scripts, one per prototype-supervised component. Each launcher adapts
 the manager's common spawn-envelope environment
 (`PERSONA_ENGINE_ID`, `PERSONA_COMPONENT`, `PERSONA_STATE_PATH`,
-`PERSONA_SOCKET_PATH`, `PERSONA_PEER_*`) to the component daemon's current CLI
-surface, records an inspectable capture file under the component state
-directory, then execs the real Nix-built component binary. This is integration
-glue, not a new component. It exists until the component daemon CLIs converge
-on the shared spawn-envelope contract.
+`PERSONA_DOMAIN_SOCKET_PATH`, `PERSONA_SUPERVISION_SOCKET_PATH`,
+`PERSONA_PEER_*`) to the component daemon's current CLI surface, records an
+inspectable capture file under the component state directory, starts the
+prototype supervision responder for the component's supervision socket, then
+execs the real Nix-built component binary. This is integration glue, not a new
+component. It exists until the component daemon CLIs converge on the shared
+spawn-envelope contract and each daemon owns its supervision relation natively.
 
 The engine launch configuration is the place for explicit component command
 overrides. A NOTA launch record may provide an override for one component
@@ -443,8 +445,9 @@ test. Omitted components use the Nix-provided default.
   operator's lane; it is not on the wire.
 - **`signal-persona::SpawnEnvelope`** — the **child-readable typed
   wire form**. Carries engine_id, component_kind, component_name,
-  state_dir, socket_path, socket_mode, peer_sockets,
-  manager_socket, supervision_protocol_version. The manager writes
+  state_dir, domain_socket_path, domain_socket_mode,
+  supervision_socket_path, supervision_socket_mode, peer_sockets,
+  manager_socket, and supervision_protocol_version. The manager writes
   the envelope file at
   `/var/run/persona/<engine-id>/<component>.envelope` at spawn
   time; the child reads it via `signal-persona`'s typed decoder
@@ -483,11 +486,16 @@ latest `StoredEngineRecord` per engine from `manager.redb` and initialises
 both reducer snapshots from their stored state. Event replay is later
 strengthening; the prototype loads snapshots directly.
 
-**Socket-metadata verification**: each child binds its own socket
-from the envelope and applies the requested mode. The manager then
-verifies the socket *type*, *path*, and *mode* on disk **before**
-appending `ComponentReady` to the event log. A child that fails to bind or
-that binds the wrong mode does not progress to `Ready`.
+**Socket and supervision verification**: each child binds its own domain
+socket from the envelope and applies the requested mode. The prototype
+supervision responder binds the envelope's supervision socket at mode `0600`.
+The manager verifies both sockets' *type*, *path*, and *mode* on disk, then
+sends typed `signal-persona::SupervisionRequest` frames over the supervision
+socket: `ComponentHello`, `ComponentReadinessQuery`, and
+`ComponentHealthQuery`. Only a matching identity, ready reply, and `Running`
+health report lets the manager append `ComponentReady` to the event log. A
+child that fails to bind, binds the wrong mode, gives the wrong identity, or
+does not answer the supervision relation does not progress to `Ready`.
 
 Component process supervision belongs behind an actor boundary. The manager
 may first use a direct child-process backend, but it should be driven by a
@@ -609,14 +617,16 @@ for hosts that have not yet supplied component commands.
 .#persona-daemon-launches-nix-built-prototype-topology` now starts
 `persona-daemon` with the Nix-built prototype launcher set. In a pure Nix
 builder it proves every prototype-supervised component receives the spawn
-envelope and reaches its launcher, and it proves the non-PTY component sockets
-bind (`mind`, `router`, `system`, `harness`, `message`). `persona-terminal`
-still needs the stateful terminal-cell smoke lane for real PTY readiness,
-because pure Nix builders do not provide the PTY environment that terminal-cell
-needs. The remaining engine-manager layers are restore-on-restart, socket ACL
-application, component readiness/exit subscriptions, restart policy,
-multi-engine catalog, origin tagging, and privileged-user deployment
-witnesses.
+envelope and reaches its launcher, proves every domain socket binds with the
+envelope-declared mode, proves every supervision socket binds with mode `0600`,
+and proves the manager receives typed supervision identity/readiness/health
+replies before recording `ComponentReady`. `persona-terminal` still needs the
+stateful terminal-cell smoke lane for real PTY readiness, because pure Nix
+builders do not provide the PTY environment that terminal-cell needs. The
+remaining engine-manager layers are native component-owned supervision handlers
+inside each daemon, restore-on-restart, socket owner/group ACL application,
+component exit subscriptions, restart policy, multi-engine catalog, origin
+tagging, and privileged-user deployment witnesses.
 
 ## 2 · Command-line Mind
 
@@ -897,7 +907,7 @@ Migration rules:
   the stateful terminal-cell lane because pure builders do not provide a real
   interactive PTY surface.
 - Resolved spawn envelopes carry executable path, argv, environment, state
-  path, socket path, socket mode, and peer sockets.
+  path, domain socket path/mode, supervision socket path/mode, and peer sockets.
 - The first engine-supervision witness starts every prototype-supervised component, not
   only the components with useful behavior already implemented.
 - Every prototype-supervised component has a Nix-built prototype launcher before
@@ -906,10 +916,9 @@ Migration rules:
   health/status/readiness, and returns typed unfinished-state replies for
   valid requests whose behavior is not built yet.
 - Prototype `ComponentReady` means the manager observed the component's
-  envelope-declared socket path as a Unix socket with the envelope-declared
-  mode. It is not emitted merely because `spawn(2)` returned a child PID.
-  Full health/status/readiness round-trip over the supervision relation is
-  the next strengthening before production.
+  envelope-declared domain socket, observed the component's supervision socket,
+  and completed a typed supervision identity/readiness/health round-trip. It is
+  not emitted merely because `spawn(2)` returned a child PID.
 - Unfinished-state replies are closed typed records such as `Unimplemented`,
   `Unsupported`, `Unavailable`, or `Failed`; they are never plain strings or
   catch-all text errors.
@@ -1039,9 +1048,10 @@ Migration rules:
   helper or direct redb call in request decoding.
 - The engine manager event log is typed manager state; text logs are views.
 - Full-engine supervision first proves every prototype-supervised component is
-  launched from the Nix-built stack and that each component socket reaches the
-  envelope-declared type/mode. PTY readiness stays in a stateful
-  terminal-cell witness.
+  launched from the Nix-built stack, that each component domain socket reaches
+  the envelope-declared type/mode, and that each supervision socket answers the
+  typed supervision relation. PTY readiness stays in a stateful terminal-cell
+  witness.
 - Component skeletons must be honest: valid unfinished operations return typed
   unfinished-state replies instead of hanging, crashing, or printing untyped
   text errors.
@@ -1257,11 +1267,13 @@ src/engine_event.rs  typed engine-management event records
 src/direct_process.rs  direct child-process launcher actor
 src/launch/      launch configuration, resolved commands, command resolver actor
 src/supervisor.rs  Kameo EngineSupervisor actor that starts/stops prototype-supervised processes
+src/supervision_readiness.rs  Kameo actor for typed component supervision probes
 src/transport.rs Unix-socket Signal codec, client, daemon, endpoint, caller
 src/manager.rs   Kameo EngineManager actor scaffold and trace witness
 src/manager_store.rs  Kameo ManagerStore actor and manager.redb Sema tables
 src/request.rs   NOTA projection into signal-persona requests and replies
 src/state.rs     in-memory engine-state reducer
+src/bin/persona_component_fixture.rs  typed component/supervision fixture for tests and prototype launcher supervision
 src/bin/wire_*   signal-persona-message wire-test shims
 tests/           daemon, manager, request, projection, and state tests
 ```

@@ -28,16 +28,34 @@ impl ComponentSocketReadiness {
         expectation: ComponentSocketExpectation,
     ) -> Result<ComponentSocketReady, ComponentSocketReadinessFailure> {
         let mut remaining = self.attempt_count;
+        let mut last_wrong_mode = None;
         while remaining > 0 {
-            match Self::inspect(&expectation)? {
-                Some(ready) => return Ok(ready),
-                None => {
+            match Self::inspect(&expectation) {
+                Ok(Some(ready)) => return Ok(ready),
+                Ok(None) => {
+                    last_wrong_mode = None;
                     remaining -= 1;
                     if remaining > 0 {
                         tokio::time::sleep(self.attempt_interval).await;
                     }
                 }
+                Err(ComponentSocketReadinessFailure::WrongMode { actual, .. }) => {
+                    last_wrong_mode = Some(actual);
+                    remaining -= 1;
+                    if remaining > 0 {
+                        tokio::time::sleep(self.attempt_interval).await;
+                    }
+                }
+                Err(error) => return Err(error),
             }
+        }
+        if let Some(actual) = last_wrong_mode {
+            return Err(ComponentSocketReadinessFailure::WrongMode {
+                component: expectation.component,
+                path: expectation.path,
+                expected: expectation.mode.as_octal(),
+                actual,
+            });
         }
         Err(ComponentSocketReadinessFailure::NotBound {
             component: expectation.component,
@@ -138,8 +156,16 @@ impl ComponentSocketExpectation {
     pub fn from_envelope(envelope: &ComponentSpawnEnvelope) -> Self {
         Self::new(
             envelope.component(),
-            envelope.socket_path().to_path_buf(),
-            envelope.socket_mode(),
+            envelope.domain_socket_path().to_path_buf(),
+            envelope.domain_socket_mode(),
+        )
+    }
+
+    pub fn from_supervision_envelope(envelope: &ComponentSpawnEnvelope) -> Self {
+        Self::new(
+            envelope.component(),
+            envelope.supervision_socket_path().to_path_buf(),
+            envelope.supervision_socket_mode(),
         )
     }
 

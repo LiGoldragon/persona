@@ -49,6 +49,10 @@ path = "src/bin/wire_emit_message.rs"
 name = "wire-decode-message"
 path = "src/bin/wire_decode_message.rs"
 
+[[bin]]
+name = "persona-component-fixture"
+path = "src/bin/persona_component_fixture.rs"
+
 [lints.rust]
 unused = "warn"
 dead_code = "warn"

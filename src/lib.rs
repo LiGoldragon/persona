@@ -15,6 +15,7 @@ pub mod readiness;
 pub mod request;
 pub mod schema;
 pub mod state;
+pub mod supervision_readiness;
 pub mod supervisor;
 pub mod transport;
 

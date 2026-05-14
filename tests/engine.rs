@@ -146,7 +146,13 @@ fn constraint_engine_layout_uses_engine_id_scoped_paths() {
         .expect("router component layout exists");
     assert!(router.state_path().ends_with("router.redb"));
     assert!(router.envelope_path().ends_with("router.envelope"));
-    assert!(router.socket().path().ends_with("router.sock"));
+    assert!(router.domain_socket().path().ends_with("router.sock"));
+    assert!(
+        router
+            .supervision_socket()
+            .path()
+            .ends_with("router.supervision.sock")
+    );
     assert!(TemporaryEngineRoot::contains(
         router.state_path(),
         "state/engine-alpha"
@@ -156,7 +162,11 @@ fn constraint_engine_layout_uses_engine_id_scoped_paths() {
         "run/engine-alpha"
     ));
     assert!(TemporaryEngineRoot::contains(
-        router.socket().path(),
+        router.domain_socket().path(),
+        "run/engine-alpha"
+    ));
+    assert!(TemporaryEngineRoot::contains(
+        router.supervision_socket().path(),
         "run/engine-alpha"
     ));
 }
@@ -190,16 +200,30 @@ fn constraint_engine_layout_assigns_socket_modes_by_component_boundary() {
         let socket = layout
             .component(component)
             .expect("component layout exists")
-            .socket();
+            .domain_socket();
         assert_eq!(socket.mode(), SocketMode::internal_component());
         assert_eq!(socket.mode().as_octal(), 0o600);
+        let supervision_socket = layout
+            .component(component)
+            .expect("component layout exists")
+            .supervision_socket();
+        assert_eq!(supervision_socket.mode(), SocketMode::internal_component());
+        assert_eq!(supervision_socket.mode().as_octal(), 0o600);
     }
 
     let message = layout
         .component(EngineComponent::Message)
         .expect("message layout exists");
-    assert_eq!(message.socket().mode(), SocketMode::message_ingress());
-    assert_eq!(message.socket().mode().as_octal(), 0o660);
+    assert_eq!(
+        message.domain_socket().mode(),
+        SocketMode::message_ingress()
+    );
+    assert_eq!(message.domain_socket().mode().as_octal(), 0o660);
+    assert_eq!(
+        message.supervision_socket().mode(),
+        SocketMode::internal_component()
+    );
+    assert_eq!(message.supervision_socket().mode().as_octal(), 0o600);
 }
 
 #[tokio::test]
@@ -216,31 +240,37 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     assert_eq!(envelope.component(), EngineComponent::Router);
     assert!(envelope.state_dir().ends_with("engine-gamma"));
     assert!(envelope.state_path().ends_with("router.redb"));
-    assert!(envelope.socket_path().ends_with("router.sock"));
+    assert!(envelope.domain_socket_path().ends_with("router.sock"));
+    assert!(
+        envelope
+            .supervision_socket_path()
+            .ends_with("router.supervision.sock")
+    );
     assert!(envelope.envelope_path().ends_with("router.envelope"));
     assert!(envelope.manager_socket().ends_with("persona.sock"));
-    assert_eq!(envelope.socket_mode().as_octal(), 0o600);
+    assert_eq!(envelope.domain_socket_mode().as_octal(), 0o600);
+    assert_eq!(envelope.supervision_socket_mode().as_octal(), 0o600);
     assert_eq!(envelope.peers().len(), 6);
     assert!(
         envelope
             .peers()
             .iter()
             .any(|peer| peer.component() == EngineComponent::Mind
-                && peer.socket_path().ends_with("mind.sock"))
+                && peer.domain_socket_path().ends_with("mind.sock"))
     );
     assert!(
         envelope
             .peers()
             .iter()
             .any(|peer| peer.component() == EngineComponent::Message
-                && peer.socket_path().ends_with("message.sock"))
+                && peer.domain_socket_path().ends_with("message.sock"))
     );
     assert!(
         envelope
             .peers()
             .iter()
             .any(|peer| peer.component() == EngineComponent::Introspect
-                && peer.socket_path().ends_with("introspect.sock"))
+                && peer.domain_socket_path().ends_with("introspect.sock"))
     );
 
     let signal_envelope = envelope.signal_spawn_envelope();
@@ -261,11 +291,18 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     );
     assert!(
         signal_envelope
-            .socket_path
+            .domain_socket_path
             .as_str()
             .ends_with("router.sock")
     );
-    assert_eq!(signal_envelope.socket_mode.into_u32(), 0o600);
+    assert_eq!(signal_envelope.domain_socket_mode.into_u32(), 0o600);
+    assert!(
+        signal_envelope
+            .supervision_socket_path
+            .as_str()
+            .ends_with("router.supervision.sock")
+    );
+    assert_eq!(signal_envelope.supervision_socket_mode.into_u32(), 0o600);
     assert_eq!(signal_envelope.peer_sockets.len(), 6);
 
     let mut encoder = Encoder::new();

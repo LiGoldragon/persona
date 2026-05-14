@@ -13,7 +13,7 @@
 
 use std::io::Read;
 
-use signal_core::{FrameBody, Request, SemaVerb};
+use signal_core::{FrameBody, Request, SignalVerb};
 use signal_persona_message::{Frame, MessageRequest};
 
 struct Expectations {
@@ -51,7 +51,7 @@ fn main() {
 
     match frame.into_body() {
         FrameBody::Request(Request::Operation { verb, payload }) => {
-            assert_eq!(verb, SemaVerb::Assert, "expected Assert verb");
+            assert_eq!(verb, SignalVerb::Assert, "expected Assert verb");
             match payload {
                 MessageRequest::MessageSubmission(submission) => {
                     expect.assert_submission(&submission);

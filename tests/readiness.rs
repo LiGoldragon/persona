@@ -101,3 +101,35 @@ async fn constraint_component_ready_rejects_wrong_socket_mode() {
     readiness.stop_gracefully().await.expect("readiness stops");
     readiness.wait_for_shutdown().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_component_ready_waits_for_socket_mode_to_settle() {
+    let fixture = ReadinessFixture::new("settle-mode");
+    let _listener = fixture.bind_socket(0o755);
+    let socket_path = fixture.socket_path();
+    let mode_path = socket_path.clone();
+    let readiness = ComponentSocketReadiness::spawn(ComponentSocketReadiness::new(
+        20,
+        Duration::from_millis(10),
+    ));
+
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        std::fs::set_permissions(mode_path, std::fs::Permissions::from_mode(0o660))
+            .expect("test socket mode corrected");
+    });
+
+    let ready = readiness
+        .ask(VerifyComponentSocket::new(ComponentSocketExpectation::new(
+            EngineComponent::Message,
+            socket_path,
+            SocketMode::message_ingress(),
+        )))
+        .await
+        .expect("socket mode settles");
+
+    assert_eq!(ready.component(), EngineComponent::Message);
+    assert_eq!(ready.mode(), SocketMode::message_ingress());
+    readiness.stop_gracefully().await.expect("readiness stops");
+    readiness.wait_for_shutdown().await;
+}

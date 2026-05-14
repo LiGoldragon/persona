@@ -240,7 +240,25 @@ async fn constraint_persona_daemon_launches_prototype_supervised_components_thro
             "capture for {component:?}: {capture}"
         );
         assert!(
-            capture.contains(&format!("mode={:o}", component.socket_mode().as_octal())),
+            capture.contains("domain_socket="),
+            "capture for {component:?}: {capture}"
+        );
+        assert!(
+            capture.contains("supervision_socket="),
+            "capture for {component:?}: {capture}"
+        );
+        assert!(
+            capture.contains(&format!(
+                "domain_mode={:o}",
+                component.socket_mode().as_octal()
+            )),
+            "capture for {component:?}: {capture}"
+        );
+        assert!(
+            capture.contains(&format!(
+                "supervision_mode={:o}",
+                component.supervision_socket_mode().as_octal()
+            )),
             "capture for {component:?}: {capture}"
         );
         assert!(

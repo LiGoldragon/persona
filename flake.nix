@@ -114,13 +114,17 @@
                   printf 'engine=%s\n' "''${PERSONA_ENGINE_ID:?}"
                   printf 'component=%s\n' "''${PERSONA_COMPONENT:?}"
                   printf 'process=%s\n' "$$"
-                  printf 'socket=%s\n' "''${PERSONA_SOCKET_PATH:?}"
+                  printf 'domain_socket=%s\n' "''${PERSONA_DOMAIN_SOCKET_PATH:?}"
+                  printf 'supervision_socket=%s\n' "''${PERSONA_SUPERVISION_SOCKET_PATH:?}"
                   printf 'spawn_envelope=%s\n' "''${PERSONA_SPAWN_ENVELOPE:?}"
                   printf 'manager_socket=%s\n' "''${PERSONA_MANAGER_SOCKET:?}"
-                  printf 'mode=%s\n' "''${PERSONA_SOCKET_MODE:?}"
+                  printf 'domain_mode=%s\n' "''${PERSONA_DOMAIN_SOCKET_MODE:?}"
+                  printf 'supervision_mode=%s\n' "''${PERSONA_SUPERVISION_SOCKET_MODE:?}"
                   printf 'peer_count=%s\n' "''${PERSONA_PEER_SOCKET_COUNT:?}"
                   printf 'actual=%s\n' '${actual}'
                 } > "$state_dir/$PERSONA_COMPONENT.env"
+                PERSONA_COMPONENT_FIXTURE_MODE=supervision-only \
+                  ${self.packages.${system}.default}/bin/persona-component-fixture &
                 ${command}
               '';
             };
@@ -129,7 +133,7 @@
             actual = "${inputs.persona-mind.packages.${system}.default}/bin/mind";
             command = ''
               exec ${inputs.persona-mind.packages.${system}.default}/bin/mind daemon \
-                --socket "$PERSONA_SOCKET_PATH" \
+                --socket "$PERSONA_DOMAIN_SOCKET_PATH" \
                 --store "$PERSONA_STATE_PATH"
             '';
           };
@@ -138,7 +142,7 @@
             actual = "${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon";
             command = ''
               exec ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon daemon \
-                --socket "$PERSONA_SOCKET_PATH" \
+                --socket "$PERSONA_DOMAIN_SOCKET_PATH" \
                 --store "$PERSONA_STATE_PATH"
             '';
           };
@@ -147,7 +151,7 @@
             actual = "${inputs.persona-system.packages.${system}.default}/bin/persona-system-daemon";
             command = ''
               exec ${inputs.persona-system.packages.${system}.default}/bin/persona-system-daemon \
-                "$PERSONA_SOCKET_PATH"
+                "$PERSONA_DOMAIN_SOCKET_PATH"
             '';
           };
           prototypeHarnessLauncher = mkPrototypeLauncher {
@@ -155,7 +159,7 @@
             actual = "${inputs.persona-harness.packages.${system}.default}/bin/persona-harness-daemon";
             command = ''
               exec ${inputs.persona-harness.packages.${system}.default}/bin/persona-harness-daemon \
-                "$PERSONA_SOCKET_PATH" \
+                "$PERSONA_DOMAIN_SOCKET_PATH" \
                 "$PERSONA_COMPONENT"
             '';
           };
@@ -164,7 +168,7 @@
             actual = "${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-supervisor";
             command = ''
               exec ${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-supervisor \
-                --socket "$PERSONA_SOCKET_PATH" \
+                --socket "$PERSONA_DOMAIN_SOCKET_PATH" \
                 --store "$PERSONA_STATE_PATH"
             '';
           };
@@ -823,13 +827,15 @@
                   grep -Fx "spawn_envelope=$work/run/default/$component.envelope" "$capture"
                   grep -Fx "manager_socket=$work/persona.sock" "$capture"
                   if [ "$component" = "message" ]; then
-                    grep -Fx "mode=660" "$capture"
+                    grep -Fx "domain_mode=660" "$capture"
                   else
-                    grep -Fx "mode=600" "$capture"
+                    grep -Fx "domain_mode=600" "$capture"
                   fi
+                  grep -Fx "supervision_mode=600" "$capture"
                   test -f "$work/run/default/$component.envelope"
                   grep -Fq "(SpawnEnvelope default" "$work/run/default/$component.envelope"
                   grep -Fq "$component.sock" "$work/run/default/$component.envelope"
+                  grep -Fq "$component.supervision.sock" "$work/run/default/$component.envelope"
                   grep -Fq "\"$work/persona.sock\"" "$work/run/default/$component.envelope"
                 done
 

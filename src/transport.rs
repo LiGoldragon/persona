@@ -95,7 +95,7 @@ impl PersonaFrameCodec {
     }
 
     pub fn request_frame(&self, request: EngineRequest) -> Frame {
-        Frame::new(FrameBody::Request(Request::assert(request)))
+        Frame::new(FrameBody::Request(Request::from_payload(request)))
     }
 
     pub fn reply_frame(&self, reply: EngineReply) -> Frame {

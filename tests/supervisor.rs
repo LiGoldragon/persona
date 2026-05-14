@@ -20,12 +20,13 @@ struct SupervisorFixture {
 }
 
 impl SupervisorFixture {
-    fn new(name: &str) -> Self {
+    fn new(_name: &str) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock after Unix epoch")
             .as_nanos();
-        let root = PathBuf::from("/tmp").join(format!("p-sup-{name}-{}-{now}", std::process::id()));
+        let root =
+            PathBuf::from("/tmp").join(format!("ps{}{}", std::process::id(), now % 1_000_000));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("fixture root created");
         Self {
@@ -131,7 +132,16 @@ async fn constraint_engine_supervisor_launches_prototype_supervised_components_t
         )));
         assert!(capture.contains("manager_socket="));
         assert!(capture.contains("persona.sock"));
-        assert!(capture.contains(&format!("mode={:o}", component.socket_mode().as_octal())));
+        assert!(capture.contains("domain_socket="));
+        assert!(capture.contains("supervision_socket="));
+        assert!(capture.contains(&format!(
+            "domain_mode={:o}",
+            component.socket_mode().as_octal()
+        )));
+        assert!(capture.contains(&format!(
+            "supervision_mode={:o}",
+            component.supervision_socket_mode().as_octal()
+        )));
         assert!(capture.contains("peer_count=6"));
     }
 

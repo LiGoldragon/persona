@@ -87,10 +87,12 @@ impl DirectProcessFixture {
   printf 'engine=%s\n' \"$PERSONA_ENGINE_ID\";
   printf 'component=%s\n' \"$PERSONA_COMPONENT\";
   printf 'state=%s\n' \"$PERSONA_STATE_PATH\";
-  printf 'socket=%s\n' \"$PERSONA_SOCKET_PATH\";
+  printf 'domain_socket=%s\n' \"$PERSONA_DOMAIN_SOCKET_PATH\";
+  printf 'supervision_socket=%s\n' \"$PERSONA_SUPERVISION_SOCKET_PATH\";
   printf 'spawn_envelope=%s\n' \"$PERSONA_SPAWN_ENVELOPE\";
   printf 'manager_socket=%s\n' \"$PERSONA_MANAGER_SOCKET\";
-  printf 'mode=%s\n' \"$PERSONA_SOCKET_MODE\";
+  printf 'domain_mode=%s\n' \"$PERSONA_DOMAIN_SOCKET_MODE\";
+  printf 'supervision_mode=%s\n' \"$PERSONA_SUPERVISION_SOCKET_MODE\";
   printf 'peer_count=%s\n' \"$PERSONA_PEER_SOCKET_COUNT\";
   printf 'peer_0_component=%s\n' \"$PERSONA_PEER_0_COMPONENT\";
   printf 'peer_0_socket=%s\n' \"$PERSONA_PEER_0_SOCKET_PATH\";
@@ -236,6 +238,7 @@ exec sleep 3600",
             if let Ok(text) = std::fs::read_to_string(self.envelope_capture_file())
                 && text.contains("peer_count=")
                 && text.contains("peer_0_socket=")
+                && text.contains("supervision_socket=")
                 && text.contains("spawn_envelope=")
             {
                 return text;
@@ -339,13 +342,16 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
     assert!(captured.contains("component=router"));
     assert!(captured.contains("state="));
     assert!(captured.contains("router.redb"));
-    assert!(captured.contains("socket="));
+    assert!(captured.contains("domain_socket="));
     assert!(captured.contains("router.sock"));
+    assert!(captured.contains("supervision_socket="));
+    assert!(captured.contains("router.supervision.sock"));
     assert!(captured.contains("spawn_envelope="));
     assert!(captured.contains("router.envelope"));
     assert!(captured.contains("manager_socket="));
     assert!(captured.contains("persona.sock"));
-    assert!(captured.contains("mode=600"));
+    assert!(captured.contains("domain_mode=600"));
+    assert!(captured.contains("supervision_mode=600"));
     let expected_peer_count = EngineComponent::prototype_supervised_components().len() - 1;
     assert!(
         captured.contains(&format!("peer_count={expected_peer_count}")),
@@ -376,11 +382,18 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
     );
     assert!(
         signal_envelope
-            .socket_path
+            .domain_socket_path
             .as_str()
             .ends_with("router.sock")
     );
-    assert_eq!(signal_envelope.socket_mode.into_u32(), 0o600);
+    assert_eq!(signal_envelope.domain_socket_mode.into_u32(), 0o600);
+    assert!(
+        signal_envelope
+            .supervision_socket_path
+            .as_str()
+            .ends_with("router.supervision.sock")
+    );
+    assert_eq!(signal_envelope.supervision_socket_mode.into_u32(), 0o600);
     assert_eq!(signal_envelope.supervision_protocol_version.into_u16(), 1);
 
     DirectProcessFixture::stop(&launcher, EngineComponent::Router)

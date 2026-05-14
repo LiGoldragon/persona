@@ -119,8 +119,10 @@ impl EngineLayout {
             component,
             state_dir: self.state_dir.clone(),
             state_path: layout.state_path.clone(),
-            socket_path: layout.socket.path.clone(),
-            socket_mode: layout.socket.mode,
+            domain_socket_path: layout.domain_socket.path.clone(),
+            domain_socket_mode: layout.domain_socket.mode,
+            supervision_socket_path: layout.supervision_socket.path.clone(),
+            supervision_socket_mode: layout.supervision_socket.mode,
             envelope_path: layout.envelope_path.clone(),
             manager_socket: self.manager_socket.clone(),
             command,
@@ -242,6 +244,18 @@ impl EngineComponent {
         }
     }
 
+    pub const fn supervision_socket_file(self) -> &'static str {
+        match self {
+            Self::Mind => "mind.supervision.sock",
+            Self::Router => "router.supervision.sock",
+            Self::System => "system.supervision.sock",
+            Self::Harness => "harness.supervision.sock",
+            Self::Terminal => "terminal.supervision.sock",
+            Self::Message => "message.supervision.sock",
+            Self::Introspect => "introspect.supervision.sock",
+        }
+    }
+
     pub const fn envelope_file(self) -> &'static str {
         match self {
             Self::Mind => "mind.envelope",
@@ -313,6 +327,14 @@ impl EngineComponent {
             | Self::Introspect => SocketMode::internal_component(),
         }
     }
+
+    pub const fn supervision_socket_mode(self) -> SocketMode {
+        Self::internal_supervision_socket_mode()
+    }
+
+    const fn internal_supervision_socket_mode() -> SocketMode {
+        SocketMode::internal_component()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -320,7 +342,8 @@ pub struct ComponentLayout {
     component: EngineComponent,
     state_path: PathBuf,
     envelope_path: PathBuf,
-    socket: ComponentSocket,
+    domain_socket: ComponentSocket,
+    supervision_socket: ComponentSocket,
 }
 
 impl ComponentLayout {
@@ -329,10 +352,15 @@ impl ComponentLayout {
             component,
             state_path: state_dir.join(component.state_file()),
             envelope_path: run_dir.join(component.envelope_file()),
-            socket: ComponentSocket {
+            domain_socket: ComponentSocket {
                 component,
                 path: run_dir.join(component.socket_file()),
                 mode: component.socket_mode(),
+            },
+            supervision_socket: ComponentSocket {
+                component,
+                path: run_dir.join(component.supervision_socket_file()),
+                mode: component.supervision_socket_mode(),
             },
         }
     }
@@ -349,8 +377,12 @@ impl ComponentLayout {
         self.envelope_path.as_path()
     }
 
-    pub fn socket(&self) -> &ComponentSocket {
-        &self.socket
+    pub fn domain_socket(&self) -> &ComponentSocket {
+        &self.domain_socket
+    }
+
+    pub fn supervision_socket(&self) -> &ComponentSocket {
+        &self.supervision_socket
     }
 }
 
@@ -398,8 +430,10 @@ pub struct ComponentSpawnEnvelope {
     component: EngineComponent,
     state_dir: PathBuf,
     state_path: PathBuf,
-    socket_path: PathBuf,
-    socket_mode: SocketMode,
+    domain_socket_path: PathBuf,
+    domain_socket_mode: SocketMode,
+    supervision_socket_path: PathBuf,
+    supervision_socket_mode: SocketMode,
     envelope_path: PathBuf,
     manager_socket: PathBuf,
     command: ComponentCommand,
@@ -423,12 +457,20 @@ impl ComponentSpawnEnvelope {
         self.state_path.as_path()
     }
 
-    pub fn socket_path(&self) -> &Path {
-        self.socket_path.as_path()
+    pub fn domain_socket_path(&self) -> &Path {
+        self.domain_socket_path.as_path()
     }
 
-    pub fn socket_mode(&self) -> SocketMode {
-        self.socket_mode
+    pub fn domain_socket_mode(&self) -> SocketMode {
+        self.domain_socket_mode
+    }
+
+    pub fn supervision_socket_path(&self) -> &Path {
+        self.supervision_socket_path.as_path()
+    }
+
+    pub fn supervision_socket_mode(&self) -> SocketMode {
+        self.supervision_socket_mode
     }
 
     pub fn envelope_path(&self) -> &Path {
@@ -453,10 +495,16 @@ impl ComponentSpawnEnvelope {
             component_kind: self.component.component_kind(),
             component_name: self.component.signal_name(),
             state_dir: signal_persona::WirePath::new(self.state_dir.to_string_lossy().into_owned()),
-            socket_path: signal_persona::WirePath::new(
-                self.socket_path.to_string_lossy().into_owned(),
+            domain_socket_path: signal_persona::WirePath::new(
+                self.domain_socket_path.to_string_lossy().into_owned(),
             ),
-            socket_mode: signal_persona::SocketMode::new(self.socket_mode.as_octal()),
+            domain_socket_mode: signal_persona::SocketMode::new(self.domain_socket_mode.as_octal()),
+            supervision_socket_path: signal_persona::WirePath::new(
+                self.supervision_socket_path.to_string_lossy().into_owned(),
+            ),
+            supervision_socket_mode: signal_persona::SocketMode::new(
+                self.supervision_socket_mode.as_octal(),
+            ),
             peer_sockets: self
                 .peers
                 .iter()
@@ -473,14 +521,14 @@ impl ComponentSpawnEnvelope {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComponentPeerSocket {
     component: EngineComponent,
-    socket_path: PathBuf,
+    domain_socket_path: PathBuf,
 }
 
 impl ComponentPeerSocket {
     fn from_layout(layout: &ComponentLayout) -> Self {
         Self {
             component: layout.component,
-            socket_path: layout.socket.path.clone(),
+            domain_socket_path: layout.domain_socket.path.clone(),
         }
     }
 
@@ -488,15 +536,15 @@ impl ComponentPeerSocket {
         self.component
     }
 
-    pub fn socket_path(&self) -> &Path {
-        self.socket_path.as_path()
+    pub fn domain_socket_path(&self) -> &Path {
+        self.domain_socket_path.as_path()
     }
 
     pub fn signal_peer_socket(&self) -> signal_persona::PeerSocket {
         signal_persona::PeerSocket {
             component_name: self.component.signal_name(),
-            socket_path: signal_persona::WirePath::new(
-                self.socket_path.to_string_lossy().into_owned(),
+            domain_socket_path: signal_persona::WirePath::new(
+                self.domain_socket_path.to_string_lossy().into_owned(),
             ),
         }
     }

@@ -254,12 +254,25 @@ impl DirectProcessLauncher {
         command.env("PERSONA_ENGINE_ID", envelope.engine().as_str());
         command.env("PERSONA_COMPONENT", envelope.component().as_str());
         command.env("PERSONA_STATE_PATH", envelope.state_path());
-        command.env("PERSONA_SOCKET_PATH", envelope.socket_path());
+        command.env("PERSONA_SOCKET_PATH", envelope.domain_socket_path());
+        command.env("PERSONA_DOMAIN_SOCKET_PATH", envelope.domain_socket_path());
+        command.env(
+            "PERSONA_DOMAIN_SOCKET_MODE",
+            format!("{:o}", envelope.domain_socket_mode().as_octal()),
+        );
+        command.env(
+            "PERSONA_SUPERVISION_SOCKET_PATH",
+            envelope.supervision_socket_path(),
+        );
+        command.env(
+            "PERSONA_SUPERVISION_SOCKET_MODE",
+            format!("{:o}", envelope.supervision_socket_mode().as_octal()),
+        );
         command.env("PERSONA_SPAWN_ENVELOPE", envelope.envelope_path());
         command.env("PERSONA_MANAGER_SOCKET", envelope.manager_socket());
         command.env(
             "PERSONA_SOCKET_MODE",
-            format!("{:o}", envelope.socket_mode().as_octal()),
+            format!("{:o}", envelope.domain_socket_mode().as_octal()),
         );
         command.env(
             "PERSONA_PEER_SOCKET_COUNT",
@@ -272,7 +285,7 @@ impl DirectProcessLauncher {
             );
             command.env(
                 format!("PERSONA_PEER_{index}_SOCKET_PATH"),
-                peer.socket_path(),
+                peer.domain_socket_path(),
             );
         }
         Self::configure_process_group(&mut command);

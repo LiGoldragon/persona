@@ -54,7 +54,7 @@ impl Cli {
 fn main() {
     let cli = Cli::parse();
     let request = MessageRequest::MessageSubmission(cli.message_submission());
-    let frame = Frame::new(FrameBody::Request(Request::assert(request)));
+    let frame = Frame::new(FrameBody::Request(Request::from_payload(request)));
     let bytes = frame
         .encode_length_prefixed()
         .expect("encode length-prefixed frame");

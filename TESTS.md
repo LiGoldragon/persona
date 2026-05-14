@@ -77,9 +77,9 @@ What the check proves:
 | `persona-dev-stack-script-builds` | The Nix-created dev-stack runners are executable. It does not start PTY daemons inside a pure Nix builder. |
 | `constraint_persona_cli_talks_to_persona_daemon_over_socket` | Spawns `persona-daemon`, sends two separate `persona` CLI requests through `PERSONA_SOCKET`, and proves the daemon-owned manager state survives between invocations. |
 | `constraint_persona_daemon_does_not_delete_non_socket_endpoint_path` | Starts `persona-daemon` on an occupied regular-file path and proves daemon startup rejects it without deleting the file. |
-| `constraint_engine_supervisor_launches_prototype_supervised_components_through_process_launcher` | Starts the `EngineSupervisor` actor with a component skeleton launch plan, proves all prototype-supervised component processes go through `DirectProcessLauncher`, and reads typed spawn/stop events back from `manager.redb`. |
-| `constraint_persona_daemon_launches_prototype_supervised_components_through_engine_supervisor` | Starts the real `persona-daemon` with `PERSONA_PROTOTYPE_STACK_EXECUTABLE`, proves all prototype-supervised spawn envelopes reached child processes, and verifies typed `ComponentSpawned` events in `manager.redb`. |
-| `persona-daemon-launches-nix-built-prototype-topology` | Starts the real `persona-daemon` with the Nix-built prototype launcher set, proves all seven prototype-supervised components receive the spawn-envelope environment and point at real component package binaries, and proves the non-PTY component sockets bind in a pure Nix builder. Terminal PTY readiness is deliberately left to the stateful terminal-cell smoke lane. |
+| `constraint_engine_supervisor_launches_prototype_supervised_components_through_process_launcher` | Starts the `EngineSupervisor` actor with a component skeleton launch plan, proves all prototype-supervised component processes go through `DirectProcessLauncher`, verifies domain and supervision sockets, completes typed supervision identity/readiness/health round-trips, and reads typed spawn/ready/stop events back from `manager.redb`. |
+| `constraint_persona_daemon_launches_prototype_supervised_components_through_engine_supervisor` | Starts the real `persona-daemon` with `PERSONA_PROTOTYPE_STACK_EXECUTABLE`, proves all prototype-supervised spawn envelopes reached child processes, verifies supervision round-trips through the supervisor path, and verifies typed `ComponentSpawned`/`ComponentReady` events in `manager.redb`. |
+| `persona-daemon-launches-nix-built-prototype-topology` | Starts the real `persona-daemon` with the Nix-built prototype launcher set, proves all seven prototype-supervised components receive the spawn-envelope environment and point at real component package binaries, proves every domain and supervision socket binds in a pure Nix builder, and proves the manager records readiness only after typed supervision replies. Terminal PTY readiness is deliberately left to the stateful terminal-cell smoke lane. |
 | `persona-engine-sandbox-script-builds` | The Nix-created sandbox runner is executable. |
 | `persona-engine-sandbox-supports-all-harnesses` | Dry-run mode creates isolated `state/`, `run/`, `home/`, `work/`, and `artifacts/` directories for `pi`, `claude`, `codex`, and `codex-api`. |
 | `persona-engine-sandbox-documents-dedicated-auth` | Dry-run credential policy artifacts say prompt-bearing Claude/Codex runs need dedicated sandbox credentials and do not copy live host auth. |
@@ -128,8 +128,9 @@ before reporting readiness.
 The meta repo also packages `persona-prototype-component-launchers`, a
 Nix-built launcher set used by the topology witness. These scripts adapt the
 manager's spawn-envelope environment to the component daemons' current CLI
-surfaces and are expected to disappear or simplify as the daemons converge on a
-shared spawn-envelope reader.
+surfaces, start the prototype supervision responder for the component
+supervision socket, and are expected to disappear or simplify as the daemons
+converge on a shared spawn-envelope reader and native supervision handlers.
 
 `dev-stack` starts the current runnable halves and keeps them alive:
 
