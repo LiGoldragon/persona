@@ -103,6 +103,13 @@ identity) lives in the criome ecosystem.
 > toward it, built rightly for the scope it serves now. See
 > `~/primary/ESSENCE.md` §"Today and eventually — different things,
 > different names".
+>
+> Eventual cross-trust-domain federation (multiple Persona deployments,
+> distinct organizations, schema evolution across the federation) is
+> named separately in §"Eventual cross-domain federation" below, marked
+> as **future work, not first-prototype work**. Today's Persona is
+> single-trust-domain — one user, that user's agents, one workspace
+> root. Federation arrives only after today's Persona works.
 
 ## 0.6 · Introspection
 
@@ -1115,6 +1122,116 @@ The apex repo owns tests that prove cross-component shape:
 The launcher checks above now cover both the primitive direct-process backend
 and the `persona-daemon` launch-plan path. They do not yet prove component
 readiness, socket ACLs, restart policy, or real router/mind/harness behavior.
+
+## 10 · Eventual cross-domain federation
+
+*This section is **future work, not first-prototype work**.* Today's
+Persona is single-trust-domain — one user, one workspace root, agents
+that all derive their authority from that root. Cross-trust-domain
+federation (multiple Persona deployments, distinct organizations,
+schema evolution across the federation) arrives **only after today's
+Persona works**. The pattern is named here so the today-stack stays
+honest about what it's a realization step toward.
+
+### 10.1 · Schema as proposal-and-recompile (medium-term)
+
+Once `persona-mind` carries real traffic, the workspace will encounter
+the need for new typed record kinds — node-kinds, edge-kinds, or new
+contract variants — that today require a human writing Rust and
+recompiling. The medium-term shape is **proposal-and-recompile**, run
+through the same Signal verb spine as everything else:
+
+1. An agent encounters a domain that needs a new typed record kind.
+2. The agent `Asserts` a `TypeProposal` record into `persona-mind`'s
+   proposal table. The proposal carries the proposed kind name, the
+   field sketch (name × type × constraints), worked examples, and the
+   proposer's identity + motivation.
+3. Other agents (or a human via NOTA) `Match` the proposal feed
+   and produce adjudication `Mutate`s on the proposal's state:
+   `Pending → UnderReview → Accepted` (or `Rejected` /
+   `NeedsRevision`). Adjudication policy is configurable per kind:
+   fully automatic (LLM agent with parameters), quorum-of-agents,
+   or human-in-loop (the agent surfaces the proposal to the user
+   through the same channel everything else surfaces through).
+4. On `Accepted`: an agent writes the actual Rust
+   (`#[derive(NotaRecord)] struct NewKind { ... }`) into the
+   appropriate contract crate, commits, pushes. CI/CD recompiles
+   the engine binary; new binaries deploy.
+5. Post-deploy, the engine on startup registers the new typed table
+   through `Engine::register_table::<NewKind>()`, which emits the
+   `Assert` on the catalog row that announces the type is now
+   live.
+
+The flow uses only the seven `SignalVerb` roots; there is no new
+"declare a type" verb. The type-system mutation happens in the Rust
+source layer, out-of-band from the Signal wire. The wire sees only
+the proposal-record traffic and the post-deploy catalog announcement.
+
+### 10.2 · Multi-version runtime + translator nodes (long-term)
+
+When the workspace federates across trust domains — two Persona
+deployments owned by different organizations, or two Sema-on-Sema
+substrates — schema agreement cannot be forced via shared recompile.
+Each domain controls its own deploys; consensus on a single current
+schema version is structurally impossible.
+
+The long-term resolution is **content-addressed schema versioning
+plus translation reducers**:
+
+- On the eventual Sema-on-Sema stack (per
+  `~/primary/ESSENCE.md` §"Today and eventually" + §"Versioning on
+  the eventual stack"), Sema's purity makes every schema content-
+  addressable by hash. The schema-hash is the identity; equal hash
+  means equal schema by construction.
+- Components carry **multiple schema versions in their runtime**.
+  A component running in domain A holds both v3 and v4 simultaneously
+  and can decode records under either schema-hash address. Peers in
+  domain B that have not yet adopted v4 keep sending v3 records;
+  the receiver decodes them through its retained v3 shape without
+  needing the sender to upgrade.
+- **Translation between versions is reducer work.** A v3-to-v4
+  reducer is a typed Sema function over records; it can run inline
+  in the receiving component's runtime, or it can be hosted by a
+  dedicated **translator component** that holds many versions and
+  mediates between peers without bloating either endpoint's
+  runtime. Translator components are themselves first-class typed
+  components in the federation — they speak the seven Signal
+  verbs, they own their own catalog, and they declare which
+  version pairs they bridge.
+- **Federation needs no quorum primitive at the verb level.**
+  Schema "agreement" reduces to "both sides can decode each other"
+  — which content-addressed versioning plus translation reducers
+  provides directly. The seven-root Signal verbs handle the wire;
+  schema bridging is reducer/translator work, not verb work.
+
+The reason this matters for the verb-spine question: cross-trust-
+domain federation was the strongest case for an eighth `Structure`
+verb (a consensus-shaped boundary primitive). The content-addressing
+plus translator pattern removes that case — federation runs in the
+seven verbs without needing schema-consensus as a verb-level
+operation.
+
+### 10.3 · Ordering
+
+The three horizons stack:
+
+1. **Today (first prototype)**: single-trust-domain Persona working
+   end-to-end. Schema changes through manual Rust edits +
+   recompile + redeploy, just as any code change. No proposal
+   record yet.
+2. **Medium-term**: §10.1 proposal-and-recompile flow lands once
+   real traffic produces schema-change pressure. The
+   `TypeProposal` record family takes its place in
+   `signal-persona-mind` alongside other coordination records.
+3. **Long-term**: §10.2 content-addressed versioning + translator
+   nodes land alongside the eventual Sema-on-Sema substrate. The
+   proposal flow continues to exist; the recompile-on-acceptance
+   step becomes content-addressing in the Sema layer instead of
+   binary-rebuild in Rust.
+
+None of this is first-prototype work. Today's `persona-mind` does
+not have proposals, translation, or content-addressed versioning.
+The path is sequential: today, then medium, then long.
 
 ## Code Map
 
