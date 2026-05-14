@@ -2,8 +2,9 @@ use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use signal_persona::{
-    ComponentShutdown, ComponentStartup, ComponentStatusQuery, EngineReply, EngineRequest,
-    EngineStatusQuery,
+    ComponentShutdown, ComponentStartup, ComponentStatusQuery, EngineCatalog, EngineCatalogEntry,
+    EngineLaunchRejection, EngineLaunchRejectionReason, EngineReply, EngineRequest,
+    EngineRetirementRejection, EngineRetirementRejectionReason, EngineStatusQuery,
 };
 use signal_persona_auth::EngineId;
 
@@ -92,6 +93,30 @@ impl EngineManager {
             EngineRequest::ComponentStatusQuery(query) => self.state.component_status(query),
             EngineRequest::ComponentStartup(startup) => self.state.start_component(startup),
             EngineRequest::ComponentShutdown(shutdown) => self.state.stop_component(shutdown),
+            EngineRequest::EngineLaunchProposal(proposal) => {
+                EngineReply::EngineLaunchRejected(EngineLaunchRejection {
+                    label: proposal.label,
+                    reason: EngineLaunchRejectionReason::LaunchPlanRejected,
+                })
+            }
+            EngineRequest::EngineCatalogQuery(_) => EngineReply::EngineCatalog(EngineCatalog {
+                engines: vec![EngineCatalogEntry {
+                    engine: self.engine.clone(),
+                    label: signal_persona::EngineLabel::new(self.engine.as_str()),
+                    phase: self.state.snapshot().phase,
+                }],
+            }),
+            EngineRequest::EngineRetirement(retirement) => {
+                let reason = if retirement.engine == self.engine {
+                    EngineRetirementRejectionReason::EngineStillRunning
+                } else {
+                    EngineRetirementRejectionReason::EngineNotFound
+                };
+                EngineReply::EngineRetirementRejected(EngineRetirementRejection {
+                    engine: retirement.engine,
+                    reason,
+                })
+            }
         };
         if should_persist && matches!(reply, EngineReply::SupervisorActionAccepted(_)) {
             self.persist_state().await?;

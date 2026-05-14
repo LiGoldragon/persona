@@ -128,9 +128,9 @@ before reporting readiness.
 The meta repo also packages `persona-prototype-component-launchers`, a
 Nix-built launcher set used by the topology witness. These scripts adapt the
 manager's spawn-envelope environment to the component daemons' current CLI
-surfaces, start the prototype supervision responder for the component
-supervision socket, and are expected to disappear or simplify as the daemons
-converge on a shared spawn-envelope reader and native supervision handlers.
+surfaces, write inspectable capture files, and exec the real component
+daemons. Each component daemon owns its own domain socket and supervision
+socket; the launchers are adaptation glue only.
 
 `dev-stack` starts the current runnable halves and keeps them alive:
 

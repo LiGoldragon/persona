@@ -423,11 +423,10 @@ the manager's common spawn-envelope environment
 (`PERSONA_ENGINE_ID`, `PERSONA_COMPONENT`, `PERSONA_STATE_PATH`,
 `PERSONA_DOMAIN_SOCKET_PATH`, `PERSONA_SUPERVISION_SOCKET_PATH`,
 `PERSONA_PEER_*`) to the component daemon's current CLI surface, records an
-inspectable capture file under the component state directory, starts the
-prototype supervision responder for the component's supervision socket, then
-execs the real Nix-built component binary. This is integration glue, not a new
-component. It exists until the component daemon CLIs converge on the shared
-spawn-envelope contract and each daemon owns its supervision relation natively.
+inspectable capture file under the component state directory, then execs the
+real Nix-built component binary. This is integration glue, not a new
+component. The component daemon owns both its domain socket and its typed
+supervision relation.
 
 The engine launch configuration is the place for explicit component command
 overrides. A NOTA launch record may provide an override for one component
@@ -487,8 +486,8 @@ both reducer snapshots from their stored state. Event replay is later
 strengthening; the prototype loads snapshots directly.
 
 **Socket and supervision verification**: each child binds its own domain
-socket from the envelope and applies the requested mode. The prototype
-supervision responder binds the envelope's supervision socket at mode `0600`.
+socket from the envelope and applies the requested mode. Each child also binds
+the envelope's supervision socket at mode `0600`.
 The manager verifies both sockets' *type*, *path*, and *mode* on disk, then
 sends typed `signal-persona::SupervisionRequest` frames over the supervision
 socket: `ComponentHello`, `ComponentReadinessQuery`, and
@@ -623,10 +622,9 @@ and proves the manager receives typed supervision identity/readiness/health
 replies before recording `ComponentReady`. `persona-terminal` still needs the
 stateful terminal-cell smoke lane for real PTY readiness, because pure Nix
 builders do not provide the PTY environment that terminal-cell needs. The
-remaining engine-manager layers are native component-owned supervision handlers
-inside each daemon, restore-on-restart, socket owner/group ACL application,
-component exit subscriptions, restart policy, multi-engine catalog, origin
-tagging, and privileged-user deployment witnesses.
+remaining engine-manager layers are restore-on-restart, socket owner/group ACL
+application, component exit subscriptions, restart policy, multi-engine
+catalog, origin tagging, and privileged-user deployment witnesses.
 
 ## 2 · Command-line Mind
 
@@ -1273,7 +1271,7 @@ src/manager.rs   Kameo EngineManager actor scaffold and trace witness
 src/manager_store.rs  Kameo ManagerStore actor and manager.redb Sema tables
 src/request.rs   NOTA projection into signal-persona requests and replies
 src/state.rs     in-memory engine-state reducer
-src/bin/persona_component_fixture.rs  typed component/supervision fixture for tests and prototype launcher supervision
+src/bin/persona_component_fixture.rs  typed component/supervision fixture for tests
 src/bin/wire_*   signal-persona-message wire-test shims
 tests/           daemon, manager, request, projection, and state tests
 ```

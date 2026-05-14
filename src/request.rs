@@ -114,6 +114,11 @@ impl NotaDecode for PersonaRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PersonaOutput {
+    EngineLaunchAccepted(contract::EngineLaunchAcceptance),
+    EngineLaunchRejected(contract::EngineLaunchRejection),
+    EngineCatalog(contract::EngineCatalog),
+    EngineRetirementAccepted(contract::EngineRetirementAcceptance),
+    EngineRetirementRejected(contract::EngineRetirementRejection),
     EngineStatusReport(EngineStatusReport),
     ComponentStatusReport(ComponentStatusReport),
     ComponentStatusMissingReport(ComponentStatusMissingReport),
@@ -124,6 +129,19 @@ pub enum PersonaOutput {
 impl PersonaOutput {
     pub fn from_engine_reply(reply: contract::EngineReply) -> Self {
         match reply {
+            contract::EngineReply::EngineLaunchAccepted(acceptance) => {
+                Self::EngineLaunchAccepted(acceptance)
+            }
+            contract::EngineReply::EngineLaunchRejected(rejection) => {
+                Self::EngineLaunchRejected(rejection)
+            }
+            contract::EngineReply::EngineCatalog(catalog) => Self::EngineCatalog(catalog),
+            contract::EngineReply::EngineRetirementAccepted(acceptance) => {
+                Self::EngineRetirementAccepted(acceptance)
+            }
+            contract::EngineReply::EngineRetirementRejected(rejection) => {
+                Self::EngineRetirementRejected(rejection)
+            }
             contract::EngineReply::EngineStatus(status) => {
                 Self::EngineStatusReport(EngineStatusReport::from_contract(status))
             }
@@ -160,6 +178,11 @@ impl PersonaOutput {
 impl NotaEncode for PersonaOutput {
     fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
         match self {
+            Self::EngineLaunchAccepted(output) => output.encode(encoder),
+            Self::EngineLaunchRejected(output) => output.encode(encoder),
+            Self::EngineCatalog(output) => output.encode(encoder),
+            Self::EngineRetirementAccepted(output) => output.encode(encoder),
+            Self::EngineRetirementRejected(output) => output.encode(encoder),
             Self::EngineStatusReport(output) => output.encode(encoder),
             Self::ComponentStatusReport(output) => output.encode(encoder),
             Self::ComponentStatusMissingReport(output) => output.encode(encoder),
@@ -173,6 +196,21 @@ impl NotaDecode for PersonaOutput {
     fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
         let head = decoder.peek_record_head()?;
         match head.as_str() {
+            "EngineLaunchAcceptance" => Ok(Self::EngineLaunchAccepted(
+                contract::EngineLaunchAcceptance::decode(decoder)?,
+            )),
+            "EngineLaunchRejection" => Ok(Self::EngineLaunchRejected(
+                contract::EngineLaunchRejection::decode(decoder)?,
+            )),
+            "EngineCatalog" => Ok(Self::EngineCatalog(contract::EngineCatalog::decode(
+                decoder,
+            )?)),
+            "EngineRetirementAcceptance" => Ok(Self::EngineRetirementAccepted(
+                contract::EngineRetirementAcceptance::decode(decoder)?,
+            )),
+            "EngineRetirementRejection" => Ok(Self::EngineRetirementRejected(
+                contract::EngineRetirementRejection::decode(decoder)?,
+            )),
             "EngineStatusReport" => Ok(Self::EngineStatusReport(EngineStatusReport::decode(
                 decoder,
             )?)),

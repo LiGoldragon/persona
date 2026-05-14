@@ -123,8 +123,6 @@
                   printf 'peer_count=%s\n' "''${PERSONA_PEER_SOCKET_COUNT:?}"
                   printf 'actual=%s\n' '${actual}'
                 } > "$state_dir/$PERSONA_COMPONENT.env"
-                PERSONA_COMPONENT_FIXTURE_MODE=supervision-only \
-                  ${self.packages.${system}.default}/bin/persona-component-fixture &
                 ${command}
               '';
             };
@@ -183,8 +181,7 @@
             name = "persona-introspect-prototype-launcher";
             actual = "${inputs.persona-introspect.packages.${system}.default}/bin/persona-introspect-daemon";
             command = ''
-              ${inputs.persona-introspect.packages.${system}.default}/bin/persona-introspect-daemon
-              exec ${pkgs.coreutils}/bin/sleep infinity
+              exec ${inputs.persona-introspect.packages.${system}.default}/bin/persona-introspect-daemon
             '';
           };
           prototypeComponentLaunchers = pkgs.symlinkJoin {
