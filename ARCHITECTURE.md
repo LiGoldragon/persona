@@ -892,6 +892,10 @@ Migration rules:
 - The prototype launcher set adapts the shared spawn-envelope environment to
   the current component daemon CLIs and records which Nix-built binary it
   executed.
+- The pure Nix prototype uses `persona-terminal-supervisor` for the terminal
+  component socket. PTY-bearing `persona-terminal-daemon` readiness belongs in
+  the stateful terminal-cell lane because pure builders do not provide a real
+  interactive PTY surface.
 - Resolved spawn envelopes carry executable path, argv, environment, state
   path, socket path, socket mode, and peer sockets.
 - The first engine-supervision witness starts every prototype-supervised component, not
@@ -901,9 +905,11 @@ Migration rules:
 - A daemon skeleton accepts its component Signal boundary, answers
   health/status/readiness, and returns typed unfinished-state replies for
   valid requests whose behavior is not built yet.
-- `ComponentReady` means the manager observed a successful health/status
-  round-trip from that component. It is not emitted merely because
-  `spawn(2)` returned a child PID.
+- Prototype `ComponentReady` means the manager observed the component's
+  envelope-declared socket path as a Unix socket with the envelope-declared
+  mode. It is not emitted merely because `spawn(2)` returned a child PID.
+  Full health/status/readiness round-trip over the supervision relation is
+  the next strengthening before production.
 - Unfinished-state replies are closed typed records such as `Unimplemented`,
   `Unsupported`, `Unavailable`, or `Failed`; they are never plain strings or
   catch-all text errors.
@@ -1033,9 +1039,9 @@ Migration rules:
   helper or direct redb call in request decoding.
 - The engine manager event log is typed manager state; text logs are views.
 - Full-engine supervision first proves every prototype-supervised component is
-  launched from the Nix-built stack. Socket readiness is proved where pure
-  builders can observe it; PTY readiness stays in a stateful terminal-cell
-  witness.
+  launched from the Nix-built stack and that each component socket reaches the
+  envelope-declared type/mode. PTY readiness stays in a stateful
+  terminal-cell witness.
 - Component skeletons must be honest: valid unfinished operations return typed
   unfinished-state replies instead of hanging, crashing, or printing untyped
   text errors.

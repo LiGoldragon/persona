@@ -161,13 +161,11 @@
           };
           prototypeTerminalLauncher = mkPrototypeLauncher {
             name = "persona-terminal-prototype-launcher";
-            actual = "${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-daemon";
+            actual = "${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-supervisor";
             command = ''
-              exec ${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-daemon \
+              exec ${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-supervisor \
                 --socket "$PERSONA_SOCKET_PATH" \
-                --store "$PERSONA_STATE_PATH" \
-                --terminal "$PERSONA_COMPONENT" \
-                -- ${pkgs.bash}/bin/bash -lc 'trap "exit 0" TERM; while :; do sleep 1; done'
+                --store "$PERSONA_STATE_PATH"
             '';
           };
           prototypeMessageLauncher = mkPrototypeLauncher {
@@ -682,6 +680,24 @@
               cargoTestExtraArgs = "--test manager_store constraint_engine_event_log_nota_projection_is_view -- --exact";
             }
           );
+          persona-component-ready-requires-socket-metadata-from-spawn-envelope =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test readiness constraint_component_ready_requires_socket_metadata_from_spawn_envelope -- --exact";
+                }
+              );
+          persona-component-ready-rejects-wrong-socket-mode =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test readiness constraint_component_ready_rejects_wrong_socket_mode -- --exact";
+                }
+              );
           persona-component-launcher-does-not-block-manager-mailbox = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -806,6 +822,11 @@
                   grep -Fx "peer_count=6" "$capture"
                   grep -Fx "spawn_envelope=$work/run/default/$component.envelope" "$capture"
                   grep -Fx "manager_socket=$work/persona.sock" "$capture"
+                  if [ "$component" = "message" ]; then
+                    grep -Fx "mode=660" "$capture"
+                  else
+                    grep -Fx "mode=600" "$capture"
+                  fi
                   test -f "$work/run/default/$component.envelope"
                   grep -Fq "(SpawnEnvelope default" "$work/run/default/$component.envelope"
                   grep -Fq "$component.sock" "$work/run/default/$component.envelope"
@@ -826,7 +847,7 @@
                 }/bin/persona-harness-daemon" "$work/state/default/harness.env"
                 grep -Fx "actual=${
                   inputs.persona-terminal.packages.${system}.default
-                }/bin/persona-terminal-daemon" "$work/state/default/terminal.env"
+                }/bin/persona-terminal-supervisor" "$work/state/default/terminal.env"
                 grep -Fx "actual=${
                   inputs.persona-message.packages.${system}.default
                 }/bin/persona-message-daemon" "$work/state/default/message.env"
@@ -834,7 +855,7 @@
                   inputs.persona-introspect.packages.${system}.default
                 }/bin/persona-introspect-daemon" "$work/state/default/introspect.env"
 
-                for socket in mind router system harness message; do
+                for socket in mind router system harness terminal message introspect; do
                   path="$work/run/default/$socket.sock"
                   for attempt in $(seq 1 100); do
                     if [ -S "$path" ]; then
@@ -847,6 +868,12 @@
                     cat "$work/persona-daemon.stdout" >&2
                     cat "$work/persona-daemon.stderr" >&2
                     exit 1
+                  fi
+                  actual_mode="$(stat -c '%a' "$path")"
+                  if [ "$socket" = "message" ]; then
+                    test "$actual_mode" = "660"
+                  else
+                    test "$actual_mode" = "600"
                   fi
                 done
 

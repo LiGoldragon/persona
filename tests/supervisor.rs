@@ -1,4 +1,3 @@
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -13,6 +12,8 @@ use persona::supervisor::{
 };
 use signal_persona_auth::EngineId;
 
+mod support;
+
 struct SupervisorFixture {
     root: PathBuf,
     engine: EngineId,
@@ -24,10 +25,7 @@ impl SupervisorFixture {
             .duration_since(UNIX_EPOCH)
             .expect("system clock after Unix epoch")
             .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "persona-supervisor-{name}-{}-{now}",
-            std::process::id()
-        ));
+        let root = PathBuf::from("/tmp").join(format!("p-sup-{name}-{}-{now}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("fixture root created");
         Self {
@@ -54,41 +52,11 @@ impl SupervisorFixture {
             .join(format!("{}.env", component.as_str()))
     }
 
-    fn launcher_script(&self) -> PathBuf {
-        let script = self.root.join("component-skeleton");
-        let shell = std::env::var("PERSONA_TEST_SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-        let script_text = format!(
-            "{}{}",
-            format!("#!{shell}\n"),
-            r#"set -eu
-state_dir="$(dirname "$PERSONA_STATE_PATH")"
-mkdir -p "$state_dir"
-{
-  printf 'engine=%s\n' "$PERSONA_ENGINE_ID"
-  printf 'component=%s\n' "$PERSONA_COMPONENT"
-  printf 'state=%s\n' "$PERSONA_STATE_PATH"
-  printf 'socket=%s\n' "$PERSONA_SOCKET_PATH"
-  printf 'spawn_envelope=%s\n' "$PERSONA_SPAWN_ENVELOPE"
-  printf 'manager_socket=%s\n' "$PERSONA_MANAGER_SOCKET"
-  printf 'mode=%s\n' "$PERSONA_SOCKET_MODE"
-  printf 'peer_count=%s\n' "$PERSONA_PEER_SOCKET_COUNT"
-} > "$state_dir/$PERSONA_COMPONENT.env"
-trap 'exit 0' TERM
-while true; do sleep 1; done
-"#
-        );
-        std::fs::write(&script, script_text).expect("launcher script written");
-        let mut permissions = std::fs::metadata(&script)
-            .expect("launcher script metadata")
-            .permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(&script, permissions).expect("launcher script executable");
-        script
-    }
-
     fn command_catalog(&self) -> ComponentCommandCatalog {
         ComponentCommandCatalog::from_repeated_executable(
-            self.launcher_script().to_string_lossy().into_owned(),
+            support::component_socket_fixture(self.root.as_path())
+                .to_string_lossy()
+                .into_owned(),
         )
     }
 
@@ -173,12 +141,21 @@ async fn constraint_engine_supervisor_launches_prototype_supervised_components_t
         .expect("engine events read");
     assert_eq!(
         events.len(),
-        EngineComponent::prototype_supervised_components().len()
+        EngineComponent::prototype_supervised_components().len() * 2
     );
-    assert!(
+    assert_eq!(
         events
             .iter()
-            .all(|event| matches!(event.body(), EngineEventBody::ComponentSpawned(_)))
+            .filter(|event| matches!(event.body(), EngineEventBody::ComponentSpawned(_)))
+            .count(),
+        EngineComponent::prototype_supervised_components().len()
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event.body(), EngineEventBody::ComponentReady(_)))
+            .count(),
+        EngineComponent::prototype_supervised_components().len()
     );
 
     let stopped = supervisor
@@ -196,7 +173,7 @@ async fn constraint_engine_supervisor_launches_prototype_supervised_components_t
         .expect("engine events read");
     assert_eq!(
         events.len(),
-        EngineComponent::prototype_supervised_components().len() * 2
+        EngineComponent::prototype_supervised_components().len() * 3
     );
     assert_eq!(
         events

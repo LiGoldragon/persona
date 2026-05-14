@@ -1,10 +1,11 @@
 use std::io::{BufRead, BufReader};
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 
 use persona::engine::EngineComponent;
 use persona::engine_event::EngineEventBody;
+
+mod support;
 
 struct DaemonFixture {
     root: PathBuf,
@@ -54,7 +55,7 @@ impl DaemonFixture {
         std::fs::create_dir_all(&root).expect("test root created");
         let socket = root.join("persona.sock");
         let manager_store = root.join("manager.redb");
-        let script = Self::component_skeleton_script(&root);
+        let script = support::component_socket_fixture(root.as_path());
         let mut daemon = Command::new(env!("CARGO_BIN_EXE_persona-daemon"))
             .arg(&socket)
             .env("PERSONA_MANAGER_STORE", &manager_store)
@@ -91,42 +92,7 @@ impl DaemonFixture {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("system clock after epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!(
-            "persona-daemon-test-{}-{unique}",
-            std::process::id()
-        ))
-    }
-
-    fn component_skeleton_script(root: &std::path::Path) -> PathBuf {
-        let script = root.join("component-skeleton");
-        let shell = std::env::var("PERSONA_TEST_SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-        let script_text = format!(
-            "{}{}",
-            format!("#!{shell}\n"),
-            r#"set -eu
-state_dir="$(dirname "$PERSONA_STATE_PATH")"
-mkdir -p "$state_dir"
-{
-  printf 'engine=%s\n' "$PERSONA_ENGINE_ID"
-  printf 'component=%s\n' "$PERSONA_COMPONENT"
-  printf 'process=%s\n' "$$"
-  printf 'socket=%s\n' "$PERSONA_SOCKET_PATH"
-  printf 'spawn_envelope=%s\n' "$PERSONA_SPAWN_ENVELOPE"
-  printf 'manager_socket=%s\n' "$PERSONA_MANAGER_SOCKET"
-  printf 'mode=%s\n' "$PERSONA_SOCKET_MODE"
-  printf 'peer_count=%s\n' "$PERSONA_PEER_SOCKET_COUNT"
-} > "$state_dir/$PERSONA_COMPONENT.env"
-trap 'exit 0' TERM
-while true; do sleep 1; done
-"#
-        );
-        std::fs::write(&script, script_text).expect("component skeleton written");
-        let mut permissions = std::fs::metadata(&script)
-            .expect("component skeleton metadata")
-            .permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(&script, permissions).expect("component skeleton executable");
-        script
+        PathBuf::from("/tmp").join(format!("p-daemon-{}-{unique}", std::process::id()))
     }
 
     fn stop_daemon(&mut self) {
@@ -297,12 +263,21 @@ async fn constraint_persona_daemon_launches_prototype_supervised_components_thro
         .expect("default engine events read through manager store actor");
     assert_eq!(
         events.len(),
-        EngineComponent::prototype_supervised_components().len()
+        EngineComponent::prototype_supervised_components().len() * 2
     );
-    assert!(
+    assert_eq!(
         events
             .iter()
-            .all(|event| matches!(event.body(), EngineEventBody::ComponentSpawned(_)))
+            .filter(|event| matches!(event.body(), EngineEventBody::ComponentSpawned(_)))
+            .count(),
+        EngineComponent::prototype_supervised_components().len()
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event.body(), EngineEventBody::ComponentReady(_)))
+            .count(),
+        EngineComponent::prototype_supervised_components().len()
     );
 
     store.stop_gracefully().await.expect("manager store stops");
