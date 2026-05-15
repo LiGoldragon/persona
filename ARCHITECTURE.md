@@ -1149,7 +1149,7 @@ The apex repo owns tests that prove cross-component shape:
 | persona-daemon launch plan reaches the engine supervisor and manager event log | `nix flake check .#persona-daemon-launches-prototype-supervised-components-through-engine-supervisor` |
 | persona-daemon can launch the focused message-router topology | `nix flake check .#persona-daemon-launches-message-router-topology-through-engine-supervisor` |
 | full topology starts from Nix-built prototype launchers | `nix flake check .#persona-daemon-launches-nix-built-prototype-topology` |
-| message-router topology starts from Nix-built prototype launchers | `nix flake check .#persona-daemon-launches-nix-built-message-router-topology` |
+| message-router topology starts from Nix-built prototype launchers and carries a real message payload | `nix flake check .#persona-daemon-launches-nix-built-message-router-topology` |
 | component skeletons answer health/status/readiness | `nix flake check .#persona-component-skeletons-answer-health-status-readiness` |
 | unfinished component behavior is typed | `nix flake check .#persona-component-skeleton-returns-typed-unimplemented` |
 | skeleton decodes every contract variant | `nix flake check .#persona-component-skeleton-decodes-every-contract-variant` |

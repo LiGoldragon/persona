@@ -1347,9 +1347,54 @@
                   test ! -S "$work/run/default/$absent.sock"
                 done
 
+                for socket in message router; do
+                  path="$work/run/default/$socket.sock"
+                  for attempt in $(seq 1 100); do
+                    if [ -S "$path" ]; then
+                      break
+                    fi
+                    sleep 0.1
+                  done
+                  if [ ! -S "$path" ]; then
+                    echo "missing component socket: $path" >&2
+                    cat "$work/persona-daemon.stdout" >&2
+                    cat "$work/persona-daemon.stderr" >&2
+                    exit 1
+                  fi
+                  actual_mode="$(stat -c '%a' "$path")"
+                  if [ "$socket" = "message" ]; then
+                    test "$actual_mode" = "660"
+                  else
+                    test "$actual_mode" = "600"
+                  fi
+                done
+
+                send_output="$work/message-send.nota"
+                send_error="$work/message-send.stderr"
+                inbox_output="$work/message-inbox.nota"
+                inbox_error="$work/message-inbox.stderr"
+
+                PERSONA_MESSAGE_SOCKET="$work/run/default/message.sock" \
+                  ${inputs.persona-message.packages.${system}.default}/bin/message \
+                    '(Send responder "supervised message-router smoke")' \
+                    > "$send_output" \
+                    2> "$send_error"
+                grep -Fq "(SubmissionAccepted " "$send_output"
+
+                PERSONA_MESSAGE_SOCKET="$work/run/default/message.sock" \
+                  ${inputs.persona-message.packages.${system}.default}/bin/message \
+                    '(Inbox responder)' \
+                    > "$inbox_output" \
+                    2> "$inbox_error"
+                grep -Fq "supervised message-router smoke" "$inbox_output"
+
                 mkdir -p "$out"
                 cp "$work/persona-daemon.stdout" "$out/persona-daemon.stdout"
                 cp "$work/persona-daemon.stderr" "$out/persona-daemon.stderr"
+                cp "$send_output" "$out/message-send.nota"
+                cp "$send_error" "$out/message-send.stderr"
+                cp "$inbox_output" "$out/message-inbox.nota"
+                cp "$inbox_error" "$out/message-inbox.stderr"
                 cp "$work/state/default"/*.env "$out/"
                 touch "$out/passed"
               '';
