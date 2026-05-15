@@ -621,6 +621,7 @@
             workdir="$(mktemp -d)"
             tap_socket="$workdir/tap.sock"
             message_socket="$workdir/message.sock"
+            spawn_envelope="$workdir/message.envelope"
             captured_bytes="$workdir/captured.bytes"
             tap_ready="$workdir/tap.ready"
             daemon_stderr="$workdir/daemon.stderr"
@@ -644,9 +645,16 @@
             done
             test -f "$tap_ready"
 
-            # 2. Start persona-message-daemon. It binds message.sock
-            #    and forwards to tap.sock as if it were the router.
-            ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon \
+            # 2. Write the manager-style typed spawn envelope and start
+            #    persona-message-daemon. It reads owner identity from the
+            #    envelope, binds message.sock, and forwards to tap.sock as
+            #    if it were the router.
+            builder_uid="$(id -u)"
+            printf '(SpawnEnvelope default Message Message (UnixUser %s) "%s" "%s" 432 "%s" 384 [(PeerSocket Router "%s")] "%s" 1)\n' \
+              "$builder_uid" "$workdir" "$message_socket" "$workdir/message.supervision.sock" "$tap_socket" "$workdir/persona.sock" \
+              > "$spawn_envelope"
+            PERSONA_SPAWN_ENVELOPE="$spawn_envelope" \
+              ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon \
               "$message_socket" "$tap_socket" 2> "$daemon_stderr" &
             daemon_pid=$!
 
@@ -658,8 +666,8 @@
             test -S "$message_socket"
 
             # 3. Send a real message through the CLI. The daemon
-            #    accepts, reads SO_PEERCRED (same uid as builder ⇒
-            #    External(Owner)), wraps into StampedMessageSubmission,
+            #    accepts, reads SO_PEERCRED, compares it to the envelope
+            #    owner identity, wraps into StampedMessageSubmission,
             #    forwards to tap_socket. The tap captures and replies.
             set +e
             PERSONA_MESSAGE_SOCKET="$message_socket" \
