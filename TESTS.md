@@ -143,20 +143,39 @@ socket; the launchers are adaptation glue only.
 flowchart LR
     dev["dev-stack"]
     router["persona-router-daemon"]
+    message_daemon["persona-message-daemon"]
     terminal["persona-terminal-daemon"]
     message["message CLI"]
     terminal_signal["persona-terminal-signal"]
 
     dev --> router
+    dev --> message_daemon
     dev --> terminal
-    message --> router
+    message --> message_daemon
+    message_daemon --> router
     terminal_signal --> terminal
 ```
 
-`dev-stack-smoke` starts the same daemons, proves router ingress through the
-`message` CLI, proves terminal Signal connect/input/capture, and exits with
-artifact paths. It is intentionally explicit that it does not yet prove
-router-to-harness-to-terminal delivery. It is a stateful app, not a pure
+The dev-stack currently runs three daemons end-to-end: `persona-router-daemon`
+(binds `router.sock`), `persona-message-daemon` (binds `message.sock`,
+forwards stamped submissions to `router.sock`), and `persona-terminal-daemon`
+(binds `responder.terminal.sock`, owns a PTY). The `message` CLI talks to
+`message.sock` via `PERSONA_MESSAGE_SOCKET`; the daemon adds an SO_PEERCRED
+origin stamp before forwarding to the router.
+
+`dev-stack-smoke` starts those three daemons, then proves:
+
+| Witness | What it proves |
+|---|---|
+| `message Send` returns `(SubmissionAccepted N)` | The CLI's `MessageSubmission` reaches `persona-message-daemon`, gets stamped, forwards to `persona-router`, and the router accepts at a slot. |
+| `message Inbox responder` returns the body | The router holds the submitted message at a slot, an `InboxQuery` round-trips, and the listing carries the origin-stamped sender plus the original body. |
+| `persona-terminal-signal connect` returns `TerminalReady` | The terminal daemon owns a live PTY at the named terminal and reports a generation. |
+| `persona-terminal-signal prompt` returns `TerminalInputAccepted` | The PTY accepts injected input through the typed Signal path. |
+| `persona-terminal-signal capture` returns `TerminalCaptured` | The PTY's transcript is readable through Signal. |
+
+The smoke deliberately does not prove router-to-harness-to-terminal end-to-end
+message delivery yet (the harness side is still wave-4 push-primitive work).
+It is a stateful app, not a pure
 `checks` derivation, because the terminal daemon owns a live PTY.
 
 `persona-engine-sandbox` is the scaffold for the full federation witness from

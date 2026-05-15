@@ -18,11 +18,14 @@ root="${PERSONA_STACK_ROOT:-$(mktemp -d -t persona-dev-stack.XXXXXX)}"
 mkdir -p "$root"
 
 router_socket="$root/router.sock"
+message_socket="$root/message.sock"
 terminal_socket="$root/responder.terminal.sock"
 terminal_store="$root/terminal.redb"
 message_store="$root/message-store"
 router_stdout="$root/router.stdout"
 router_stderr="$root/router.stderr"
+message_daemon_stdout="$root/message-daemon.stdout"
+message_daemon_stderr="$root/message-daemon.stderr"
 terminal_stdout="$root/terminal.stdout"
 terminal_stderr="$root/terminal.stderr"
 environment_file="$root/env.sh"
@@ -30,6 +33,7 @@ process_manifest="$root/process-manifest.nota"
 socket_manifest="$root/socket-manifest.nota"
 
 message_bin="$PERSONA_MESSAGE_PACKAGE/bin/message"
+message_daemon_bin="$PERSONA_MESSAGE_PACKAGE/bin/persona-message-daemon"
 router_bin="$PERSONA_ROUTER_PACKAGE/bin/persona-router-daemon"
 terminal_daemon="$PERSONA_TERMINAL_PACKAGE/bin/persona-terminal-daemon"
 terminal_signal="$PERSONA_TERMINAL_PACKAGE/bin/persona-terminal-signal"
@@ -38,6 +42,10 @@ cleanup() {
   if [ -n "${terminal_pid:-}" ]; then
     kill "$terminal_pid" 2>/dev/null || true
     wait "$terminal_pid" 2>/dev/null || true
+  fi
+  if [ -n "${message_daemon_pid:-}" ]; then
+    kill "$message_daemon_pid" 2>/dev/null || true
+    wait "$message_daemon_pid" 2>/dev/null || true
   fi
   if [ -n "${router_pid:-}" ]; then
     kill "$router_pid" 2>/dev/null || true
@@ -76,6 +84,12 @@ start_router() {
   read_ready_line "persona-router" "${PERSONA_ROUTER_PROCESS[0]}" "$router_stdout" "persona-router-daemon socket=$router_socket"
 }
 
+start_message_daemon() {
+  coproc PERSONA_MESSAGE_DAEMON_PROCESS { "$message_daemon_bin" "$message_socket" "$router_socket" 2>&1; }
+  message_daemon_pid="$PERSONA_MESSAGE_DAEMON_PROCESS_PID"
+  read_ready_line "persona-message-daemon" "${PERSONA_MESSAGE_DAEMON_PROCESS[0]}" "$message_daemon_stdout" "persona-message-daemon socket=$message_socket"
+}
+
 start_terminal() {
   coproc PERSONA_TERMINAL_PROCESS {
     "$terminal_daemon" \
@@ -91,6 +105,7 @@ start_terminal() {
 
 write_environment_file() {
   cat >"$environment_file" <<EOF
+export PERSONA_MESSAGE_SOCKET='$message_socket'
 export PERSONA_MESSAGE_ROUTER_SOCKET='$router_socket'
 export PERSONA_MESSAGE_STORE='$message_store'
 export PERSONA_TERMINAL_SOCKET='$terminal_socket'
@@ -104,8 +119,10 @@ write_stack_manifests() {
     printf '%s\n' '(PersonaDevStackProcesses'
     printf '  (Root "%s")\n' "$root"
     printf '  (RouterPid %s)\n' "$router_pid"
+    printf '  (MessageDaemonPid %s)\n' "$message_daemon_pid"
     printf '  (TerminalPid %s)\n' "$terminal_pid"
     printf '  (RouterReady "%s")\n' "$router_stdout"
+    printf '  (MessageDaemonReady "%s")\n' "$message_daemon_stdout"
     printf '  (TerminalReady "%s")\n' "$terminal_stdout"
     printf ')\n'
   } >"$process_manifest"
@@ -114,6 +131,7 @@ write_stack_manifests() {
     printf '%s\n' '(PersonaDevStackSockets'
     printf '  (Root "%s")\n' "$root"
     printf '  (RouterSocket "%s")\n' "$router_socket"
+    printf '  (MessageSocket "%s")\n' "$message_socket"
     printf '  (TerminalSocket "%s")\n' "$terminal_socket"
     printf '  (TerminalStore "%s")\n' "$terminal_store"
     printf '  (MessageStore "%s")\n' "$message_store"
@@ -122,7 +140,6 @@ write_stack_manifests() {
 }
 
 run_smoke() {
-  local register_output="$root/message-register.nota"
   local send_output="$root/message-send.nota"
   local send_error="$root/message-send.stderr"
   local inbox_output="$root/message-inbox.nota"
@@ -131,18 +148,13 @@ run_smoke() {
   local terminal_input="$root/terminal-input.tsv"
   local terminal_capture="$root/terminal-capture.tsv"
 
-  PERSONA_MESSAGE_STORE="$message_store" \
-    "$message_bin" '(Register operator None)' \
-    >"$register_output"
-  grep -Fq "(Registered " "$register_output"
-
-  PERSONA_MESSAGE_ROUTER_SOCKET="$router_socket" \
+  PERSONA_MESSAGE_SOCKET="$message_socket" \
     PERSONA_MESSAGE_STORE="$message_store" \
     "$message_bin" '(Send responder "hello from persona meta")' \
     >"$send_output" 2>"$send_error"
   grep -Fq "(SubmissionAccepted " "$send_output"
 
-  PERSONA_MESSAGE_ROUTER_SOCKET="$router_socket" \
+  PERSONA_MESSAGE_SOCKET="$message_socket" \
     PERSONA_MESSAGE_STORE="$message_store" \
     "$message_bin" '(Inbox responder)' \
     >"$inbox_output" 2>"$inbox_error"
@@ -164,6 +176,7 @@ run_smoke() {
 }
 
 start_router
+start_message_daemon
 start_terminal
 write_environment_file
 write_stack_manifests
@@ -178,11 +191,12 @@ case "$mode" in
     printf 'process manifest=%s\n' "$process_manifest"
     printf 'socket manifest=%s\n' "$socket_manifest"
     printf 'router socket=%s\n' "$router_socket"
+    printf 'message socket=%s\n' "$message_socket"
     printf 'terminal socket=%s\n' "$terminal_socket"
     printf 'try: source %s\n' "$environment_file"
-    printf 'try: message '\''(Register operator None)'\''\n'
     printf 'try: message '\''(Send responder "hello")'\''\n'
+    printf 'try: message '\''(Inbox responder)'\''\n'
     printf 'try: persona-terminal-signal --socket "$PERSONA_TERMINAL_SOCKET" --terminal responder capture\n'
-    wait -n "$router_pid" "$terminal_pid"
+    wait -n "$router_pid" "$message_daemon_pid" "$terminal_pid"
     ;;
 esac
