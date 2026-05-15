@@ -1127,6 +1127,7 @@ The apex repo owns tests that prove cross-component shape:
 | persona-daemon preserves unrelated files | daemon startup refuses a non-socket endpoint path instead of deleting it. |
 | manager catalog writes go through the writer actor | `nix flake check .#persona-manager-store-writes-engine-status-through-writer-actor` |
 | engine manager persists accepted mutations | `nix flake check .#persona-engine-manager-persists-component-mutation-through-manager-store` |
+| engine manager restores persisted snapshot before serving status | `nix flake check .#persona-engine-manager-restores-persisted-snapshot-before-status` |
 | persona CLI mutation reaches manager.redb via daemon path | `nix flake check .#persona-daemon-persists-cli-mutation-to-manager-store` |
 | sandbox runner is a Nix-owned app | `nix flake check .#persona-engine-sandbox-script-builds` |
 | sandbox runner supports each first harness name | `nix flake check .#persona-engine-sandbox-supports-all-harnesses` |

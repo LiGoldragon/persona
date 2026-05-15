@@ -1214,6 +1214,15 @@
                   cargoTestExtraArgs = "--test manager_store constraint_engine_manager_persists_component_mutation_through_manager_store -- --exact";
                 }
               );
+          persona-engine-manager-restores-persisted-snapshot-before-status =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager_store constraint_engine_manager_restores_persisted_snapshot_before_answering_status -- --exact";
+                }
+              );
           persona-engine-event-log-records-typed-manager-events = context.craneLib.cargoTest (
             context.commonArgs
             // {

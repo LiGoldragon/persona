@@ -9,7 +9,7 @@ use signal_persona::{
 use signal_persona_auth::EngineId;
 
 use crate::error::{Error, Result};
-use crate::manager_store::{ManagerStore, PersistEngineRecord};
+use crate::manager_store::{ManagerStore, PersistEngineRecord, ReadEngineRecord};
 use crate::state::EngineState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,17 +58,27 @@ impl EngineManager {
         engine: EngineId,
         store: ActorRef<ManagerStore>,
     ) -> Result<ActorRef<Self>> {
-        let reference = Self::spawn(Self::with_store(
-            engine,
-            EngineState::default_catalog(),
-            store,
-        ));
+        let state = Self::initial_state_from_store(&engine, &store).await?;
+        let reference = Self::spawn(Self::with_store(engine, state, store));
         reference.wait_for_startup().await;
         reference
             .ask(SynchronizeManagerState)
             .await
             .map_err(|error| Error::actor("synchronize manager state", error))?;
         Ok(reference)
+    }
+
+    async fn initial_state_from_store(
+        engine: &EngineId,
+        store: &ActorRef<ManagerStore>,
+    ) -> Result<EngineState> {
+        let record = store
+            .ask(ReadEngineRecord::new(engine.clone()))
+            .await
+            .map_err(|error| Error::actor("read persisted manager engine record", error))?;
+        Ok(record
+            .map(|record| EngineState::from_status(record.status().clone()))
+            .unwrap_or_else(EngineState::default_catalog))
     }
 
     pub async fn stop(reference: ActorRef<Self>) -> Result<()> {

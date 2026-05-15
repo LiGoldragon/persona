@@ -182,6 +182,61 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_status() {
+    let fixture = StoreFixture::new("persona-engine-manager-restore");
+    let engine = EngineId::new("engine-manager-restore");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    let manager = EngineManager::start_with_store(engine.clone(), store.clone())
+        .await
+        .expect("engine manager starts with store");
+
+    let reply = manager
+        .ask(persona::manager::HandleEngineRequest::new(
+            EngineRequest::ComponentShutdown(ComponentShutdown {
+                component: ComponentName::new("persona-terminal"),
+            }),
+        ))
+        .await
+        .expect("shutdown handled through manager actor");
+    assert!(matches!(reply, EngineReply::SupervisorActionAccepted(_)));
+
+    EngineManager::stop(manager)
+        .await
+        .expect("first engine manager stops");
+
+    let restored = EngineManager::start_with_store(engine.clone(), store.clone())
+        .await
+        .expect("engine manager restores from store");
+    let status = restored
+        .ask(persona::manager::HandleEngineRequest::new(
+            EngineRequest::ComponentStatusQuery(ComponentStatusQuery {
+                component: ComponentName::new("persona-terminal"),
+            }),
+        ))
+        .await
+        .expect("status handled through restored manager actor");
+
+    let EngineReply::ComponentStatus(status) = status else {
+        panic!("expected restored component status");
+    };
+    assert_eq!(status.desired_state, ComponentDesiredState::Stopped);
+    assert_eq!(status.health, ComponentHealth::Stopped);
+
+    let record = store
+        .ask(ReadEngineRecord::new(engine.clone()))
+        .await
+        .expect("stored record read through store actor")
+        .expect("stored engine record exists");
+    assert_eq!(record.status().generation.into_u64(), 1);
+
+    EngineManager::stop(restored)
+        .await
+        .expect("restored engine manager stops");
+    store.stop_gracefully().await.expect("manager store stops");
+    store.wait_for_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_event_log_records_typed_manager_events() {
     let fixture = StoreFixture::new("persona-manager-event-log");
     let engine = EngineId::new("engine-event-log");

@@ -31,6 +31,10 @@ impl EngineState {
         }
     }
 
+    pub fn from_status(status: EngineStatus) -> Self {
+        Self { status }
+    }
+
     pub fn snapshot(&self) -> &EngineStatus {
         &self.status
     }
