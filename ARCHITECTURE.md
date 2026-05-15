@@ -984,6 +984,10 @@ Migration rules:
 - Spawn envelopes carry the component's own state/socket paths and every peer
   socket path plus the manager's owner identity; components do not derive peers
   by scanning directories and do not infer engine ownership from their own uid.
+- Stateful sandbox stacks that bypass the manager still write typed
+  spawn-envelope artifacts for component daemons under test. The sandbox must
+  exercise the same owner-identity path as the managed engine, not the
+  daemon-uid fallback.
 - Local engine trust is created by manager-owned sockets, ownership, modes, and
   spawn envelopes. Components do not accept agent-supplied in-band auth proofs
   as authority.
@@ -1126,6 +1130,7 @@ The apex repo owns tests that prove cross-component shape:
 | auth isolation witness protects host credential/session files | `nix flake check .#persona-engine-sandbox-auth-isolation-witness` |
 | host attach helper is a Nix-owned app | `nix flake check .#persona-engine-sandbox-attach-script-builds` |
 | sandbox dev-stack smoke is a Nix-owned stateful app | `nix flake check .#persona-engine-sandbox-dev-stack-smoke-script-builds`; run with `nix run .#persona-engine-sandbox-dev-stack-smoke` |
+| sandbox dev-stack passes a manager-style spawn envelope to persona-message | run `nix run .#persona-engine-sandbox-dev-stack-smoke` and inspect `dev-stack-processes.nota` / `dev-stack-sockets.nota` for `MessageSpawnEnvelope` |
 | sandbox terminal-cell smoke is a Nix-owned stateful app | `nix flake check .#persona-engine-sandbox-terminal-cell-script-builds`; run fixture with `nix run .#persona-engine-sandbox-terminal-cell-fixture-smoke` |
 | sandbox terminal-cell Pi smoke uses local model config without copied auth | run with `nix run .#persona-engine-sandbox-terminal-cell-pi-smoke` and inspect `pi-model-snapshot.nota` plus `terminal-cell-transcript.txt` |
 | host attach helper plans Ghostty without Wayland-in-sandbox | `nix flake check .#persona-engine-sandbox-attach-plans-host-ghostty` |

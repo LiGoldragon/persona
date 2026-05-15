@@ -204,15 +204,18 @@ The dev-stack currently runs three daemons end-to-end: `persona-router-daemon`
 (binds `router.sock`), `persona-message-daemon` (binds `message.sock`,
 forwards stamped submissions to `router.sock`), and `persona-terminal-daemon`
 (binds `responder.terminal.sock`, owns a PTY). The `message` CLI talks to
-`message.sock` via `PERSONA_MESSAGE_SOCKET`; the daemon adds an SO_PEERCRED
-origin stamp before forwarding to the router.
+`message.sock` via `PERSONA_MESSAGE_SOCKET`; the dev stack writes a
+manager-style `SpawnEnvelope` for `persona-message`, passes it by
+`PERSONA_SPAWN_ENVELOPE`, and the daemon combines that owner identity with
+SO_PEERCRED before forwarding to the router.
 
 `dev-stack-smoke` starts those three daemons, then proves:
 
 | Witness | What it proves |
 |---|---|
+| `message.envelope` is recorded in the process/socket manifests | The stateful stack starts `persona-message-daemon` through the same spawn-envelope owner path used by the managed engine, not the old daemon-uid fallback. |
 | `message Send` returns `(SubmissionAccepted N)` | The CLI's `MessageSubmission` reaches `persona-message-daemon`, gets stamped, forwards to `persona-router`, and the router accepts at a slot. |
-| `message Inbox responder` returns the body | The router holds the submitted message at a slot, an `InboxQuery` round-trips, and the listing carries the origin-stamped sender plus the original body. |
+| `message Inbox responder` omits the delivered body | The router accepted the message and delivered it to the terminal path; the recipient inbox no longer exposes the already-delivered body. |
 | `persona-terminal-signal connect` returns `TerminalReady` | The terminal daemon owns a live PTY at the named terminal and reports a generation. |
 | `persona-terminal-signal prompt` returns `TerminalInputAccepted` | The PTY accepts injected input through the typed Signal path. |
 | `persona-terminal-signal capture` returns `TerminalCaptured` | The PTY's transcript is readable through Signal. |
