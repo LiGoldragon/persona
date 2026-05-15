@@ -513,21 +513,26 @@ The first meta-repo runner starts only the executable halves that exist today:
 graph LR
     dev["persona-dev-stack"]
     router["persona-router daemon"]
+    harness["persona-harness daemon"]
     terminal["persona-terminal daemon"]
     message["message CLI"]
     terminal_signal["persona-terminal-signal"]
     pty["terminal-cell child PTY"]
 
     dev --> router
+    dev --> harness
     dev --> terminal
     message -->|"Signal message frame"| router
+    router -->|"delivery frame"| harness
+    harness -->|"terminal prompt frame"| terminal
     terminal_signal -->|"Signal terminal frame"| terminal
     terminal --> pty
 ```
 
-That runner proves router ingress and terminal transport independently. It is
-not the final delivery witness because the external router-to-harness
-registration/control surface has not landed yet.
+That runner proves the current fixture router-to-harness-to-terminal delivery
+path and terminal transport. It is still not the final federation witness
+because mind adjudication, live harness login, and terminal-cell live-agent
+delivery are separate lanes.
 
 The full-engine sandbox witness starts at the same apex layer. The Nix app
 `persona-engine-sandbox` creates an isolated `state/`, `run/`, `home/`,
@@ -549,12 +554,13 @@ Prometheus-backed model path.
 The current executable inside-unit witness is still deliberately smaller than
 the final federation: it runs the existing Nix-built `persona-dev-stack-smoke`
 under `state/dev-stack`, starts real `persona-router-daemon` and
-`persona-terminal-daemon` processes, drives them through the `message` and
-`persona-terminal-signal` CLIs, and writes `dev-stack-run.nota`,
-`dev-stack-processes.nota`, and `dev-stack-sockets.nota` under
-`artifacts/`. This proves the sandbox envelope runs real component daemons
-inside the unit; it does not claim router-to-mind adjudication,
-persona-harness delivery, or a terminal-cell live-agent path yet.
+`persona-harness-daemon` and `persona-terminal-daemon` processes, drives them
+through the `message` and `persona-terminal-signal` CLIs, and writes
+`dev-stack-run.nota`, `dev-stack-processes.nota`, and
+`dev-stack-sockets.nota` under `artifacts/`. This proves the sandbox envelope
+runs real component daemons inside the unit and carries a message through the
+fixture router-to-harness-to-terminal path; it does not claim router-to-mind
+adjudication or a terminal-cell live-agent path yet.
 
 The terminal-cell sandbox lane is a separate witness. It runs
 `terminal-cell-daemon` directly at `$sandbox_dir/run/cell.sock`, launches one
@@ -1161,8 +1167,10 @@ The apex repo owns tests that prove cross-component shape:
 | sandbox credential roots remain visible under home hiding | `nix flake check .#persona-engine-sandbox-binds-dedicated-credential-root` |
 
 The launcher checks above now cover both the primitive direct-process backend
-and the `persona-daemon` launch-plan path. They do not yet prove component
-readiness, socket ACLs, restart policy, or real router/mind/harness behavior.
+and the `persona-daemon` launch-plan path. They prove readiness and socket
+shape for the prototype stack plus fixture router/harness/terminal delivery;
+they do not yet prove restart policy, mind adjudication, or live provider
+harness behavior.
 
 ## 10 · Eventual cross-domain federation
 

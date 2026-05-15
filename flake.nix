@@ -208,6 +208,7 @@
                 export PERSONA_MESSAGE_PACKAGE=${inputs.persona-message.packages.${system}.default}
                 export PERSONA_ROUTER_PACKAGE=${inputs.persona-router.packages.${system}.default}
                 export PERSONA_TERMINAL_PACKAGE=${inputs.persona-terminal.packages.${system}.default}
+                export PERSONA_HARNESS_PACKAGE=${inputs.persona-harness.packages.${system}.default}
                 export PERSONA_BASH=${pkgs.bash}/bin/bash
                 exec ${pkgs.bash}/bin/bash ${./scripts/persona-dev-stack} ${mode} "$@"
               '';
@@ -222,6 +223,7 @@
               export PERSONA_BASH=${pkgs.bash}/bin/bash
               export PERSONA_DEV_STACK_SMOKE=${personaDevStack "smoke"}/bin/persona-dev-stack-smoke
               export PERSONA_TERMINAL_CELL_SMOKE=${personaEngineSandboxTerminalCellSmoke}/bin/persona-engine-sandbox-terminal-cell-smoke
+              export PERSONA_HARNESS_PACKAGE=${inputs.persona-harness.packages.${system}.default}
               exec ${pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox} "$@"
             '';
           };

@@ -188,41 +188,47 @@ flowchart LR
     dev["dev-stack"]
     router["persona-router-daemon"]
     message_daemon["persona-message-daemon"]
+    harness["persona-harness-daemon"]
     terminal["persona-terminal-daemon"]
     message["message CLI"]
     terminal_signal["persona-terminal-signal"]
 
     dev --> router
     dev --> message_daemon
+    dev --> harness
     dev --> terminal
     message --> message_daemon
     message_daemon --> router
+    router --> harness
+    harness --> terminal
     terminal_signal --> terminal
 ```
 
-The dev-stack currently runs three daemons end-to-end: `persona-router-daemon`
+The dev-stack currently runs four daemons end-to-end: `persona-router-daemon`
 (binds `router.sock`), `persona-message-daemon` (binds `message.sock`,
-forwards stamped submissions to `router.sock`), and `persona-terminal-daemon`
-(binds `responder.terminal.sock`, owns a PTY). The `message` CLI talks to
-`message.sock` via `PERSONA_MESSAGE_SOCKET`; the dev stack writes a
+forwards stamped submissions to `router.sock`), `persona-harness-daemon`
+(binds `responder.harness.sock`, forwards delivery to terminal), and
+`persona-terminal-daemon` (binds `responder.terminal.sock`, owns a PTY). The
+`message` CLI talks to `message.sock` via `PERSONA_MESSAGE_SOCKET`; the dev
+stack writes a
 manager-style `SpawnEnvelope` for `persona-message`, passes it by
 `PERSONA_SPAWN_ENVELOPE`, and the daemon combines that owner identity with
 SO_PEERCRED before forwarding to the router.
 
-`dev-stack-smoke` starts those three daemons, then proves:
+`dev-stack-smoke` starts those four daemons, then proves:
 
 | Witness | What it proves |
 |---|---|
 | `message.envelope` is recorded in the process/socket manifests | The stateful stack starts `persona-message-daemon` through the same spawn-envelope owner path used by the managed engine, not the old daemon-uid fallback. |
 | `message Send` returns `(SubmissionAccepted N)` | The CLI's `MessageSubmission` reaches `persona-message-daemon`, gets stamped, forwards to `persona-router`, and the router accepts at a slot. |
-| `message Inbox responder` omits the delivered body | The router accepted the message and delivered it to the terminal path; the recipient inbox no longer exposes the already-delivered body. |
+| `message Inbox responder` omits the delivered body | The router accepted the message and delivered it through `persona-harness` to the terminal path; the recipient inbox no longer exposes the already-delivered body. |
+| `persona-harness-daemon` reports readiness | The harness delivery boundary is live in the smoke, not bypassed by direct terminal registration. |
 | `persona-terminal-signal connect` returns `TerminalReady` | The terminal daemon owns a live PTY at the named terminal and reports a generation. |
 | `persona-terminal-signal prompt` returns `TerminalInputAccepted` | The PTY accepts injected input through the typed Signal path. |
 | `persona-terminal-signal capture` returns `TerminalCaptured` | The PTY's transcript is readable through Signal. |
 
-The smoke deliberately does not prove router-to-harness-to-terminal end-to-end
-message delivery yet (the harness side is still wave-4 push-primitive work).
-It is a stateful app, not a pure
+The smoke proves the current fixture router-to-harness-to-terminal delivery
+path. It is a stateful app, not a pure
 `checks` derivation, because the terminal daemon owns a live PTY.
 
 `persona-engine-sandbox` is the scaffold for the full federation witness from
@@ -294,10 +300,10 @@ The next load-bearing integration work is split by lane:
 
 | Lane | Current state | Next target |
 |---|---|---|
-| Router persistence | Planned | Router-shaped binary commits `signal-persona-message::MessageSubmission` through router-owned Sema/redb and emits `SubmissionAccepted`. |
-| Sandbox dev-stack | Landed | Keep proving real persona daemons run under the systemd sandbox. |
+| Router ingress | Landed for supervised `persona-message` + `persona-router` | Move accepted messages from in-memory pending state into router-owned Sema/redb. |
+| Sandbox dev-stack | Landed through router -> harness -> terminal fixture delivery | Add mind adjudication and durable delivery traces. |
 | Sandbox terminal-cell | Landed for fixture and Pi | Add dedicated Codex/Claude auth smoke after sandbox credentials are provisioned. |
-| Full federation | Not landed | Route message through router/mind/harness/terminal with durable traces. |
+| Full federation | Partly landed without mind | Route message through router/mind/harness/terminal with durable traces. |
 
 The next router persistence witness targets the corrected prototype stack:
 
@@ -347,17 +353,17 @@ can satisfy the test.
 
 ---
 
-## What the current wire test does NOT do
+## Remaining gaps
 
-- It does NOT exercise the actual `persona-router` daemon.
 - It does NOT yet consume `signal-persona-system` in router code; the
   meta repo currently verifies that contract through its own imported
   flake checks.
 - It does NOT write a redb file through a router-owned Sema layer.
-- It does NOT exercise delivery guards, harness adapters, or terminal
-  adapters.
-- `persona-dev-stack-smoke` does NOT register router recipients with terminal
-  endpoints because that control surface is not exposed yet.
+- It does NOT exercise terminal prompt/focus gates; the current terminal lane
+  is a fixture transport witness.
+- `persona-dev-stack-smoke` registers the fixture recipient through
+  `persona-harness`, but it does not exercise live provider login or real
+  harness prompt behavior.
 - It does NOT exercise `persona-mind`; central mind state has its
   own component tests.
 
