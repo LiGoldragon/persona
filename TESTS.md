@@ -97,6 +97,11 @@ flowchart LR
         t4a --> t4b --> t4e
         t4c --> t4d --> t4e
     end
+    subgraph T5["T5 single-daemon witnesses (real persona-router-daemon)"]
+        t5a["accepts-stamped-submission"]
+        t5b["rejects-unstamped-submission"]
+        t5c["serves-inbox-after-submit"]
+    end
 ```
 
 What each tier proves:
@@ -118,6 +123,9 @@ What each tier proves:
 | T4 · `wire-chain-reply-bytes` → `wire-chain-reply-nota` | Same for the reply side. The two artifacts live independently and are joined by the summary check. |
 | T4 · `wire-chain-summary` | Lands `request.bytes` + `request.nota` + `reply.bytes` + `reply.nota` together under one output and asserts the body string travels byte-stable across all 4 intermediate artifacts. Failures point at the specific intermediate that diverged. |
 | T4 · `persona-message-daemon-stamps-origin-via-tap` | The midway witness: spawns the real `persona-message-daemon`, hands it `wire-tap-router` as its forwarding target, sends a `Send` through the `message` CLI, the tap captures the actual bytes the daemon emitted, then we decode those bytes through `wire-decode-message --expect-variant stamped --expect-origin external:owner`. Proves the daemon's SO_PEERCRED origin stamping produces the right wire shape under a Nix builder uid. Captured bytes, decoded NOTA, daemon stderr, and CLI output all land in `/nix/store/`. |
+| T5 · `persona-router-daemon-accepts-stamped-submission` | Spawns the real `persona-router-daemon daemon --socket router.sock`, drives a `StampedMessageSubmission` (origin `external:owner`) through `wire-router-client`, decodes the reply through `wire-decode-message-reply`, asserts `SubmissionAccepted` at slot 1. Captured request bytes, reply bytes, reply NOTA, and router stderr all land in `/nix/store/`. Final NOTA witness: `(SubmissionAcceptance 1)`. |
+| T5 · `persona-router-daemon-rejects-unstamped-submission` | The signal-catching negative pair: same router setup, sends a raw `MessageSubmission` (NOT stamped). The router's contract says only `StampedMessageSubmission` is acceptable; raw submissions must reject as `MessageRequestUnimplemented`. Proves the daemon doesn't silently accept unstamped traffic. NOTA witness: `(MessageRequestUnimplemented MessageSubmission (NotInPrototypeScope))`. |
+| T5 · `persona-router-daemon-serves-inbox-after-submit` | Two-call chain against the same router: submit a stamped message, then `InboxQuery` for the recipient. The recipient is unregistered (no bootstrap), so delivery silently fails and the message stays pending. Asserts the inbox listing has one entry with the original body and the sender stamped through SO_PEERCRED. Both request/reply byte-pairs and both decoded NOTA records land in `/nix/store/`. Final NOTA witness: `(InboxListing [(InboxEntry 1 owner router-inbox-chain-body)])`. |
 | `persona-dev-stack-script-builds` | The Nix-created dev-stack runners are executable. It does not start PTY daemons inside a pure Nix builder. |
 | `constraint_persona_cli_talks_to_persona_daemon_over_socket` | Spawns `persona-daemon`, sends two separate `persona` CLI requests through `PERSONA_SOCKET`, and proves the daemon-owned manager state survives between invocations. |
 | `constraint_persona_daemon_does_not_delete_non_socket_endpoint_path` | Starts `persona-daemon` on an occupied regular-file path and proves daemon startup rejects it without deleting the file. |

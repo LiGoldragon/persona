@@ -736,6 +736,197 @@
             printf '  reply.bytes:    %s bytes\n' "$reply_size" >> $out/chain-summary.txt
             printf '  reply.nota:     %s\n' "$(cat $out/reply.nota)" >> $out/chain-summary.txt
           '';
+
+          # T5 — single-daemon witnesses against the real
+          # persona-router-daemon. Each check spawns a fresh router
+          # in the Nix builder, drives it through wire-router-client
+          # bytes, decodes the reply through the shim, asserts the
+          # typed shape. No PTY, no harness, no message-daemon
+          # required — the router is the single component under test.
+          persona-router-daemon-accepts-stamped-submission = context.pkgs.runCommand "persona-router-daemon-accepts-stamped-submission" {
+            nativeBuildInputs = [ context.pkgs.coreutils ];
+          } ''
+            set -euo pipefail
+            workdir="$(mktemp -d)"
+            router_socket="$workdir/router.sock"
+            router_stderr="$workdir/router.stderr"
+
+            ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon \
+              daemon --socket "$router_socket" 2> "$router_stderr" &
+            router_pid=$!
+
+            for _ in $(seq 1 100); do
+              [ -S "$router_socket" ] && break
+              sleep 0.05
+            done
+            test -S "$router_socket"
+
+            request_bytes="$workdir/request.bytes"
+            reply_bytes="$workdir/reply.bytes"
+
+            ${personaShims}/bin/wire-emit-message \
+              --variant stamped \
+              --recipient resp \
+              --body 'router-accepts-stamped' \
+              --origin external:owner \
+              --stamped-at 1 \
+              > "$request_bytes"
+
+            ${personaShims}/bin/wire-router-client \
+              --socket "$router_socket" \
+              < "$request_bytes" \
+              > "$reply_bytes"
+
+            kill "$router_pid" 2>/dev/null || true
+            wait "$router_pid" 2>/dev/null || true
+
+            ${personaShims}/bin/wire-decode-message-reply \
+              --expect submission-accepted \
+              --expect-slot 1 \
+              --capture-nota "$workdir/reply.nota" \
+              < "$reply_bytes"
+
+            mkdir -p $out
+            cp "$request_bytes" $out/request.bytes
+            cp "$reply_bytes" $out/reply.bytes
+            cp "$workdir/reply.nota" $out/reply.nota
+            cp "$router_stderr" $out/router.stderr
+            printf 'router accepted stamped submission at slot 1\n' > $out/witness.txt
+            printf '  request bytes:  %s\n' "$(wc -c < $out/request.bytes)" >> $out/witness.txt
+            printf '  reply bytes:    %s\n' "$(wc -c < $out/reply.bytes)" >> $out/witness.txt
+            printf '  reply nota:     %s\n' "$(cat $out/reply.nota)" >> $out/witness.txt
+          '';
+          persona-router-daemon-rejects-unstamped-submission = context.pkgs.runCommand "persona-router-daemon-rejects-unstamped-submission" {
+            nativeBuildInputs = [ context.pkgs.coreutils ];
+          } ''
+            set -euo pipefail
+            workdir="$(mktemp -d)"
+            router_socket="$workdir/router.sock"
+            router_stderr="$workdir/router.stderr"
+
+            ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon \
+              daemon --socket "$router_socket" 2> "$router_stderr" &
+            router_pid=$!
+
+            for _ in $(seq 1 100); do
+              [ -S "$router_socket" ] && break
+              sleep 0.05
+            done
+            test -S "$router_socket"
+
+            reply_bytes="$workdir/reply.bytes"
+
+            # Send a raw MessageSubmission (NOT stamped) — the router
+            # contract says only StampedMessageSubmission may be
+            # accepted; raw submissions get MessageRequestUnimplemented.
+            # This is the signal-catching negative test: confirms the
+            # daemon does not silently accept unstamped traffic.
+            ${personaShims}/bin/wire-emit-message \
+              --recipient resp \
+              --body 'router-rejects-unstamped' \
+              | ${personaShims}/bin/wire-router-client \
+                --socket "$router_socket" \
+                > "$reply_bytes"
+
+            kill "$router_pid" 2>/dev/null || true
+            wait "$router_pid" 2>/dev/null || true
+
+            ${personaShims}/bin/wire-decode-message-reply \
+              --expect unimplemented \
+              --expect-operation submission \
+              --capture-nota "$workdir/reply.nota" \
+              < "$reply_bytes"
+
+            mkdir -p $out
+            cp "$reply_bytes" $out/reply.bytes
+            cp "$workdir/reply.nota" $out/reply.nota
+            cp "$router_stderr" $out/router.stderr
+            printf 'router rejected unstamped submission (signal caught)\n' > $out/witness.txt
+            printf '  reply nota:     %s\n' "$(cat $out/reply.nota)" >> $out/witness.txt
+          '';
+          persona-router-daemon-serves-inbox-after-submit = context.pkgs.runCommand "persona-router-daemon-serves-inbox-after-submit" {
+            nativeBuildInputs = [ context.pkgs.coreutils ];
+          } ''
+            set -euo pipefail
+            workdir="$(mktemp -d)"
+            router_socket="$workdir/router.sock"
+            router_stderr="$workdir/router.stderr"
+
+            ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon \
+              daemon --socket "$router_socket" 2> "$router_stderr" &
+            router_pid=$!
+
+            for _ in $(seq 1 100); do
+              [ -S "$router_socket" ] && break
+              sleep 0.05
+            done
+            test -S "$router_socket"
+
+            # Step 1: submit a stamped message. Recipient is not
+            # registered through bootstrap, so delivery silently
+            # fails and the message stays pending in the router's
+            # inbox — exactly the shape the InboxQuery is designed
+            # to read.
+            submit_request="$workdir/submit-request.bytes"
+            submit_reply="$workdir/submit-reply.bytes"
+
+            ${personaShims}/bin/wire-emit-message \
+              --variant stamped \
+              --recipient resp \
+              --body 'router-inbox-chain-body' \
+              --origin external:owner \
+              --stamped-at 7 \
+              > "$submit_request"
+
+            ${personaShims}/bin/wire-router-client \
+              --socket "$router_socket" \
+              < "$submit_request" \
+              > "$submit_reply"
+
+            ${personaShims}/bin/wire-decode-message-reply \
+              --expect submission-accepted \
+              --expect-slot 1 \
+              --capture-nota "$workdir/submit-reply.nota" \
+              < "$submit_reply"
+
+            # Step 2: query the inbox. The router must return the
+            # pending message at slot 1 with the original body.
+            query_request="$workdir/query-request.bytes"
+            query_reply="$workdir/query-reply.bytes"
+
+            ${personaShims}/bin/wire-emit-message \
+              --variant inbox-query \
+              --recipient resp \
+              --body ignored \
+              > "$query_request"
+
+            ${personaShims}/bin/wire-router-client \
+              --socket "$router_socket" \
+              < "$query_request" \
+              > "$query_reply"
+
+            kill "$router_pid" 2>/dev/null || true
+            wait "$router_pid" 2>/dev/null || true
+
+            ${personaShims}/bin/wire-decode-message-reply \
+              --expect inbox-listing \
+              --expect-entry-count 1 \
+              --expect-entry-body 'router-inbox-chain-body' \
+              --capture-nota "$workdir/query-reply.nota" \
+              < "$query_reply"
+
+            mkdir -p $out
+            cp "$submit_request" $out/submit-request.bytes
+            cp "$submit_reply"   $out/submit-reply.bytes
+            cp "$workdir/submit-reply.nota" $out/submit-reply.nota
+            cp "$query_request" $out/query-request.bytes
+            cp "$query_reply"   $out/query-reply.bytes
+            cp "$workdir/query-reply.nota"  $out/query-reply.nota
+            cp "$router_stderr" $out/router.stderr
+            printf 'router served inbox after stamped submit\n' > $out/witness.txt
+            printf '  submit reply:  %s\n' "$(cat $out/submit-reply.nota)" >> $out/witness.txt
+            printf '  query  reply:  %s\n' "$(cat $out/query-reply.nota)" >> $out/witness.txt
+          '';
           persona-dev-stack-script-builds = context.pkgs.runCommand "persona-dev-stack-script-builds" { } ''
             test -x ${self.packages.${system}.persona-dev-stack}/bin/persona-dev-stack
             test -x ${self.packages.${system}.persona-dev-stack-smoke}/bin/persona-dev-stack-smoke
