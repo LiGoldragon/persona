@@ -467,6 +467,7 @@ systemd_command() {
     --setenv=PERSONA_BASH="$PERSONA_BASH"
     --setenv=PERSONA_DEV_STACK_SMOKE="${PERSONA_DEV_STACK_SMOKE:-}"
     --setenv=PERSONA_TERMINAL_CELL_SMOKE="${PERSONA_TERMINAL_CELL_SMOKE:-}"
+    --setenv=PERSONA_HARNESS_PACKAGE="${PERSONA_HARNESS_PACKAGE:-}"
     --setenv=HOME="$home_dir"
     --property=PrivateUsers=yes
     --property=ProtectHome=tmpfs

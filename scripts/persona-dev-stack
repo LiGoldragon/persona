@@ -20,6 +20,7 @@ mkdir -p "$root"
 router_socket="$root/router.sock"
 message_socket="$root/message.sock"
 terminal_socket="$root/responder.terminal.sock"
+harness_socket="$root/responder.harness.sock"
 terminal_store="$root/terminal.redb"
 message_store="$root/message-store"
 router_bootstrap="$root/router-bootstrap.nota"
@@ -27,6 +28,8 @@ router_stdout="$root/router.stdout"
 router_stderr="$root/router.stderr"
 message_daemon_stdout="$root/message-daemon.stdout"
 message_daemon_stderr="$root/message-daemon.stderr"
+harness_stdout="$root/harness.stdout"
+harness_stderr="$root/harness.stderr"
 terminal_stdout="$root/terminal.stdout"
 terminal_stderr="$root/terminal.stderr"
 environment_file="$root/env.sh"
@@ -38,6 +41,11 @@ message_daemon_bin="$PERSONA_MESSAGE_PACKAGE/bin/persona-message-daemon"
 router_bin="$PERSONA_ROUTER_PACKAGE/bin/persona-router-daemon"
 terminal_daemon="$PERSONA_TERMINAL_PACKAGE/bin/persona-terminal-daemon"
 terminal_signal="$PERSONA_TERMINAL_PACKAGE/bin/persona-terminal-signal"
+if [ -n "${PERSONA_HARNESS_PACKAGE:-}" ]; then
+  harness_daemon="$PERSONA_HARNESS_PACKAGE/bin/persona-harness-daemon"
+else
+  harness_daemon=""
+fi
 
 cleanup() {
   if [ -n "${terminal_pid:-}" ]; then
@@ -47,6 +55,10 @@ cleanup() {
   if [ -n "${message_daemon_pid:-}" ]; then
     kill "$message_daemon_pid" 2>/dev/null || true
     wait "$message_daemon_pid" 2>/dev/null || true
+  fi
+  if [ -n "${harness_pid:-}" ]; then
+    kill "$harness_pid" 2>/dev/null || true
+    wait "$harness_pid" 2>/dev/null || true
   fi
   if [ -n "${router_pid:-}" ]; then
     kill "$router_pid" 2>/dev/null || true
@@ -100,6 +112,18 @@ start_message_daemon() {
   read_ready_line "persona-message-daemon" "${PERSONA_MESSAGE_DAEMON_PROCESS[0]}" "$message_daemon_stdout" "persona-message-daemon socket=$message_socket"
 }
 
+start_harness() {
+  coproc PERSONA_HARNESS_PROCESS {
+    "$harness_daemon" \
+      --socket "$harness_socket" \
+      --harness responder \
+      --terminal-socket "$terminal_socket" \
+      2>&1
+  }
+  harness_pid="$PERSONA_HARNESS_PROCESS_PID"
+  read_ready_line "persona-harness" "${PERSONA_HARNESS_PROCESS[0]}" "$harness_stdout" "persona-harness-daemon socket=$harness_socket"
+}
+
 start_terminal() {
   coproc PERSONA_TERMINAL_PROCESS {
     "$terminal_daemon" \
@@ -115,7 +139,11 @@ start_terminal() {
 
 write_router_bootstrap() {
   {
-    printf '(RegisterActor (Actor responder %s (EndpointTransport PtySocket "%s" None)))\n' "$terminal_pid" "$terminal_socket"
+    if [ -n "$harness_daemon" ]; then
+      printf '(RegisterActor (Actor responder %s (EndpointTransport HarnessSocket "%s" None)))\n' "$harness_pid" "$harness_socket"
+    else
+      printf '(RegisterActor (Actor responder %s (EndpointTransport PtySocket "%s" None)))\n' "$terminal_pid" "$terminal_socket"
+    fi
     printf '%s\n' '(GrantDirectMessage owner responder)'
   } >"$router_bootstrap"
 }
@@ -125,9 +153,10 @@ write_environment_file() {
 export PERSONA_MESSAGE_SOCKET='$message_socket'
 export PERSONA_MESSAGE_ROUTER_SOCKET='$router_socket'
 export PERSONA_MESSAGE_STORE='$message_store'
+$(if [ -n "$harness_daemon" ]; then printf "export PERSONA_HARNESS_SOCKET='%s'\n" "$harness_socket"; fi)
 export PERSONA_TERMINAL_SOCKET='$terminal_socket'
 export PERSONA_TERMINAL_STORE='$terminal_store'
-export PATH='$PERSONA_MESSAGE_PACKAGE/bin:$PERSONA_ROUTER_PACKAGE/bin:$PERSONA_TERMINAL_PACKAGE/bin:'"\$PATH"
+export PATH='$PERSONA_MESSAGE_PACKAGE/bin:$PERSONA_ROUTER_PACKAGE/bin:$(if [ -n "${PERSONA_HARNESS_PACKAGE:-}" ]; then printf "%s/bin:" "$PERSONA_HARNESS_PACKAGE"; fi)$PERSONA_TERMINAL_PACKAGE/bin:'"\$PATH"
 EOF
 }
 
@@ -137,9 +166,15 @@ write_stack_manifests() {
     printf '  (Root "%s")\n' "$root"
     printf '  (RouterPid %s)\n' "$router_pid"
     printf '  (MessageDaemonPid %s)\n' "$message_daemon_pid"
+    if [ -n "$harness_daemon" ]; then
+      printf '  (HarnessPid %s)\n' "$harness_pid"
+    fi
     printf '  (TerminalPid %s)\n' "$terminal_pid"
     printf '  (RouterReady "%s")\n' "$router_stdout"
     printf '  (MessageDaemonReady "%s")\n' "$message_daemon_stdout"
+    if [ -n "$harness_daemon" ]; then
+      printf '  (HarnessReady "%s")\n' "$harness_stdout"
+    fi
     printf '  (TerminalReady "%s")\n' "$terminal_stdout"
     printf ')\n'
   } >"$process_manifest"
@@ -149,6 +184,9 @@ write_stack_manifests() {
     printf '  (Root "%s")\n' "$root"
     printf '  (RouterSocket "%s")\n' "$router_socket"
     printf '  (MessageSocket "%s")\n' "$message_socket"
+    if [ -n "$harness_daemon" ]; then
+      printf '  (HarnessSocket "%s")\n' "$harness_socket"
+    fi
     printf '  (TerminalSocket "%s")\n' "$terminal_socket"
     printf '  (TerminalStore "%s")\n' "$terminal_store"
     printf '  (MessageStore "%s")\n' "$message_store"
@@ -204,6 +242,9 @@ run_smoke() {
 }
 
 start_terminal
+if [ -n "$harness_daemon" ]; then
+  start_harness
+fi
 write_router_bootstrap
 start_router
 start_message_daemon
@@ -221,11 +262,18 @@ case "$mode" in
     printf 'socket manifest=%s\n' "$socket_manifest"
     printf 'router socket=%s\n' "$router_socket"
     printf 'message socket=%s\n' "$message_socket"
+    if [ -n "$harness_daemon" ]; then
+      printf 'harness socket=%s\n' "$harness_socket"
+    fi
     printf 'terminal socket=%s\n' "$terminal_socket"
     printf 'try: source %s\n' "$environment_file"
     printf 'try: message '\''(Send responder "hello")'\''\n'
     printf 'try: message '\''(Inbox responder)'\''\n'
     printf 'try: persona-terminal-signal --socket "$PERSONA_TERMINAL_SOCKET" --terminal responder capture\n'
-    wait -n "$router_pid" "$message_daemon_pid" "$terminal_pid"
+    if [ -n "$harness_daemon" ]; then
+      wait -n "$router_pid" "$message_daemon_pid" "$harness_pid" "$terminal_pid"
+    else
+      wait -n "$router_pid" "$message_daemon_pid" "$terminal_pid"
+    fi
     ;;
 esac

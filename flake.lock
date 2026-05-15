@@ -473,11 +473,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1778853379,
-        "narHash": "sha256-sho+aw+NqH3mDEIpBzpRJg49f9FNxjMGXIpWU47UpSs=",
+        "lastModified": 1778863672,
+        "narHash": "sha256-A89iPHrz6uTEaAuixYyLJySX8W3DKzmPAjt/Z8k29e4=",
         "owner": "LiGoldragon",
         "repo": "persona-harness",
-        "rev": "7629af71a2420f3265c44f4f8cf923d31e3c8738",
+        "rev": "202befa66f862dbd80d6c15e140ca4c3c9fcba83",
         "type": "github"
       },
       "original": {
@@ -561,11 +561,11 @@
         "nixpkgs": "nixpkgs_4"
       },
       "locked": {
-        "lastModified": 1778863076,
-        "narHash": "sha256-xK87n9fjATf8xYWMVHcCCftjvkzd9etSWVsIWFu9cHc=",
+        "lastModified": 1778864242,
+        "narHash": "sha256-8x7uYq7txSCevVRClyyF5CqSS/Z5sLC8dTdtdJH2PJM=",
         "owner": "LiGoldragon",
         "repo": "persona-router",
-        "rev": "80a431f3a8da334e0dabccdd5c9647363af02f42",
+        "rev": "72f47a70d665cf70507a8aea521994a33a1c1c8f",
         "type": "github"
       },
       "original": {
