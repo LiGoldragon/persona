@@ -14,7 +14,9 @@
 
 use std::io::Write;
 
-use signal_core::{FrameBody, Request};
+use signal_core::{
+    ExchangeIdentifier, ExchangeLane, ExchangeSequence, FrameBody, Request, SessionEpoch,
+};
 use signal_persona_message::{
     Frame, MessageBody, MessageKind, MessageRecipient, MessageRequest, MessageSubmission,
 };
@@ -54,7 +56,14 @@ impl Cli {
 fn main() {
     let cli = Cli::parse();
     let request = MessageRequest::MessageSubmission(cli.message_submission());
-    let frame = Frame::new(FrameBody::Request(Request::from_payload(request)));
+    let frame = Frame::new(FrameBody::Request {
+        exchange: ExchangeIdentifier::new(
+            SessionEpoch::new(1),
+            ExchangeLane::Connector,
+            ExchangeSequence::first(),
+        ),
+        request: Request::from_payload(request),
+    });
     let bytes = frame
         .encode_length_prefixed()
         .expect("encode length-prefixed frame");

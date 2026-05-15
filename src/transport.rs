@@ -3,13 +3,16 @@ use std::path::{Path, PathBuf};
 use std::os::unix::fs::FileTypeExt;
 
 use kameo::actor::ActorRef;
-use signal_core::{FrameBody, Reply, Request};
+use signal_core::{
+    ExchangeIdentifier, ExchangeLane, ExchangeSequence, FrameBody, NonEmpty, Reply, Request,
+    SessionEpoch, SignalVerb, SubReply,
+};
 use signal_persona::{EngineReply, EngineRequest, Frame};
 use signal_persona_auth::EngineId;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 
-use crate::engine::PersonaDaemonPaths;
+use crate::engine::{EngineTopology, PersonaDaemonPaths};
 use crate::error::{Error, Result};
 use crate::launch::{ComponentCommandCatalog, EngineLaunchConfiguration};
 use crate::manager::{EngineManager, HandleEngineRequest};
@@ -95,21 +98,48 @@ impl PersonaFrameCodec {
     }
 
     pub fn request_frame(&self, request: EngineRequest) -> Frame {
-        Frame::new(FrameBody::Request(Request::from_payload(request)))
+        Frame::new(FrameBody::Request {
+            exchange: self.initial_exchange(),
+            request: Request::from_payload(request),
+        })
     }
 
-    pub fn reply_frame(&self, reply: EngineReply) -> Frame {
-        Frame::new(FrameBody::Reply(Reply::operation(reply)))
+    pub fn reply_frame(
+        &self,
+        exchange: ExchangeIdentifier,
+        verb: SignalVerb,
+        reply: EngineReply,
+    ) -> Frame {
+        Frame::new(FrameBody::Reply {
+            exchange,
+            reply: Reply::completed(NonEmpty::single(SubReply::Ok {
+                verb,
+                payload: reply,
+            })),
+        })
     }
 
-    pub fn request_from_frame(&self, frame: Frame) -> Result<EngineRequest> {
+    pub fn request_from_frame(&self, frame: Frame) -> Result<ReceivedEngineRequest> {
         match frame.into_body() {
-            FrameBody::Request(request) => {
-                request
-                    .into_payload_checked()
-                    .map_err(|error| Error::UnexpectedSignalFrame {
-                        got: error.to_string(),
-                    })
+            FrameBody::Request { exchange, request } => {
+                let checked = request
+                    .into_checked()
+                    .map_err(|(reason, _request)| Error::InvalidSignalRequest { reason })?;
+                let mut operations = checked.operations.into_vec();
+                if operations.len() != 1 {
+                    return Err(Error::UnexpectedSignalFrame {
+                        got: format!(
+                            "persona manager currently accepts one operation, got {}",
+                            operations.len()
+                        ),
+                    });
+                }
+                let operation = operations.remove(0);
+                Ok(ReceivedEngineRequest::new(
+                    exchange,
+                    operation.verb,
+                    operation.payload,
+                ))
             }
             other => Err(Error::UnexpectedSignalFrame {
                 got: format!("{other:?}"),
@@ -119,17 +149,75 @@ impl PersonaFrameCodec {
 
     pub fn reply_from_frame(&self, frame: Frame) -> Result<EngineReply> {
         match frame.into_body() {
-            FrameBody::Reply(Reply::Operation(reply)) => Ok(reply),
+            FrameBody::Reply { reply, .. } => match reply {
+                Reply::Accepted { per_operation, .. } => {
+                    let mut operations = per_operation.into_vec();
+                    if operations.len() != 1 {
+                        return Err(Error::UnexpectedSignalFrame {
+                            got: format!(
+                                "persona client currently accepts one reply operation, got {}",
+                                operations.len()
+                            ),
+                        });
+                    }
+                    match operations.remove(0) {
+                        SubReply::Ok { payload, .. } => Ok(payload),
+                        other => Err(Error::UnexpectedSignalFrame {
+                            got: format!("{other:?}"),
+                        }),
+                    }
+                }
+                Reply::Rejected { reason } => Err(Error::UnexpectedSignalFrame {
+                    got: format!("{reason:?}"),
+                }),
+            },
             other => Err(Error::UnexpectedSignalFrame {
                 got: format!("{other:?}"),
             }),
         }
+    }
+
+    fn initial_exchange(&self) -> ExchangeIdentifier {
+        ExchangeIdentifier::new(
+            SessionEpoch::new(1),
+            ExchangeLane::Connector,
+            ExchangeSequence::first(),
+        )
     }
 }
 
 impl Default for PersonaFrameCodec {
     fn default() -> Self {
         Self::new(1024 * 1024)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReceivedEngineRequest {
+    exchange: ExchangeIdentifier,
+    verb: SignalVerb,
+    request: EngineRequest,
+}
+
+impl ReceivedEngineRequest {
+    pub fn new(exchange: ExchangeIdentifier, verb: SignalVerb, request: EngineRequest) -> Self {
+        Self {
+            exchange,
+            verb,
+            request,
+        }
+    }
+
+    pub fn exchange(&self) -> ExchangeIdentifier {
+        self.exchange
+    }
+
+    pub fn verb(&self) -> SignalVerb {
+        self.verb
+    }
+
+    pub fn into_request(self) -> EngineRequest {
+        self.request
     }
 }
 
@@ -251,12 +339,14 @@ impl PersonaDaemon {
         manager: &ActorRef<EngineManager>,
     ) -> Result<()> {
         let frame = self.codec.read_frame(&mut stream).await?;
-        let request = self.codec.request_from_frame(frame)?;
+        let received = self.codec.request_from_frame(frame)?;
+        let exchange = received.exchange();
+        let verb = received.verb();
         let reply = manager
-            .ask(HandleEngineRequest::new(request))
+            .ask(HandleEngineRequest::new(received.into_request()))
             .await
             .map_err(|error| Error::actor("handle daemon engine request", error))?;
-        let frame = self.codec.reply_frame(reply);
+        let frame = self.codec.reply_frame(exchange, verb, reply);
         self.codec.write_frame(&mut stream, &frame).await
     }
 }
@@ -294,6 +384,7 @@ impl PersonaDaemonCommand {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaLaunchPlan {
     engine: EngineId,
+    topology: EngineTopology,
     paths: PersonaDaemonPaths,
     manager_socket: PathBuf,
     command_catalog: ComponentCommandCatalog,
@@ -301,7 +392,10 @@ pub struct PersonaLaunchPlan {
 
 impl PersonaLaunchPlan {
     pub fn from_environment(endpoint: &PersonaEndpoint) -> Result<Option<Self>> {
-        let Some(command_catalog) = ComponentCommandCatalog::from_environment()? else {
+        let topology = Self::topology_from_environment()?;
+        let Some(command_catalog) =
+            ComponentCommandCatalog::from_environment_for_topology(topology)?
+        else {
             return Ok(None);
         };
         let engine = std::env::var("PERSONA_MANAGER_ENGINE_ID")
@@ -310,6 +404,7 @@ impl PersonaLaunchPlan {
         let paths = Self::paths_from_environment(endpoint)?;
         Ok(Some(Self {
             engine,
+            topology,
             paths,
             manager_socket: endpoint.as_path().to_path_buf(),
             command_catalog,
@@ -319,10 +414,21 @@ impl PersonaLaunchPlan {
     pub fn from_input(input: PersonaLaunchPlanInput) -> Self {
         Self {
             engine: input.engine,
+            topology: input.topology,
             paths: input.paths,
             manager_socket: input.manager_socket,
             command_catalog: input.command_catalog,
         }
+    }
+
+    fn topology_from_environment() -> Result<EngineTopology> {
+        let Some(value) = std::env::var_os("PERSONA_ENGINE_TOPOLOGY") else {
+            return Ok(EngineTopology::FullPrototype);
+        };
+        let text = value.to_string_lossy();
+        EngineTopology::from_str(text.as_ref()).ok_or_else(|| Error::UnknownEngineTopology {
+            got: text.into_owned(),
+        })
     }
 
     fn paths_from_environment(endpoint: &PersonaEndpoint) -> Result<PersonaDaemonPaths> {
@@ -343,14 +449,18 @@ impl PersonaLaunchPlan {
     }
 
     pub fn layout(&self) -> crate::engine::EngineLayout {
-        self.paths
-            .engine_layout_with_manager_socket(self.engine.clone(), self.manager_socket.clone())
+        self.paths.engine_layout_with_manager_socket_and_topology(
+            self.engine.clone(),
+            self.manager_socket.clone(),
+            self.topology,
+        )
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaLaunchPlanInput {
     pub engine: EngineId,
+    pub topology: EngineTopology,
     pub paths: PersonaDaemonPaths,
     pub manager_socket: PathBuf,
     pub command_catalog: ComponentCommandCatalog,

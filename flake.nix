@@ -616,6 +616,13 @@
               cargoTestExtraArgs = "--test engine constraint_engine_layout_assigns_socket_modes_by_component_boundary -- --exact";
             }
           );
+          persona-engine-layout-can-select-message-router-topology = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test engine constraint_engine_layout_can_select_message_router_topology -- --exact";
+            }
+          );
           persona-spawn-envelope-carries-component-paths-and-peer-sockets = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -623,6 +630,15 @@
               cargoTestExtraArgs = "--test engine constraint_spawn_envelope_carries_component_paths_and_peer_sockets -- --exact";
             }
           );
+          persona-message-router-topology-spawn-envelope-has-one-peer-socket =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test engine constraint_message_router_topology_spawn_envelope_has_one_peer_socket -- --exact";
+                }
+              );
           persona-engine-layout-prepares-only-engine-scoped-directories = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -733,6 +749,16 @@
                   cargoTestExtraArgs = "--test supervisor constraint_engine_supervisor_launches_prototype_supervised_components_through_process_launcher -- --exact";
                 }
               );
+          persona-engine-supervisor-launches-message-router-topology-without-full-stack =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+                  cargoTestExtraArgs = "--test supervisor constraint_engine_supervisor_launches_message_router_topology_without_full_stack -- --exact";
+                }
+              );
           persona-daemon-persists-cli-mutation-to-manager-store = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -748,6 +774,16 @@
                   inherit (context) cargoArtifacts;
                   PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
                   cargoTestExtraArgs = "--test daemon constraint_persona_daemon_launches_prototype_supervised_components_through_engine_supervisor -- --exact";
+                }
+              );
+          persona-daemon-launches-message-router-topology-through-engine-supervisor =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+                  cargoTestExtraArgs = "--test daemon constraint_persona_daemon_launches_message_router_topology_through_engine_supervisor -- --exact";
                 }
               );
           persona-daemon-launches-nix-built-prototype-topology =
@@ -878,6 +914,99 @@
                   else
                     test "$actual_mode" = "600"
                   fi
+                done
+
+                mkdir -p "$out"
+                cp "$work/persona-daemon.stdout" "$out/persona-daemon.stdout"
+                cp "$work/persona-daemon.stderr" "$out/persona-daemon.stderr"
+                cp "$work/state/default"/*.env "$out/"
+                touch "$out/passed"
+              '';
+          persona-daemon-launches-nix-built-message-router-topology =
+            context.pkgs.runCommand "persona-daemon-launches-nix-built-message-router-topology"
+              {
+                nativeBuildInputs = [
+                  context.pkgs.bash
+                  context.pkgs.coreutils
+                  context.pkgs.gnugrep
+                ];
+              }
+              ''
+                set -eu
+                work="$TMPDIR/persona-daemon-nix-built-message-router"
+                mkdir -p "$work/state" "$work/run" "$work/artifacts"
+                manager_socket="$work/persona.sock"
+
+                export PERSONA_MANAGER_STORE="$work/manager.redb"
+                export PERSONA_STATE_ROOT="$work/state"
+                export PERSONA_RUN_ROOT="$work/run"
+                export PERSONA_ENGINE_TOPOLOGY=message-router
+                export PERSONA_ROUTER_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-router-prototype-launcher
+                export PERSONA_MESSAGE_DAEMON_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-message-prototype-launcher
+
+                ${self.packages.${system}.default}/bin/persona-daemon "$manager_socket" \
+                  > "$work/persona-daemon.stdout" \
+                  2> "$work/persona-daemon.stderr" &
+                daemon="$!"
+
+                cleanup() {
+                  kill "$daemon" 2>/dev/null || true
+                  if [ -d "$work/state/default" ]; then
+                    for capture in "$work/state/default"/*.env; do
+                      [ -e "$capture" ] || continue
+                      process="$(sed -n 's/^process=//p' "$capture" | head -n 1)"
+                      if [ -n "$process" ]; then
+                        kill -- "-$process" 2>/dev/null || true
+                      fi
+                    done
+                  fi
+                  wait "$daemon" 2>/dev/null || true
+                }
+                trap cleanup EXIT
+
+                for attempt in $(seq 1 100); do
+                  if grep -Fq "persona-daemon socket=$manager_socket" "$work/persona-daemon.stdout"; then
+                    break
+                  fi
+                  if ! kill -0 "$daemon" 2>/dev/null; then
+                    cat "$work/persona-daemon.stdout"
+                    cat "$work/persona-daemon.stderr" >&2
+                    exit 1
+                  fi
+                  sleep 0.1
+                done
+                grep -Fq "persona-daemon socket=$manager_socket" "$work/persona-daemon.stdout"
+
+                for component in message router; do
+                  capture="$work/state/default/$component.env"
+                  for attempt in $(seq 1 100); do
+                    if [ -f "$capture" ]; then
+                      break
+                    fi
+                    sleep 0.1
+                  done
+                  test -f "$capture"
+                  grep -Fx "engine=default" "$capture"
+                  grep -Fx "component=$component" "$capture"
+                  grep -Fx "peer_count=1" "$capture"
+                  grep -Fx "spawn_envelope=$work/run/default/$component.envelope" "$capture"
+                  grep -Fx "manager_socket=$work/persona.sock" "$capture"
+                  if [ "$component" = "message" ]; then
+                    grep -Fx "domain_mode=660" "$capture"
+                  else
+                    grep -Fx "domain_mode=600" "$capture"
+                  fi
+                  grep -Fx "supervision_mode=600" "$capture"
+                  test -f "$work/run/default/$component.envelope"
+                  grep -Fq "(SpawnEnvelope default" "$work/run/default/$component.envelope"
+                  grep -Fq "$component.sock" "$work/run/default/$component.envelope"
+                  grep -Fq "$component.supervision.sock" "$work/run/default/$component.envelope"
+                done
+
+                for absent in mind system harness terminal introspect; do
+                  test ! -e "$work/state/default/$absent.env"
+                  test ! -e "$work/run/default/$absent.envelope"
+                  test ! -S "$work/run/default/$absent.sock"
                 done
 
                 mkdir -p "$out"

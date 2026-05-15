@@ -46,8 +46,16 @@ pub enum Error {
     #[error("unexpected Signal frame: {got}")]
     UnexpectedSignalFrame { got: String },
 
+    #[error("signal request failed structural checks: {reason}")]
+    InvalidSignalRequest {
+        reason: signal_core::RequestRejectionReason,
+    },
+
     #[error("manager store path is missing a parent directory: {path}")]
     ManagerStorePathMissingParent { path: PathBuf },
+
+    #[error("unknown Persona engine topology: {got}")]
+    UnknownEngineTopology { got: String },
 
     #[error("component command resolution: {0}")]
     CommandResolution(#[from] crate::launch::CommandResolutionFailure),

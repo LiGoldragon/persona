@@ -13,7 +13,7 @@
 
 use std::io::Read;
 
-use signal_core::{FrameBody, Request, SignalVerb};
+use signal_core::{FrameBody, SignalVerb};
 use signal_persona_message::{Frame, MessageRequest};
 
 struct Expectations {
@@ -50,9 +50,16 @@ fn main() {
     let frame = Frame::decode_length_prefixed(&bytes).expect("decode length-prefixed frame");
 
     match frame.into_body() {
-        FrameBody::Request(Request::Operation { verb, payload }) => {
-            assert_eq!(verb, SignalVerb::Assert, "expected Assert verb");
-            match payload {
+        FrameBody::Request { request, .. } => {
+            let checked = request
+                .into_checked()
+                .map_err(|(error, _request)| error)
+                .expect("request passes signal-core receive checks");
+            let mut operations = checked.operations.into_vec();
+            assert_eq!(operations.len(), 1, "expected one message operation");
+            let operation = operations.remove(0);
+            assert_eq!(operation.verb, SignalVerb::Assert, "expected Assert verb");
+            match operation.payload {
                 MessageRequest::MessageSubmission(submission) => {
                     expect.assert_submission(&submission);
                 }

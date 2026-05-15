@@ -41,10 +41,33 @@ impl PersonaDaemonPaths {
         engine: EngineId,
         manager_socket: impl Into<PathBuf>,
     ) -> EngineLayout {
+        self.engine_layout_with_manager_socket_and_topology(
+            engine,
+            manager_socket,
+            EngineTopology::FullPrototype,
+        )
+    }
+
+    pub fn engine_layout_with_topology(
+        &self,
+        engine: EngineId,
+        topology: EngineTopology,
+    ) -> EngineLayout {
+        self.engine_layout_with_manager_socket_and_topology(engine, self.manager_socket(), topology)
+    }
+
+    pub fn engine_layout_with_manager_socket_and_topology(
+        &self,
+        engine: EngineId,
+        manager_socket: impl Into<PathBuf>,
+        topology: EngineTopology,
+    ) -> EngineLayout {
         let state_dir = self.state_root.join(engine.as_str());
         let run_dir = self.run_root.join(engine.as_str());
-        let components = EngineComponent::prototype_supervised_components()
-            .into_iter()
+        let components = topology
+            .components()
+            .iter()
+            .copied()
             .map(|component| {
                 ComponentLayout::new(component, state_dir.as_path(), run_dir.as_path())
             })
@@ -156,6 +179,36 @@ impl PreparedEngineLayout {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EngineTopology {
+    FullPrototype,
+    MessageRouter,
+}
+
+impl EngineTopology {
+    pub const fn components(self) -> &'static [EngineComponent] {
+        match self {
+            Self::FullPrototype => &PROTOTYPE_SUPERVISED_COMPONENTS,
+            Self::MessageRouter => &MESSAGE_ROUTER_COMPONENTS,
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::FullPrototype => "full-prototype",
+            Self::MessageRouter => "message-router",
+        }
+    }
+
+    pub fn from_str(value: &str) -> Option<Self> {
+        match value {
+            "full-prototype" => Some(Self::FullPrototype),
+            "message-router" => Some(Self::MessageRouter),
+            _ => None,
+        }
+    }
+}
+
 #[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EngineComponent {
     Mind,
@@ -167,28 +220,39 @@ pub enum EngineComponent {
     Introspect,
 }
 
+const OPERATIONAL_DELIVERY_COMPONENTS: [EngineComponent; 6] = [
+    EngineComponent::Mind,
+    EngineComponent::Router,
+    EngineComponent::System,
+    EngineComponent::Harness,
+    EngineComponent::Terminal,
+    EngineComponent::Message,
+];
+
+const PROTOTYPE_SUPERVISED_COMPONENTS: [EngineComponent; 7] = [
+    EngineComponent::Mind,
+    EngineComponent::Router,
+    EngineComponent::System,
+    EngineComponent::Harness,
+    EngineComponent::Terminal,
+    EngineComponent::Message,
+    EngineComponent::Introspect,
+];
+
+const MESSAGE_ROUTER_COMPONENTS: [EngineComponent; 2] =
+    [EngineComponent::Message, EngineComponent::Router];
+
 impl EngineComponent {
     pub const fn operational_delivery_components() -> [Self; 6] {
-        [
-            Self::Mind,
-            Self::Router,
-            Self::System,
-            Self::Harness,
-            Self::Terminal,
-            Self::Message,
-        ]
+        OPERATIONAL_DELIVERY_COMPONENTS
     }
 
     pub const fn prototype_supervised_components() -> [Self; 7] {
-        [
-            Self::Mind,
-            Self::Router,
-            Self::System,
-            Self::Harness,
-            Self::Terminal,
-            Self::Message,
-            Self::Introspect,
-        ]
+        PROTOTYPE_SUPERVISED_COMPONENTS
+    }
+
+    pub const fn message_router_components() -> [Self; 2] {
+        MESSAGE_ROUTER_COMPONENTS
     }
 
     pub const fn component_kind(self) -> signal_persona::ComponentKind {

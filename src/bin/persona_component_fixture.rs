@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
-use signal_core::{FrameBody, Reply};
+use signal_core::{ExchangeIdentifier, FrameBody, NonEmpty, Reply, SignalVerb, SubReply};
 use signal_persona::{
     ComponentHealth, ComponentHealthQuery, ComponentHealthReport, ComponentHello,
     ComponentIdentity, ComponentKind, ComponentName, ComponentReadinessQuery, ComponentReady,
@@ -208,9 +208,9 @@ impl SupervisionServer {
 
     fn serve_connection(&self, stream: &mut std::os::unix::net::UnixStream) {
         while let Ok(request) = self.codec.read_request(stream) {
-            let reply = self.reply_to(request);
+            let reply = self.reply_to(request.request);
             self.codec
-                .write_reply(stream, reply)
+                .write_reply(stream, request.exchange, request.verb, reply)
                 .expect("write supervision reply");
         }
     }
@@ -259,10 +259,27 @@ impl BlockingSupervisionCodec {
     fn read_request(
         &self,
         stream: &mut std::os::unix::net::UnixStream,
-    ) -> std::io::Result<SupervisionRequest> {
+    ) -> std::io::Result<ReceivedSupervisionRequest> {
         let frame = self.read_frame(stream)?;
         match frame.into_body() {
-            FrameBody::Request(request) => request.into_payload_checked().map_err(io_error),
+            FrameBody::Request { exchange, request } => {
+                let checked = request
+                    .into_checked()
+                    .map_err(|(error, _request)| io_error(error))?;
+                let mut operations = checked.operations.into_vec();
+                if operations.len() != 1 {
+                    return Err(io_error(format!(
+                        "supervision fixture expects one request operation, got {}",
+                        operations.len()
+                    )));
+                }
+                let operation = operations.remove(0);
+                Ok(ReceivedSupervisionRequest {
+                    exchange,
+                    verb: operation.verb,
+                    request: operation.payload,
+                })
+            }
             other => Err(io_error(format!("unexpected supervision frame: {other:?}"))),
         }
     }
@@ -270,9 +287,17 @@ impl BlockingSupervisionCodec {
     fn write_reply(
         &self,
         stream: &mut std::os::unix::net::UnixStream,
+        exchange: ExchangeIdentifier,
+        verb: SignalVerb,
         reply: SupervisionReply,
     ) -> std::io::Result<()> {
-        let frame = SupervisionFrame::new(FrameBody::Reply(Reply::operation(reply)));
+        let frame = SupervisionFrame::new(FrameBody::Reply {
+            exchange,
+            reply: Reply::completed(NonEmpty::single(SubReply::Ok {
+                verb,
+                payload: reply,
+            })),
+        });
         self.write_frame(stream, &frame)
     }
 
@@ -309,6 +334,12 @@ impl BlockingSupervisionCodec {
         stream.write_all(&bytes)?;
         stream.flush()
     }
+}
+
+struct ReceivedSupervisionRequest {
+    exchange: ExchangeIdentifier,
+    verb: SignalVerb,
+    request: SupervisionRequest,
 }
 
 fn io_error(error: impl std::fmt::Display) -> std::io::Error {

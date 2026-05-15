@@ -3,7 +3,10 @@ use persona::request::{
 };
 use persona::schema::EngineStatusReport;
 use persona::transport::PersonaFrameCodec;
-use signal_core::{FrameBody, Request, SignalVerb};
+use signal_core::{
+    ExchangeIdentifier, ExchangeLane, ExchangeSequence, FrameBody, NonEmpty, Operation, Request,
+    RequestRejectionReason, SessionEpoch, SignalVerb,
+};
 use signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, ComponentStatus,
     EngineGeneration, EnginePhase, EngineReply, EngineStatus, Frame as PersonaFrame,
@@ -71,17 +74,33 @@ fn persona_request_lowers_to_signal_persona_engine_request() {
 
 #[test]
 fn persona_frame_codec_rejects_mismatched_signal_verb() {
-    let frame = PersonaFrame::new(FrameBody::Request(Request::unchecked_operation(
+    let request = Request::from_operations(NonEmpty::single(Operation::new(
         SignalVerb::Assert,
         signal_persona::EngineRequest::EngineStatusQuery(
             signal_persona::EngineStatusQuery::whole_engine(),
         ),
     )));
+    let frame = PersonaFrame::new(FrameBody::Request {
+        exchange: ExchangeIdentifier::new(
+            SessionEpoch::new(1),
+            ExchangeLane::Connector,
+            ExchangeSequence::first(),
+        ),
+        request,
+    });
     let error = PersonaFrameCodec::default()
         .request_from_frame(frame)
         .expect_err("mismatched verb is rejected");
 
-    assert!(error.to_string().contains("signal verb mismatch"));
+    match error {
+        persona::Error::InvalidSignalRequest { reason } => {
+            assert_eq!(
+                reason,
+                RequestRejectionReason::VerbPayloadMismatch { index: 0 }
+            );
+        }
+        other => panic!("expected typed signal request rejection, got {other:?}"),
+    }
 }
 
 #[test]

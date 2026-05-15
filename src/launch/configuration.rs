@@ -1,7 +1,7 @@
 use nota_codec::NotaRecord;
 use thiserror::Error;
 
-use crate::engine::EngineComponent;
+use crate::engine::{EngineComponent, EngineTopology};
 
 use super::command::{ComponentCommand, ExecutablePath};
 
@@ -37,40 +37,75 @@ pub struct ComponentCommandEntryInput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComponentCommandCatalog {
     entries: Vec<ComponentCommandEntry>,
+    required_components: Vec<EngineComponent>,
 }
 
 impl ComponentCommandCatalog {
     pub fn from_entries(entries: Vec<ComponentCommandEntry>) -> Self {
-        Self { entries }
-    }
-
-    pub fn from_repeated_executable(executable_path: impl Into<String>) -> Self {
-        let executable_path = executable_path.into();
-        Self::from_entries(
-            EngineComponent::prototype_supervised_components()
-                .into_iter()
-                .map(|component| {
-                    ComponentCommandEntry::from_input(ComponentCommandEntryInput {
-                        component,
-                        command: ComponentCommand::executable(ExecutablePath::new(
-                            executable_path.clone(),
-                        )),
-                    })
-                })
-                .collect(),
+        Self::from_entries_for_components(
+            entries,
+            EngineComponent::prototype_supervised_components(),
         )
     }
 
+    pub fn from_repeated_executable(executable_path: impl Into<String>) -> Self {
+        Self::from_repeated_executable_for_components(
+            executable_path,
+            EngineComponent::prototype_supervised_components(),
+        )
+    }
+
+    pub fn from_entries_for_components(
+        entries: Vec<ComponentCommandEntry>,
+        required_components: impl IntoIterator<Item = EngineComponent>,
+    ) -> Self {
+        Self {
+            entries,
+            required_components: required_components.into_iter().collect(),
+        }
+    }
+
+    pub fn from_repeated_executable_for_components(
+        executable_path: impl Into<String>,
+        required_components: impl IntoIterator<Item = EngineComponent>,
+    ) -> Self {
+        let executable_path = executable_path.into();
+        let required_components = required_components.into_iter().collect::<Vec<_>>();
+        let entries = required_components
+            .iter()
+            .copied()
+            .map(|component| {
+                ComponentCommandEntry::from_input(ComponentCommandEntryInput {
+                    component,
+                    command: ComponentCommand::executable(ExecutablePath::new(
+                        executable_path.clone(),
+                    )),
+                })
+            })
+            .collect();
+        Self {
+            entries,
+            required_components,
+        }
+    }
+
     pub fn from_environment() -> std::result::Result<Option<Self>, CommandResolutionFailure> {
+        Self::from_environment_for_topology(EngineTopology::FullPrototype)
+    }
+
+    pub fn from_environment_for_topology(
+        topology: EngineTopology,
+    ) -> std::result::Result<Option<Self>, CommandResolutionFailure> {
         if let Some(executable_path) = std::env::var_os("PERSONA_PROTOTYPE_STACK_EXECUTABLE") {
-            return Ok(Some(Self::from_repeated_executable(
+            return Ok(Some(Self::from_repeated_executable_for_components(
                 executable_path.to_string_lossy().into_owned(),
+                topology.components().iter().copied(),
             )));
         }
 
         let mut entries = Vec::new();
         let mut saw_environment = false;
-        for component in EngineComponent::prototype_supervised_components() {
+        for component in topology.components().iter().copied() {
             match std::env::var_os(component.executable_environment_variable()) {
                 Some(path) => {
                     saw_environment = true;
@@ -91,8 +126,9 @@ impl ComponentCommandCatalog {
             return Ok(None);
         }
 
-        let catalog = Self::from_entries(entries);
-        for component in EngineComponent::prototype_supervised_components() {
+        let catalog =
+            Self::from_entries_for_components(entries, topology.components().iter().copied());
+        for component in topology.components().iter().copied() {
             if catalog.command_for(component)?.is_none() {
                 return Err(CommandResolutionFailure::MissingRequiredCommand { component });
             }
@@ -102,6 +138,10 @@ impl ComponentCommandCatalog {
 
     pub fn entries(&self) -> &[ComponentCommandEntry] {
         self.entries.as_slice()
+    }
+
+    pub fn required_components(&self) -> &[EngineComponent] {
+        self.required_components.as_slice()
     }
 
     pub fn command_for(

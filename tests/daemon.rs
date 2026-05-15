@@ -2,7 +2,7 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 
-use persona::engine::EngineComponent;
+use persona::engine::{EngineComponent, EngineTopology};
 use persona::engine_event::EngineEventBody;
 
 mod support;
@@ -50,6 +50,14 @@ impl DaemonFixture {
     }
 
     fn start_with_prototype_supervised_components() -> Self {
+        Self::start_with_engine_topology(EngineTopology::FullPrototype)
+    }
+
+    fn start_with_message_router_components() -> Self {
+        Self::start_with_engine_topology(EngineTopology::MessageRouter)
+    }
+
+    fn start_with_engine_topology(topology: EngineTopology) -> Self {
         let root = Self::unique_root();
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("test root created");
@@ -62,6 +70,7 @@ impl DaemonFixture {
             .env("PERSONA_STATE_ROOT", root.join("state"))
             .env("PERSONA_RUN_ROOT", root.join("run"))
             .env("PERSONA_PROTOTYPE_STACK_EXECUTABLE", script)
+            .env("PERSONA_ENGINE_TOPOLOGY", topology.as_str())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -163,6 +172,63 @@ impl Drop for DaemonFixture {
         self.stop_component_process_groups();
         let _ = std::fs::remove_dir_all(&self.root);
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_persona_daemon_launches_message_router_topology_through_engine_supervisor() {
+    let mut fixture = DaemonFixture::start_with_message_router_components();
+    let topology = EngineTopology::MessageRouter;
+
+    for component in topology.components().iter().copied() {
+        let capture = fixture.wait_for_component_capture(component);
+        assert!(
+            capture.contains("engine=default"),
+            "capture for {component:?}: {capture}"
+        );
+        assert!(
+            capture.contains(&format!("component={}", component.as_str())),
+            "capture for {component:?}: {capture}"
+        );
+        assert!(
+            capture.contains("peer_count=1"),
+            "capture for {component:?}: {capture}"
+        );
+    }
+    assert!(
+        !fixture.component_capture(EngineComponent::Mind).exists(),
+        "message-router topology must not launch persona-mind"
+    );
+
+    fixture.stop_daemon();
+
+    let store = persona::manager_store::ManagerStore::start(
+        persona::manager_store::ManagerStoreLocation::new(&fixture.manager_store),
+    )
+    .expect("manager store starts for inspection");
+    let events = store
+        .ask(persona::manager_store::ReadEngineEvents::new(
+            signal_persona_auth::EngineId::new("default"),
+        ))
+        .await
+        .expect("default engine events read through manager store actor");
+    assert_eq!(events.len(), topology.components().len() * 2);
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event.body(), EngineEventBody::ComponentSpawned(_)))
+            .count(),
+        topology.components().len()
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event.body(), EngineEventBody::ComponentReady(_)))
+            .count(),
+        topology.components().len()
+    );
+
+    store.stop_gracefully().await.expect("manager store stops");
+    store.wait_for_shutdown().await;
 }
 
 #[test]

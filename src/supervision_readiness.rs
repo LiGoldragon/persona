@@ -4,7 +4,10 @@ use std::time::Duration;
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use signal_core::{FrameBody, Reply, Request};
+use signal_core::{
+    ExchangeIdentifier, ExchangeLane, ExchangeSequence, FrameBody, NonEmpty, Reply, Request,
+    SessionEpoch, SignalVerb, SubReply,
+};
 use signal_persona::{
     ComponentHealth, ComponentHealthQuery, ComponentHealthReport, ComponentHello,
     ComponentIdentity, ComponentKind, ComponentName, ComponentNotReady, ComponentReadinessQuery,
@@ -327,7 +330,10 @@ impl SupervisionFrameCodec {
         stream: &mut UnixStream,
         request: SupervisionRequest,
     ) -> Result<(), ComponentSupervisionReadinessFailure> {
-        let frame = SupervisionFrame::new(FrameBody::Request(Request::from_payload(request)));
+        let frame = SupervisionFrame::new(FrameBody::Request {
+            exchange: self.initial_exchange(),
+            request: Request::from_payload(request),
+        });
         self.write_frame(stream, &frame).await
     }
 
@@ -336,7 +342,13 @@ impl SupervisionFrameCodec {
         stream: &mut UnixStream,
         reply: SupervisionReply,
     ) -> Result<(), ComponentSupervisionReadinessFailure> {
-        let frame = SupervisionFrame::new(FrameBody::Reply(Reply::operation(reply)));
+        let frame = SupervisionFrame::new(FrameBody::Reply {
+            exchange: self.initial_exchange(),
+            reply: Reply::completed(NonEmpty::single(SubReply::Ok {
+                verb: SignalVerb::Match,
+                payload: reply,
+            })),
+        });
         self.write_frame(stream, &frame).await
     }
 
@@ -345,7 +357,30 @@ impl SupervisionFrameCodec {
         stream: &mut UnixStream,
     ) -> Result<SupervisionReply, ComponentSupervisionReadinessFailure> {
         match self.read_frame(stream).await?.into_body() {
-            FrameBody::Reply(Reply::Operation(reply)) => Ok(reply),
+            FrameBody::Reply { reply, .. } => match reply {
+                Reply::Accepted { per_operation, .. } => {
+                    let mut operations = per_operation.into_vec();
+                    if operations.len() != 1 {
+                        return Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
+                            got: format!(
+                                "supervision readiness expects one reply operation, got {}",
+                                operations.len()
+                            ),
+                        });
+                    }
+                    match operations.remove(0) {
+                        SubReply::Ok { payload, .. } => Ok(payload),
+                        other => Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
+                            got: format!("{other:?}"),
+                        }),
+                    }
+                }
+                Reply::Rejected { reason } => {
+                    Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
+                        got: format!("{reason:?}"),
+                    })
+                }
+            },
             other => Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
                 got: format!("{other:?}"),
             }),
@@ -357,11 +392,23 @@ impl SupervisionFrameCodec {
         stream: &mut UnixStream,
     ) -> Result<SupervisionRequest, ComponentSupervisionReadinessFailure> {
         match self.read_frame(stream).await?.into_body() {
-            FrameBody::Request(request) => request.into_payload_checked().map_err(|error| {
-                ComponentSupervisionReadinessFailure::UnexpectedFrame {
-                    got: error.to_string(),
+            FrameBody::Request { request, .. } => {
+                let checked = request.into_checked().map_err(|(error, _request)| {
+                    ComponentSupervisionReadinessFailure::UnexpectedFrame {
+                        got: error.to_string(),
+                    }
+                })?;
+                let mut operations = checked.operations.into_vec();
+                if operations.len() != 1 {
+                    return Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
+                        got: format!(
+                            "supervision readiness expects one request operation, got {}",
+                            operations.len()
+                        ),
+                    });
                 }
-            }),
+                Ok(operations.remove(0).payload)
+            }
             other => Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
                 got: format!("{other:?}"),
             }),
@@ -395,6 +442,14 @@ impl SupervisionFrameCodec {
         bytes.resize(4 + length, 0);
         stream.read_exact(&mut bytes[4..]).await?;
         Ok(SupervisionFrame::decode_length_prefixed(&bytes)?)
+    }
+
+    fn initial_exchange(&self) -> ExchangeIdentifier {
+        ExchangeIdentifier::new(
+            SessionEpoch::new(1),
+            ExchangeLane::Connector,
+            ExchangeSequence::first(),
+        )
     }
 }
 

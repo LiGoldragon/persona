@@ -2,8 +2,6 @@ use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 
-use crate::engine::EngineComponent;
-
 use super::configuration::{
     CommandResolutionFailure, ComponentCommandCatalog, EngineLaunchConfiguration,
     ResolvedComponentCommand, ResolvedComponentCommandInput, ResolvedComponentCommands,
@@ -29,7 +27,7 @@ impl ComponentCommandResolver {
     ) -> std::result::Result<ResolvedComponentCommands, CommandResolutionFailure> {
         self.resolution_count += 1;
         let mut entries = Vec::new();
-        for component in EngineComponent::prototype_supervised_components() {
+        for component in self.defaults.required_components().iter().copied() {
             let command = match configuration.command_override_for(component)? {
                 Some(command) => command,
                 None => self

@@ -626,6 +626,13 @@ remaining engine-manager layers are restore-on-restart, socket owner/group ACL
 application, component exit subscriptions, restart policy, multi-engine
 catalog, origin tagging, and privileged-user deployment witnesses.
 
+The same supervisor path also has a narrow two-component topology for the
+current Signal refactor wave: `PERSONA_ENGINE_TOPOLOGY=message-router`
+launches only `persona-message` and `persona-router`, gives each component
+one peer socket, and proves the manager can start a focused integration
+sandbox without booting the full prototype federation. This is a test
+topology, not a separate production engine shape.
+
 ## 2 · Command-line Mind
 
 The first foundational implementation target is the command-line mind backed
@@ -807,8 +814,11 @@ mailbox.
 | Control | Signal frames | Commands and observations; latency-tolerant |
 | Data | Raw byte stream | Human keystroke latency must not pass through application-level relay |
 
-Open question: one socket per cell with mode-shift vs two sockets
-(`control.sock` + `data.sock`); resolution at refactor time.
+The socket split is decided: each terminal cell exposes `control.sock` and
+`data.sock`. `control.sock` carries privileged `signal-persona-terminal`
+control frames. `data.sock` carries raw attached-viewer bytes with only minimal
+attach/detach/resize/exit framing. There is no production single-socket
+mode-shift path between the control and data roles.
 `terminal-cell` stays its own repo (the seam is clean; the
 micro-components discipline favors it).
 
@@ -897,6 +907,9 @@ Migration rules:
 - Component command resolution fails closed when a required command is missing
   or ambiguous. A spawn request does not continue with a best-effort host PATH
   guess.
+- Engine topology is explicit. The default prototype topology launches every
+  prototype-supervised component; the `message-router` topology launches only
+  `persona-message` and `persona-router` for focused Signal refactor witnesses.
 - The prototype launcher set adapts the shared spawn-envelope environment to
   the current component daemon CLIs and records which Nix-built binary it
   executed.
@@ -1050,6 +1063,9 @@ Migration rules:
   the envelope-declared type/mode, and that each supervision socket answers the
   typed supervision relation. PTY readiness stays in a stateful terminal-cell
   witness.
+- The message-router topology first proves a two-component sandbox can launch
+  through the same manager/supervisor/launcher path, with one peer socket per
+  component and no accidental full-stack component spawn.
 - Component skeletons must be honest: valid unfinished operations return typed
   unfinished-state replies instead of hanging, crashing, or printing untyped
   text errors.
@@ -1115,14 +1131,19 @@ The apex repo owns tests that prove cross-component shape:
 | optional bwrap strict profile is documented as a tiny bind set | `nix flake check .#persona-engine-sandbox-documents-bwrap-strict-profile` |
 | engine resources are scoped | `nix flake check .#persona-engine-layout-uses-engine-id-scoped-paths` |
 | socket policy is boundary-specific | `nix flake check .#persona-engine-layout-assigns-socket-modes-by-component-boundary` |
+| engine topology is explicit | `nix flake check .#persona-engine-layout-can-select-message-router-topology` |
 | spawn envelopes carry manager-supplied peers | `nix flake check .#persona-spawn-envelope-carries-component-paths-and-peer-sockets` |
+| message-router topology gives each component one peer | `nix flake check .#persona-message-router-topology-spawn-envelope-has-one-peer-socket` |
 | engine preparation does not write global manager state as a side effect | `nix flake check .#persona-engine-layout-prepares-only-engine-scoped-directories` |
 | component command resolution is Nix-owned | `nix flake check .#persona-component-commands-resolve-from-nix-closure` |
 | launch config overrides are narrow | `nix flake check .#persona-launch-config-overrides-one-component-command` |
 | spawn envelope carries the resolved command | `nix flake check .#persona-spawn-envelope-carries-resolved-component-command` |
 | engine supervisor starts every prototype-supervised process through the launcher actor | `nix flake check .#persona-engine-supervisor-launches-prototype-supervised-components-through-process-launcher` |
+| engine supervisor can launch the focused message-router topology without full-stack side effects | `nix flake check .#persona-engine-supervisor-launches-message-router-topology-without-full-stack` |
 | persona-daemon launch plan reaches the engine supervisor and manager event log | `nix flake check .#persona-daemon-launches-prototype-supervised-components-through-engine-supervisor` |
+| persona-daemon can launch the focused message-router topology | `nix flake check .#persona-daemon-launches-message-router-topology-through-engine-supervisor` |
 | full topology starts from Nix-built prototype launchers | `nix flake check .#persona-daemon-launches-nix-built-prototype-topology` |
+| message-router topology starts from Nix-built prototype launchers | `nix flake check .#persona-daemon-launches-nix-built-message-router-topology` |
 | component skeletons answer health/status/readiness | `nix flake check .#persona-component-skeletons-answer-health-status-readiness` |
 | unfinished component behavior is typed | `nix flake check .#persona-component-skeleton-returns-typed-unimplemented` |
 | skeleton decodes every contract variant | `nix flake check .#persona-component-skeleton-decodes-every-contract-variant` |
@@ -1176,7 +1197,7 @@ through the same Signal verb spine as everything else:
    `Assert` on the catalog row that announces the type is now
    live.
 
-The flow uses only the seven `SignalVerb` roots; there is no new
+The flow uses only the six `SignalVerb` roots; there is no new
 "declare a type" verb. The type-system mutation happens in the Rust
 source layer, out-of-band from the Signal wire. The wire sees only
 the proposal-record traffic and the post-deploy catalog announcement.
@@ -1209,20 +1230,20 @@ plus translation reducers**:
   dedicated **translator component** that holds many versions and
   mediates between peers without bloating either endpoint's
   runtime. Translator components are themselves first-class typed
-  components in the federation — they speak the seven Signal
+  components in the federation — they speak the six Signal
   verbs, they own their own catalog, and they declare which
   version pairs they bridge.
 - **Federation needs no quorum primitive at the verb level.**
   Schema "agreement" reduces to "both sides can decode each other"
   — which content-addressed versioning plus translation reducers
-  provides directly. The seven-root Signal verbs handle the wire;
+  provides directly. The six-root Signal verbs handle the wire;
   schema bridging is reducer/translator work, not verb work.
 
 The reason this matters for the verb-spine question: cross-trust-
 domain federation was the strongest case for an eighth `Structure`
 verb (a consensus-shaped boundary primitive). The content-addressing
 plus translator pattern removes that case — federation runs in the
-seven verbs without needing schema-consensus as a verb-level
+six verbs without needing schema-consensus as a verb-level
 operation.
 
 ### 10.3 · Ordering

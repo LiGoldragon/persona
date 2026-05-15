@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use kameo::actor::Spawn;
 use kameo::error::SendError;
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
-use persona::engine::{EngineComponent, PersonaDaemonPaths, SocketMode};
+use persona::engine::{EngineComponent, EngineTopology, PersonaDaemonPaths, SocketMode};
 use persona::launch::{
     CommandArgument, CommandResolutionFailure, ComponentCommand, ComponentCommandCatalog,
     ComponentCommandEntry, ComponentCommandEntryInput, ComponentCommandInput,
@@ -90,6 +90,16 @@ impl TemporaryEngineRoot {
         )
     }
 
+    fn message_router_command_catalog() -> ComponentCommandCatalog {
+        ComponentCommandCatalog::from_entries_for_components(
+            EngineComponent::message_router_components()
+                .into_iter()
+                .map(Self::command_entry)
+                .collect(),
+            EngineComponent::message_router_components(),
+        )
+    }
+
     async fn resolver_result(
         catalog: ComponentCommandCatalog,
         configuration: EngineLaunchConfiguration,
@@ -169,6 +179,21 @@ fn constraint_engine_layout_uses_engine_id_scoped_paths() {
         router.supervision_socket().path(),
         "run/engine-alpha"
     ));
+}
+
+#[test]
+fn constraint_engine_layout_can_select_message_router_topology() {
+    let root = TemporaryEngineRoot::new("message-router-layout");
+    let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
+    let layout = paths.engine_layout_with_topology(
+        EngineId::new("engine-message-router"),
+        EngineTopology::MessageRouter,
+    );
+
+    assert_eq!(layout.components().len(), 2);
+    assert!(layout.component(EngineComponent::Message).is_some());
+    assert!(layout.component(EngineComponent::Router).is_some());
+    assert!(layout.component(EngineComponent::Mind).is_none());
 }
 
 #[test]
@@ -314,6 +339,33 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     let recovered =
         signal_persona::SpawnEnvelope::decode(&mut decoder).expect("decode signal spawn envelope");
     assert_eq!(recovered, signal_envelope);
+}
+
+#[tokio::test]
+async fn constraint_message_router_topology_spawn_envelope_has_one_peer_socket() {
+    let root = TemporaryEngineRoot::new("message-router-envelope");
+    let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
+    let layout = paths.engine_layout_with_topology(
+        EngineId::new("engine-message-router"),
+        EngineTopology::MessageRouter,
+    );
+    let resolved_commands = TemporaryEngineRoot::resolver_result(
+        TemporaryEngineRoot::message_router_command_catalog(),
+        EngineLaunchConfiguration::empty(),
+    )
+    .await
+    .expect("message-router commands resolve");
+    let envelope = layout
+        .spawn_envelope(EngineComponent::Message, &resolved_commands)
+        .expect("message spawn envelope exists");
+
+    assert_eq!(envelope.peers().len(), 1);
+    assert_eq!(envelope.peers()[0].component(), EngineComponent::Router);
+    assert!(
+        envelope.peers()[0]
+            .domain_socket_path()
+            .ends_with("router.sock")
+    );
 }
 
 #[tokio::test]

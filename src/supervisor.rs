@@ -89,7 +89,12 @@ impl EngineSupervisor {
         };
 
         let mut launched = Vec::new();
-        for component in EngineComponent::prototype_supervised_components() {
+        for component in self
+            .layout
+            .components()
+            .iter()
+            .map(|layout| layout.component())
+        {
             let envelope = self
                 .layout
                 .spawn_envelope(component, &resolved)
