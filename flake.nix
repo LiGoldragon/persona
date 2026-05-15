@@ -387,6 +387,16 @@
           persona-terminal = inputs.persona-terminal.checks.${system}.default;
 
           # ─── Wire-test chain: signal-persona-message ───
+          #
+          # Each derivation captures exactly one wire-layer boundary so
+          # a failure pinpoints which bytes-on-the-line shape regressed.
+          # The chain has four tiers:
+          #   T1 per-record round-trips (no daemon, pure)
+          #   T2 origin-shape coverage (no daemon, pure)
+          #   T3 negative tests / signals caught (no daemon, pure)
+          #   T4 chained midway witnesses (4 intermediate artifacts, pure)
+          #
+          # T1 — per-record round-trips
           wire-message-channel-round-trip = context.pkgs.runCommand "wire-message-channel-round-trip" { } ''
             ${personaShims}/bin/wire-emit-message \
               --recipient designer \
@@ -395,6 +405,326 @@
               --expect-recipient designer \
               --expect-body 'message-only round-trip'
             touch $out
+          '';
+          wire-stamped-submission-round-trip = context.pkgs.runCommand "wire-stamped-submission-round-trip" { } ''
+            ${personaShims}/bin/wire-emit-message \
+              --variant stamped \
+              --recipient designer \
+              --body 'stamped round-trip' \
+              --origin 'internal:message' \
+              --stamped-at 1234 \
+              | ${personaShims}/bin/wire-decode-message \
+              --expect-recipient designer \
+              --expect-body 'stamped round-trip' \
+              --expect-variant stamped \
+              --expect-origin 'internal:message'
+            touch $out
+          '';
+          wire-inbox-query-round-trip = context.pkgs.runCommand "wire-inbox-query-round-trip" { } ''
+            ${personaShims}/bin/wire-emit-message \
+              --variant inbox-query \
+              --recipient designer \
+              --body 'ignored for inbox-query' \
+              | ${personaShims}/bin/wire-decode-message \
+              --expect-recipient designer \
+              --expect-body 'ignored for inbox-query' \
+              --expect-variant inbox-query
+            touch $out
+          '';
+          wire-submission-accepted-reply-round-trip = context.pkgs.runCommand "wire-submission-accepted-reply-round-trip" { } ''
+            ${personaShims}/bin/wire-emit-message-reply \
+              --variant submission-accepted \
+              --slot 42 \
+              | ${personaShims}/bin/wire-decode-message-reply \
+              --expect submission-accepted \
+              --expect-slot 42
+            touch $out
+          '';
+          wire-inbox-listing-reply-round-trip = context.pkgs.runCommand "wire-inbox-listing-reply-round-trip" { } ''
+            ${personaShims}/bin/wire-emit-message-reply \
+              --variant inbox-listing \
+              --entry 'slot=1,sender=owner,body=first message' \
+              --entry 'slot=2,sender=owner,body=second message' \
+              --entry 'slot=3,sender=mind,body=third from mind' \
+              | ${personaShims}/bin/wire-decode-message-reply \
+              --expect inbox-listing \
+              --expect-entry-count 3 \
+              --expect-entry-body 'second message' \
+              --expect-entry-sender mind
+            touch $out
+          '';
+          wire-message-unimplemented-reply-round-trip = context.pkgs.runCommand "wire-message-unimplemented-reply-round-trip" { } ''
+            ${personaShims}/bin/wire-emit-message-reply \
+              --variant unimplemented \
+              --operation submission \
+              --reason not-in-prototype-scope \
+              | ${personaShims}/bin/wire-decode-message-reply \
+              --expect unimplemented \
+              --expect-operation submission
+            touch $out
+          '';
+
+          # T2 — origin-shape coverage. Each MessageOrigin variant
+          # must encode and decode byte-perfect through the channel
+          # frame. The security boundary (SO_PEERCRED stamping)
+          # depends on these shapes being stable.
+          wire-stamped-origin-internal-mind-round-trip = context.pkgs.runCommand "wire-stamped-origin-internal-mind-round-trip" { } ''
+            ${personaShims}/bin/wire-emit-message \
+              --variant stamped --recipient designer --body witness \
+              --origin 'internal:mind' --stamped-at 1 \
+              | ${personaShims}/bin/wire-decode-message \
+              --expect-recipient designer --expect-body witness \
+              --expect-origin 'internal:mind'
+            touch $out
+          '';
+          wire-stamped-origin-internal-router-round-trip = context.pkgs.runCommand "wire-stamped-origin-internal-router-round-trip" { } ''
+            ${personaShims}/bin/wire-emit-message \
+              --variant stamped --recipient designer --body witness \
+              --origin 'internal:router' --stamped-at 1 \
+              | ${personaShims}/bin/wire-decode-message \
+              --expect-recipient designer --expect-body witness \
+              --expect-origin 'internal:router'
+            touch $out
+          '';
+          wire-stamped-origin-external-owner-round-trip = context.pkgs.runCommand "wire-stamped-origin-external-owner-round-trip" { } ''
+            ${personaShims}/bin/wire-emit-message \
+              --variant stamped --recipient designer --body witness \
+              --origin 'external:owner' --stamped-at 1 \
+              | ${personaShims}/bin/wire-decode-message \
+              --expect-recipient designer --expect-body witness \
+              --expect-origin 'external:owner'
+            touch $out
+          '';
+          wire-stamped-origin-external-non-owner-uid-round-trip = context.pkgs.runCommand "wire-stamped-origin-external-non-owner-uid-round-trip" { } ''
+            ${personaShims}/bin/wire-emit-message \
+              --variant stamped --recipient designer --body witness \
+              --origin 'external:non-owner-user:1000' --stamped-at 1 \
+              | ${personaShims}/bin/wire-decode-message \
+              --expect-recipient designer --expect-body witness \
+              --expect-origin 'external:non-owner-user:1000'
+            touch $out
+          '';
+          wire-stamped-origin-external-network-peer-round-trip = context.pkgs.runCommand "wire-stamped-origin-external-network-peer-round-trip" { } ''
+            ${personaShims}/bin/wire-emit-message \
+              --variant stamped --recipient designer --body witness \
+              --origin 'external:network:10.0.0.1' --stamped-at 1 \
+              | ${personaShims}/bin/wire-decode-message \
+              --expect-recipient designer --expect-body witness \
+              --expect-origin 'external:network:10.0.0.1'
+            touch $out
+          '';
+
+          # T3 — negative tests / signals caught. The decoder must
+          # reject malformed bytes, truncated frames, and wrong
+          # frame kinds with a typed error rather than silently
+          # passing or panicking with no diagnostic.
+          wire-malformed-bytes-decode-rejects = context.pkgs.runCommand "wire-malformed-bytes-decode-rejects" { } ''
+            set +e
+            printf '\x42\x42\x42\x42garbage-not-a-frame' | \
+              ${personaShims}/bin/wire-decode-message \
+              --expect-recipient designer --expect-body anything 2> stderr.txt
+            decode_exit=$?
+            set -e
+            if [ "$decode_exit" -eq 0 ]; then
+              printf 'wire-decode-message did not reject malformed bytes\n' >&2
+              exit 1
+            fi
+            test -s stderr.txt
+            mkdir -p $out
+            cp stderr.txt $out/stderr.txt
+            printf 'rejected as expected with exit %s\n' "$decode_exit" > $out/witness.txt
+          '';
+          wire-truncated-frame-decode-rejects = context.pkgs.runCommand "wire-truncated-frame-decode-rejects" { } ''
+            set +e
+            ${personaShims}/bin/wire-emit-message \
+              --recipient designer --body 'will be truncated' \
+              | head -c 8 \
+              | ${personaShims}/bin/wire-decode-message \
+              --expect-recipient designer --expect-body 'will be truncated' 2> stderr.txt
+            decode_exit=$?
+            set -e
+            if [ "$decode_exit" -eq 0 ]; then
+              printf 'wire-decode-message did not reject truncated frame\n' >&2
+              exit 1
+            fi
+            test -s stderr.txt
+            mkdir -p $out
+            cp stderr.txt $out/stderr.txt
+            printf 'rejected as expected with exit %s\n' "$decode_exit" > $out/witness.txt
+          '';
+          wire-wrong-frame-kind-decode-rejects = context.pkgs.runCommand "wire-wrong-frame-kind-decode-rejects" { } ''
+            set +e
+            ${personaShims}/bin/wire-emit-message-reply \
+              --variant submission-accepted --slot 1 \
+              | ${personaShims}/bin/wire-decode-message \
+              --expect-recipient designer --expect-body anything 2> stderr.txt
+            decode_exit=$?
+            set -e
+            if [ "$decode_exit" -eq 0 ]; then
+              printf 'wire-decode-message accepted a reply frame on the request decoder\n' >&2
+              exit 1
+            fi
+            test -s stderr.txt
+            mkdir -p $out
+            cp stderr.txt $out/stderr.txt
+            printf 'rejected as expected with exit %s\n' "$decode_exit" > $out/witness.txt
+          '';
+
+          # T4 — chained midway witnesses. Each step is its own
+          # derivation; intermediate artifacts (frame bytes, NOTA
+          # records) land in /nix/store/ and the final summary
+          # derivation ties them together. If any link breaks, the
+          # specific intermediate that diverged is the one that fails.
+          wire-chain-request-bytes = context.pkgs.runCommand "wire-chain-request-bytes" { } ''
+            ${personaShims}/bin/wire-emit-message \
+              --variant stamped \
+              --recipient designer \
+              --body 'chained-midway-witness' \
+              --origin 'external:owner' \
+              --stamped-at 99 \
+              > $out
+          '';
+          wire-chain-request-nota = context.pkgs.runCommand "wire-chain-request-nota" { } ''
+            ${personaShims}/bin/wire-decode-message \
+              --expect-recipient designer \
+              --expect-body 'chained-midway-witness' \
+              --expect-origin 'external:owner' \
+              --capture-nota $out \
+              < ${self.checks.${system}.wire-chain-request-bytes}
+          '';
+          wire-chain-reply-bytes = context.pkgs.runCommand "wire-chain-reply-bytes" { } ''
+            ${personaShims}/bin/wire-emit-message-reply \
+              --variant inbox-listing \
+              --entry 'slot=1,sender=owner,body=chained-midway-witness' \
+              > $out
+          '';
+          wire-chain-reply-nota = context.pkgs.runCommand "wire-chain-reply-nota" { } ''
+            ${personaShims}/bin/wire-decode-message-reply \
+              --expect inbox-listing \
+              --expect-entry-count 1 \
+              --expect-entry-body 'chained-midway-witness' \
+              --capture-nota $out \
+              < ${self.checks.${system}.wire-chain-reply-bytes}
+          '';
+          # T4-bonus: real-daemon midway witness. Spawn the actual
+          # persona-message-daemon and a one-shot wire-tap-router as
+          # its forwarding target. The tap captures the bytes the
+          # daemon actually sends toward "the router," writes them to
+          # a Nix-store artifact, and we decode + assert the origin
+          # the daemon's SO_PEERCRED stamping produced. This is the
+          # midway witness: the daemon's wire output is no longer a
+          # black-box claim, it's an inspectable byte sequence.
+          persona-message-daemon-stamps-origin-via-tap = context.pkgs.runCommand "persona-message-daemon-stamps-origin-via-tap" {
+            nativeBuildInputs = [ context.pkgs.coreutils ];
+          } ''
+            set -euo pipefail
+            workdir="$(mktemp -d)"
+            tap_socket="$workdir/tap.sock"
+            message_socket="$workdir/message.sock"
+            captured_bytes="$workdir/captured.bytes"
+            tap_ready="$workdir/tap.ready"
+            daemon_stderr="$workdir/daemon.stderr"
+            cli_out="$workdir/cli.out"
+            cli_err="$workdir/cli.err"
+
+            # 1. Start the tap-router. It binds tap.sock, captures
+            #    the first frame it receives, replies with a canned
+            #    SubmissionAccepted slot=999, and exits.
+            ${personaShims}/bin/wire-tap-router \
+              --socket "$tap_socket" \
+              --capture "$captured_bytes" \
+              --reply 'submission-accepted-slot=999' \
+              --ready-file "$tap_ready" &
+            tap_pid=$!
+
+            # Wait for the tap to be bound (ready file written).
+            for _ in $(seq 1 100); do
+              [ -f "$tap_ready" ] && break
+              sleep 0.05
+            done
+            test -f "$tap_ready"
+
+            # 2. Start persona-message-daemon. It binds message.sock
+            #    and forwards to tap.sock as if it were the router.
+            ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon \
+              "$message_socket" "$tap_socket" 2> "$daemon_stderr" &
+            daemon_pid=$!
+
+            # Wait for the message socket to appear.
+            for _ in $(seq 1 100); do
+              [ -S "$message_socket" ] && break
+              sleep 0.05
+            done
+            test -S "$message_socket"
+
+            # 3. Send a real message through the CLI. The daemon
+            #    accepts, reads SO_PEERCRED (same uid as builder ⇒
+            #    External(Owner)), wraps into StampedMessageSubmission,
+            #    forwards to tap_socket. The tap captures and replies.
+            set +e
+            PERSONA_MESSAGE_SOCKET="$message_socket" \
+              ${inputs.persona-message.packages.${system}.default}/bin/message \
+              '(Send tap-recipient "tap-captured-body")' > "$cli_out" 2> "$cli_err"
+            cli_exit=$?
+            set -e
+
+            # 4. Wait for the tap to finish writing the capture and exit.
+            wait "$tap_pid" || true
+            # Shut the daemon down — its job is done.
+            kill "$daemon_pid" 2>/dev/null || true
+            wait "$daemon_pid" 2>/dev/null || true
+
+            # 5. Assert the capture exists.
+            test -s "$captured_bytes"
+
+            # 6. Decode the captured bytes through our shim and
+            #    assert the daemon stamped the origin correctly.
+            ${personaShims}/bin/wire-decode-message \
+              --expect-recipient tap-recipient \
+              --expect-body 'tap-captured-body' \
+              --expect-variant stamped \
+              --expect-origin 'external:owner' \
+              --capture-nota "$workdir/stamped.nota" \
+              < "$captured_bytes"
+
+            # 7. Land artifacts in /nix/store/ for forensic inspection.
+            mkdir -p $out
+            cp "$captured_bytes" $out/captured.bytes
+            cp "$workdir/stamped.nota" $out/stamped.nota
+            cp "$cli_out" $out/cli.out
+            cp "$cli_err" $out/cli.err
+            cp "$daemon_stderr" $out/daemon.stderr
+            printf 'midway witness: persona-message-daemon stamped origin in flight\n' > $out/witness.txt
+            printf '  cli exit:        %s\n' "$cli_exit" >> $out/witness.txt
+            printf '  captured bytes:  %s\n' "$(wc -c < $out/captured.bytes)" >> $out/witness.txt
+            printf '  decoded nota:    %s\n' "$(cat $out/stamped.nota)" >> $out/witness.txt
+            printf '  expected origin: External(Owner) (Nix builder uid)\n' >> $out/witness.txt
+          '';
+
+          wire-chain-summary = context.pkgs.runCommand "wire-chain-summary" { } ''
+            mkdir -p $out
+            cp ${self.checks.${system}.wire-chain-request-bytes} $out/request.bytes
+            cp ${self.checks.${system}.wire-chain-request-nota} $out/request.nota
+            cp ${self.checks.${system}.wire-chain-reply-bytes} $out/reply.bytes
+            cp ${self.checks.${system}.wire-chain-reply-nota} $out/reply.nota
+            # Consistency: the body string travels byte-stable across
+            # all 4 intermediate artifacts. If any link mutates the
+            # body, this final assertion catches it.
+            grep -Fq 'chained-midway-witness' $out/request.nota || {
+              printf 'request.nota missing expected body string\n' >&2
+              exit 1
+            }
+            grep -Fq 'chained-midway-witness' $out/reply.nota || {
+              printf 'reply.nota missing expected body string\n' >&2
+              exit 1
+            }
+            request_size=$(wc -c < $out/request.bytes)
+            reply_size=$(wc -c < $out/reply.bytes)
+            printf 'chained witness: 4 intermediate artifacts consistent\n' > $out/chain-summary.txt
+            printf '  request.bytes:  %s bytes\n' "$request_size" >> $out/chain-summary.txt
+            printf '  request.nota:   %s\n' "$(cat $out/request.nota)" >> $out/chain-summary.txt
+            printf '  reply.bytes:    %s bytes\n' "$reply_size" >> $out/chain-summary.txt
+            printf '  reply.nota:     %s\n' "$(cat $out/reply.nota)" >> $out/chain-summary.txt
           '';
           persona-dev-stack-script-builds = context.pkgs.runCommand "persona-dev-stack-script-builds" { } ''
             test -x ${self.packages.${system}.persona-dev-stack}/bin/persona-dev-stack
