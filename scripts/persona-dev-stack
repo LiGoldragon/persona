@@ -22,6 +22,7 @@ message_socket="$root/message.sock"
 terminal_socket="$root/responder.terminal.sock"
 terminal_store="$root/terminal.redb"
 message_store="$root/message-store"
+router_bootstrap="$root/router-bootstrap.nota"
 router_stdout="$root/router.stdout"
 router_stderr="$root/router.stderr"
 message_daemon_stdout="$root/message-daemon.stdout"
@@ -78,8 +79,17 @@ read_ready_line() {
   fi
 }
 
+capture_contains_text() {
+  local capture_file="$1"
+  local text="$2"
+  local hex
+
+  hex="$(printf '%s' "$text" | od -An -tx1 -v | tr -d ' \n')"
+  grep -Fq "$hex" "$capture_file"
+}
+
 start_router() {
-  coproc PERSONA_ROUTER_PROCESS { "$router_bin" "$router_socket" 2>&1; }
+  coproc PERSONA_ROUTER_PROCESS { "$router_bin" daemon --socket "$router_socket" --bootstrap "$router_bootstrap" 2>&1; }
   router_pid="$PERSONA_ROUTER_PROCESS_PID"
   read_ready_line "persona-router" "${PERSONA_ROUTER_PROCESS[0]}" "$router_stdout" "persona-router-daemon socket=$router_socket"
 }
@@ -101,6 +111,13 @@ start_terminal() {
   }
   terminal_pid="$PERSONA_TERMINAL_PROCESS_PID"
   read_ready_line "persona-terminal" "${PERSONA_TERMINAL_PROCESS[0]}" "$terminal_stdout" "persona-terminal-daemon socket=$terminal_socket"
+}
+
+write_router_bootstrap() {
+  {
+    printf '(RegisterActor (Actor responder %s (EndpointTransport PtySocket "%s" None)))\n' "$terminal_pid" "$terminal_socket"
+    printf '%s\n' '(GrantDirectMessage owner responder)'
+  } >"$router_bootstrap"
 }
 
 write_environment_file() {
@@ -135,6 +152,7 @@ write_stack_manifests() {
     printf '  (TerminalSocket "%s")\n' "$terminal_socket"
     printf '  (TerminalStore "%s")\n' "$terminal_store"
     printf '  (MessageStore "%s")\n' "$message_store"
+    printf '  (RouterBootstrap "%s")\n' "$router_bootstrap"
     printf ')\n'
   } >"$socket_manifest"
 }
@@ -147,6 +165,10 @@ run_smoke() {
   local terminal_connect="$root/terminal-connect.tsv"
   local terminal_input="$root/terminal-input.tsv"
   local terminal_capture="$root/terminal-capture.tsv"
+  local terminal_capture_after_input="$root/terminal-capture-after-input.tsv"
+
+  "$terminal_signal" --socket "$terminal_socket" --terminal responder connect >"$terminal_connect"
+  grep -Fq $'TerminalReady\tresponder\t1' "$terminal_connect"
 
   PERSONA_MESSAGE_SOCKET="$message_socket" \
     PERSONA_MESSAGE_STORE="$message_store" \
@@ -154,30 +176,37 @@ run_smoke() {
     >"$send_output" 2>"$send_error"
   grep -Fq "(SubmissionAccepted " "$send_output"
 
+  "$terminal_signal" --socket "$terminal_socket" --terminal responder capture >"$terminal_capture"
+  grep -Fq $'TerminalCaptured\tresponder\t1' "$terminal_capture"
+  capture_contains_text "$terminal_capture" "hello from persona meta"
+
   PERSONA_MESSAGE_SOCKET="$message_socket" \
     PERSONA_MESSAGE_STORE="$message_store" \
     "$message_bin" '(Inbox responder)' \
     >"$inbox_output" 2>"$inbox_error"
-  grep -Fq "hello from persona meta" "$inbox_output"
-
-  "$terminal_signal" --socket "$terminal_socket" --terminal responder connect >"$terminal_connect"
-  grep -Fq $'TerminalReady\tresponder\t1' "$terminal_connect"
+  if grep -Fq "hello from persona meta" "$inbox_output"; then
+    printf 'delivered message remained in router inbox\n' >&2
+    return 1
+  fi
 
   "$terminal_signal" --socket "$terminal_socket" --terminal responder prompt terminal-side-input >"$terminal_input"
   grep -Fq $'TerminalInputAccepted\tresponder\t1' "$terminal_input"
 
-  "$terminal_signal" --socket "$terminal_socket" --terminal responder capture >"$terminal_capture"
-  grep -Fq $'TerminalCaptured\tresponder\t1' "$terminal_capture"
+  "$terminal_signal" --socket "$terminal_socket" --terminal responder capture >"$terminal_capture_after_input"
+  grep -Fq $'TerminalCaptured\tresponder\t1' "$terminal_capture_after_input"
+  capture_contains_text "$terminal_capture_after_input" "terminal-side-input"
 
   printf 'persona dev stack smoke=passed\n'
   printf 'router send=%s\n' "$send_output"
   printf 'router inbox=%s\n' "$inbox_output"
   printf 'terminal capture=%s\n' "$terminal_capture"
+  printf 'terminal capture after input=%s\n' "$terminal_capture_after_input"
 }
 
+start_terminal
+write_router_bootstrap
 start_router
 start_message_daemon
-start_terminal
 write_environment_file
 write_stack_manifests
 
