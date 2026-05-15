@@ -444,7 +444,7 @@ test. Omitted components use the Nix-provided default.
   operator's lane; it is not on the wire.
 - **`signal-persona::SpawnEnvelope`** — the **child-readable typed
   wire form**. Carries engine_id, component_kind, component_name,
-  state_dir, domain_socket_path, domain_socket_mode,
+  owner_identity, state_dir, domain_socket_path, domain_socket_mode,
   supervision_socket_path, supervision_socket_mode, peer_sockets,
   manager_socket, and supervision_protocol_version. The manager writes
   the envelope file at
@@ -982,7 +982,8 @@ Migration rules:
 - Internal component sockets are private to the Persona authority boundary;
   the `message.sock` is group-writable for owner ingress (bound by `persona-message-daemon`, the supervised prototype message-ingress component). `router.sock` (mode 0600) is bound by `persona-router` for internal traffic. The "proxy" name retires; the daemon itself stays.
 - Spawn envelopes carry the component's own state/socket paths and every peer
-  socket path; components do not derive peers by scanning directories.
+  socket path plus the manager's owner identity; components do not derive peers
+  by scanning directories and do not infer engine ownership from their own uid.
 - Local engine trust is created by manager-owned sockets, ownership, modes, and
   spawn envelopes. Components do not accept agent-supplied in-band auth proofs
   as authority.

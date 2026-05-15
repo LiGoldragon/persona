@@ -333,6 +333,7 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
         .envelope_with_command(EngineComponent::Router, fixture.envelope_capture_command())
         .await;
     let envelope_path = envelope.envelope_path().to_path_buf();
+    let owner_identity = envelope.owner_identity().clone();
 
     DirectProcessFixture::launch(&launcher, envelope)
         .await
@@ -374,6 +375,7 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
         signal_envelope.component_name,
         signal_persona_auth::ComponentName::Router
     );
+    assert_eq!(signal_envelope.owner_identity, owner_identity);
     assert!(
         signal_envelope
             .state_dir

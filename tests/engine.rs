@@ -13,7 +13,7 @@ use persona::launch::{
     EnvironmentVariableName, EnvironmentVariableValue, ExecutablePath,
     ReadCommandResolutionAttemptCount, ResolveComponentCommands, ResolvedComponentCommands,
 };
-use signal_persona_auth::EngineId;
+use signal_persona_auth::{EngineId, OwnerIdentity, UnixUserId};
 
 struct TemporaryEngineRoot {
     root: PathBuf,
@@ -255,13 +255,15 @@ fn constraint_engine_layout_assigns_socket_modes_by_component_boundary() {
 async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     let root = TemporaryEngineRoot::new("spawn-envelope");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
-    let layout = paths.engine_layout(EngineId::new("engine-gamma"));
+    let owner_identity = OwnerIdentity::UnixUser(UnixUserId::new(4242));
+    let layout = paths.engine_layout_with_owner(EngineId::new("engine-gamma"), owner_identity.clone());
     let resolved_commands = TemporaryEngineRoot::resolved_commands().await;
     let envelope = layout
         .spawn_envelope(EngineComponent::Router, &resolved_commands)
         .expect("router spawn envelope exists");
 
     assert_eq!(envelope.engine().as_str(), "engine-gamma");
+    assert_eq!(envelope.owner_identity(), &owner_identity);
     assert_eq!(envelope.component(), EngineComponent::Router);
     assert!(envelope.state_dir().ends_with("engine-gamma"));
     assert!(envelope.state_path().ends_with("router.redb"));
@@ -308,6 +310,7 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
         signal_envelope.component_name,
         signal_persona_auth::ComponentName::Router
     );
+    assert_eq!(signal_envelope.owner_identity, owner_identity);
     assert!(
         signal_envelope
             .state_dir
