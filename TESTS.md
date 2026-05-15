@@ -228,6 +228,7 @@ SO_PEERCRED before forwarding to the router.
 | Witness | What it proves |
 |---|---|
 | `message.envelope` is recorded in the process/socket manifests | The stateful stack starts `persona-message-daemon` through the same spawn-envelope owner path used by the managed engine, not the old daemon-uid fallback. |
+| `router.redb` is passed to `persona-router-daemon` and created during smoke | The stateful stack exercises durable router tables instead of the in-memory direct-run fallback. |
 | `message Send` returns `(SubmissionAccepted N)` | The CLI's `MessageSubmission` reaches `persona-message-daemon`, gets stamped, forwards to `persona-router`, and the router accepts at a slot. |
 | `message Inbox responder` omits the delivered body | The router accepted the message and delivered it through `persona-harness` to the terminal path; the recipient inbox no longer exposes the already-delivered body. |
 | `persona-harness-daemon` reports readiness | The harness delivery boundary is live in the smoke, not bypassed by direct terminal registration. |

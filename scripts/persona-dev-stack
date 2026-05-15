@@ -21,6 +21,7 @@ router_socket="$root/router.sock"
 message_socket="$root/message.sock"
 terminal_socket="$root/responder.terminal.sock"
 harness_socket="$root/responder.harness.sock"
+router_store="$root/router.redb"
 terminal_store="$root/terminal.redb"
 message_store="$root/message-store"
 router_bootstrap="$root/router-bootstrap.nota"
@@ -102,7 +103,7 @@ capture_contains_text() {
 }
 
 start_router() {
-  coproc PERSONA_ROUTER_PROCESS { "$router_bin" daemon --socket "$router_socket" --bootstrap "$router_bootstrap" 2>&1; }
+  coproc PERSONA_ROUTER_PROCESS { "$router_bin" daemon --socket "$router_socket" --store "$router_store" --bootstrap "$router_bootstrap" 2>&1; }
   router_pid="$PERSONA_ROUTER_PROCESS_PID"
   read_ready_line "persona-router" "${PERSONA_ROUTER_PROCESS[0]}" "$router_stdout" "persona-router-daemon socket=$router_socket"
 }
@@ -171,6 +172,7 @@ write_environment_file() {
 export PERSONA_MESSAGE_SOCKET='$message_socket'
 export PERSONA_MESSAGE_ROUTER_SOCKET='$router_socket'
 export PERSONA_MESSAGE_STORE='$message_store'
+export PERSONA_ROUTER_STORE='$router_store'
 $(if [ -n "$harness_daemon" ]; then printf "export PERSONA_HARNESS_SOCKET='%s'\n" "$harness_socket"; fi)
 export PERSONA_TERMINAL_SOCKET='$terminal_socket'
 export PERSONA_TERMINAL_STORE='$terminal_store'
@@ -204,6 +206,7 @@ write_stack_manifests() {
     printf '  (RouterSocket "%s")\n' "$router_socket"
     printf '  (MessageSocket "%s")\n' "$message_socket"
     printf '  (MessageSpawnEnvelope "%s")\n' "$message_spawn_envelope"
+    printf '  (RouterStore "%s")\n' "$router_store"
     if [ -n "$harness_daemon" ]; then
       printf '  (HarnessSocket "%s")\n' "$harness_socket"
     fi
@@ -247,6 +250,11 @@ run_smoke() {
     return 1
   fi
 
+  if [ ! -f "$router_store" ]; then
+    printf 'router store was not created: %s\n' "$router_store" >&2
+    return 1
+  fi
+
   "$terminal_signal" --socket "$terminal_socket" --terminal responder prompt terminal-side-input >"$terminal_input"
   grep -Fq $'TerminalInputAccepted\tresponder\t1' "$terminal_input"
 
@@ -257,6 +265,7 @@ run_smoke() {
   printf 'persona dev stack smoke=passed\n'
   printf 'router send=%s\n' "$send_output"
   printf 'router inbox=%s\n' "$inbox_output"
+  printf 'router store=%s\n' "$router_store"
   printf 'terminal capture=%s\n' "$terminal_capture"
   printf 'terminal capture after input=%s\n' "$terminal_capture_after_input"
 }
