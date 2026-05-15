@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
-use signal_core::{ExchangeIdentifier, FrameBody, NonEmpty, Reply, SignalVerb, SubReply};
+use signal_core::{ExchangeIdentifier, NonEmpty, Reply, SignalVerb, SubReply};
 use signal_persona::{
     ComponentHealth, ComponentHealthQuery, ComponentHealthReport, ComponentHello,
     ComponentIdentity, ComponentKind, ComponentName, ComponentReadinessQuery, ComponentReady,
-    GracefulStopAcknowledgement, SupervisionFrame, SupervisionProtocolVersion, SupervisionReply,
-    SupervisionRequest,
+    GracefulStopAcknowledgement, SupervisionFrame, SupervisionFrameBody as FrameBody,
+    SupervisionProtocolVersion, SupervisionReply, SupervisionRequest,
 };
 
 struct FixtureProcess {

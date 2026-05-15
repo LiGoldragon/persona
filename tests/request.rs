@@ -4,12 +4,13 @@ use persona::request::{
 use persona::schema::EngineStatusReport;
 use persona::transport::PersonaFrameCodec;
 use signal_core::{
-    ExchangeIdentifier, ExchangeLane, ExchangeSequence, FrameBody, NonEmpty, Operation, Request,
+    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Operation, Request,
     RequestRejectionReason, SessionEpoch, SignalVerb,
 };
 use signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, ComponentStatus,
-    EngineGeneration, EnginePhase, EngineReply, EngineStatus, Frame as PersonaFrame,
+    EngineFrame as PersonaFrame, EngineFrameBody as FrameBody, EngineGeneration, EnginePhase,
+    EngineReply, EngineStatus,
 };
 
 struct RequestFixture {
@@ -84,7 +85,7 @@ fn persona_frame_codec_rejects_mismatched_signal_verb() {
         exchange: ExchangeIdentifier::new(
             SessionEpoch::new(1),
             ExchangeLane::Connector,
-            ExchangeSequence::first(),
+            LaneSequence::first(),
         ),
         request,
     });

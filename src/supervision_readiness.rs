@@ -5,14 +5,14 @@ use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use signal_core::{
-    ExchangeIdentifier, ExchangeLane, ExchangeSequence, FrameBody, NonEmpty, Reply, Request,
-    SessionEpoch, SignalVerb, SubReply,
+    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
+    SignalVerb, SubReply,
 };
 use signal_persona::{
     ComponentHealth, ComponentHealthQuery, ComponentHealthReport, ComponentHello,
     ComponentIdentity, ComponentKind, ComponentName, ComponentNotReady, ComponentReadinessQuery,
-    ComponentReady, SupervisionFrame, SupervisionProtocolVersion, SupervisionReply,
-    SupervisionRequest,
+    ComponentReady, SupervisionFrame, SupervisionFrameBody as FrameBody,
+    SupervisionProtocolVersion, SupervisionReply, SupervisionRequest,
 };
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -448,7 +448,7 @@ impl SupervisionFrameCodec {
         ExchangeIdentifier::new(
             SessionEpoch::new(1),
             ExchangeLane::Connector,
-            ExchangeSequence::first(),
+            LaneSequence::first(),
         )
     }
 }

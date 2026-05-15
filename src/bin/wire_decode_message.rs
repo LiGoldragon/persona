@@ -13,8 +13,8 @@
 
 use std::io::Read;
 
-use signal_core::{FrameBody, SignalVerb};
-use signal_persona_message::{Frame, MessageRequest};
+use signal_core::SignalVerb;
+use signal_persona_message::{Frame, FrameBody, MessageRequest};
 
 struct Expectations {
     recipient: String,

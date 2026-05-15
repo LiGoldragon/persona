@@ -14,11 +14,9 @@
 
 use std::io::Write;
 
-use signal_core::{
-    ExchangeIdentifier, ExchangeLane, ExchangeSequence, FrameBody, Request, SessionEpoch,
-};
+use signal_core::{ExchangeIdentifier, ExchangeLane, LaneSequence, Request, SessionEpoch};
 use signal_persona_message::{
-    Frame, MessageBody, MessageKind, MessageRecipient, MessageRequest, MessageSubmission,
+    Frame, FrameBody, MessageBody, MessageKind, MessageRecipient, MessageRequest, MessageSubmission,
 };
 
 struct Cli {
@@ -60,7 +58,7 @@ fn main() {
         exchange: ExchangeIdentifier::new(
             SessionEpoch::new(1),
             ExchangeLane::Connector,
-            ExchangeSequence::first(),
+            LaneSequence::first(),
         ),
         request: Request::from_payload(request),
     });

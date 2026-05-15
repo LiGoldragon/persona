@@ -4,10 +4,12 @@ use std::os::unix::fs::FileTypeExt;
 
 use kameo::actor::ActorRef;
 use signal_core::{
-    ExchangeIdentifier, ExchangeLane, ExchangeSequence, FrameBody, NonEmpty, Reply, Request,
-    SessionEpoch, SignalVerb, SubReply,
+    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
+    SignalVerb, SubReply,
 };
-use signal_persona::{EngineReply, EngineRequest, Frame};
+use signal_persona::{
+    EngineFrame as Frame, EngineFrameBody as FrameBody, EngineReply, EngineRequest,
+};
 use signal_persona_auth::EngineId;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
@@ -181,7 +183,7 @@ impl PersonaFrameCodec {
         ExchangeIdentifier::new(
             SessionEpoch::new(1),
             ExchangeLane::Connector,
-            ExchangeSequence::first(),
+            LaneSequence::first(),
         )
     }
 }
