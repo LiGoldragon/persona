@@ -5,9 +5,10 @@ use persona::engine_event::{
 };
 use persona::manager::EngineManager;
 use persona::manager_store::{
-    AppendEngineEvent, ComponentProcessState, ManagerStore, ManagerStoreLocation,
-    PersistEngineRecord, ReadEngineEvents, ReadEngineLifecycleSnapshot, ReadEngineRecord,
-    ReadEngineStatusSnapshot, ReadManagerStoreWriteCount,
+    AppendEngineEvent, ComponentLifecycleSnapshotRow, ComponentProcessState,
+    ComponentStatusSnapshotRow, ManagerStore, ManagerStoreLocation, PersistEngineRecord,
+    ReadEngineEvents, ReadEngineLifecycleSnapshot, ReadEngineRecord, ReadEngineStatusSnapshot,
+    ReadManagerStoreWriteCount, RebuildSnapshotsFromEventLog,
 };
 use persona::schema::{
     ComponentOperationReport, EngineEventBodyReport, EngineEventReport, EngineEventSourceKind,
@@ -455,4 +456,142 @@ async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
         .expect("manager stops after snapshot witness");
     store.stop_gracefully().await.expect("manager store stops");
     store.wait_for_shutdown().await;
+}
+
+/// Architectural-truth witness: the event log is authoritative, the
+/// snapshot tables are projections. A `RebuildSnapshotsFromEventLog`
+/// drops every snapshot row and replays the event log; the post-rebuild
+/// snapshot contents equal the pre-rebuild contents because the event
+/// log carries the truth.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapshot_truncation() {
+    let fixture = StoreFixture::new("persona-manager-store-snapshot-rebuild");
+    let engine = EngineId::new("engine-snapshot-rebuild");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+
+    // Append a lifecycle arc that fully exercises both reducers.
+    store
+        .ask(AppendEngineEvent::new(StoreFixture::spawned_event(
+            engine.clone(),
+            "persona-router",
+        )))
+        .await
+        .expect("router spawn event appends");
+
+    let ready_router = EngineEventDraft::from_input(EngineEventDraftInput {
+        engine: engine.clone(),
+        source: EngineEventSource::Manager,
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(
+            ComponentName::new("persona-router"),
+        )),
+    });
+    store
+        .ask(AppendEngineEvent::new(ready_router))
+        .await
+        .expect("router ready event appends");
+
+    store
+        .ask(AppendEngineEvent::new(StoreFixture::spawned_event(
+            engine.clone(),
+            "persona-terminal",
+        )))
+        .await
+        .expect("terminal spawn event appends");
+
+    // Capture the snapshot the reducer produced as it absorbed each event.
+    let lifecycle_before = sorted_lifecycle(
+        store
+            .ask(ReadEngineLifecycleSnapshot::new(engine.clone()))
+            .await
+            .expect("lifecycle snapshot reads before rebuild"),
+    );
+    let status_before = sorted_status(
+        store
+            .ask(ReadEngineStatusSnapshot::new(engine.clone()))
+            .await
+            .expect("status snapshot reads before rebuild"),
+    );
+    assert_eq!(lifecycle_before.len(), 2, "two components in lifecycle");
+    assert_eq!(status_before.len(), 2, "two components in status");
+
+    // Force a truncate-and-rebuild. If the reducer-on-append shape were the
+    // only source of snapshot state, this would leave both tables empty.
+    // The event log replay is what restores them.
+    store
+        .ask(RebuildSnapshotsFromEventLog)
+        .await
+        .expect("rebuild from event log succeeds");
+
+    let lifecycle_after = sorted_lifecycle(
+        store
+            .ask(ReadEngineLifecycleSnapshot::new(engine.clone()))
+            .await
+            .expect("lifecycle snapshot reads after rebuild"),
+    );
+    let status_after = sorted_status(
+        store
+            .ask(ReadEngineStatusSnapshot::new(engine.clone()))
+            .await
+            .expect("status snapshot reads after rebuild"),
+    );
+
+    assert_eq!(
+        lifecycle_after, lifecycle_before,
+        "lifecycle snapshot after rebuild equals pre-rebuild content"
+    );
+    assert_eq!(
+        status_after, status_before,
+        "status snapshot after rebuild equals pre-rebuild content"
+    );
+
+    // The router component should be Ready/Running, terminal should be
+    // Launched/Starting — proof the reducer absorbed the per-event arc.
+    let router_lifecycle = lifecycle_after
+        .iter()
+        .find(|row| row.component().as_str() == "persona-router")
+        .expect("router lifecycle row present");
+    assert_eq!(
+        router_lifecycle.process_state(),
+        ComponentProcessState::Ready
+    );
+    let router_status = status_after
+        .iter()
+        .find(|row| row.component().as_str() == "persona-router")
+        .expect("router status row present");
+    assert_eq!(
+        router_status.health(),
+        signal_persona::ComponentHealth::Running
+    );
+
+    let terminal_lifecycle = lifecycle_after
+        .iter()
+        .find(|row| row.component().as_str() == "persona-terminal")
+        .expect("terminal lifecycle row present");
+    assert_eq!(
+        terminal_lifecycle.process_state(),
+        ComponentProcessState::Launched
+    );
+    let terminal_status = status_after
+        .iter()
+        .find(|row| row.component().as_str() == "persona-terminal")
+        .expect("terminal status row present");
+    assert_eq!(
+        terminal_status.health(),
+        signal_persona::ComponentHealth::Starting
+    );
+
+    store.stop_gracefully().await.expect("manager store stops");
+    store.wait_for_shutdown().await;
+}
+
+fn sorted_lifecycle(
+    mut rows: Vec<ComponentLifecycleSnapshotRow>,
+) -> Vec<ComponentLifecycleSnapshotRow> {
+    rows.sort_by(|a, b| a.component().as_str().cmp(b.component().as_str()));
+    rows
+}
+
+fn sorted_status(mut rows: Vec<ComponentStatusSnapshotRow>) -> Vec<ComponentStatusSnapshotRow> {
+    rows.sort_by(|a, b| a.component().as_str().cmp(b.component().as_str()));
+    rows
 }

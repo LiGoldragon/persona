@@ -286,6 +286,39 @@ impl ManagerTables {
         })?)
     }
 
+    /// Drop every row in both snapshot tables, then replay the event log
+    /// to materialise them again. Used by maintenance paths and by
+    /// architectural-truth tests that prove the event log is the
+    /// authoritative source — the snapshot rows must reappear with the
+    /// same contents after a forced truncation. The snapshot tables are
+    /// always projections; this operation never loses durable state.
+    fn truncate_and_rebuild_snapshots(&self) -> Result<()> {
+        let lifecycle_keys: Vec<String> = self.database.read(|transaction| {
+            Ok(ENGINE_LIFECYCLE_SNAPSHOT
+                .iter(transaction)?
+                .into_iter()
+                .map(|(key, _row)| key)
+                .collect())
+        })?;
+        let status_keys: Vec<String> = self.database.read(|transaction| {
+            Ok(ENGINE_STATUS_SNAPSHOT
+                .iter(transaction)?
+                .into_iter()
+                .map(|(key, _row)| key)
+                .collect())
+        })?;
+        self.database.write(|transaction| {
+            for key in &lifecycle_keys {
+                ENGINE_LIFECYCLE_SNAPSHOT.remove(transaction, key.as_str())?;
+            }
+            for key in &status_keys {
+                ENGINE_STATUS_SNAPSHOT.remove(transaction, key.as_str())?;
+            }
+            Ok(())
+        })?;
+        self.rebuild_snapshots_from_event_log()
+    }
+
     fn reduce_event_into_snapshots(
         transaction: &redb::WriteTransaction,
         event: &EngineEvent,
@@ -423,6 +456,12 @@ impl ManagerStore {
         engine: &EngineId,
     ) -> Result<Vec<ComponentStatusSnapshotRow>> {
         self.tables()?.engine_status_snapshot(engine)
+    }
+
+    fn force_rebuild_snapshots(&mut self) -> Result<()> {
+        self.tables()?.truncate_and_rebuild_snapshots()?;
+        self.write_count = self.write_count.saturating_add(1);
+        Ok(())
     }
 
     fn write_count(&self) -> u64 {
@@ -646,5 +685,24 @@ impl Message<ReadEngineStatusSnapshot> for ManagerStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.read_engine_status_snapshot(&message.engine)
+    }
+}
+
+/// Operational and architectural-truth verb: drop every row in both
+/// snapshot tables and rebuild them from the event log. The event log
+/// is the authoritative source; snapshots are projections. After this
+/// call, both snapshot tables have exactly the same rows the reducer
+/// would produce from the persisted event sequence.
+pub struct RebuildSnapshotsFromEventLog;
+
+impl Message<RebuildSnapshotsFromEventLog> for ManagerStore {
+    type Reply = Result<()>;
+
+    async fn handle(
+        &mut self,
+        _message: RebuildSnapshotsFromEventLog,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.force_rebuild_snapshots()
     }
 }
