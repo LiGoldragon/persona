@@ -1236,6 +1236,7 @@ The apex repo owns tests that prove cross-component shape:
 | engine manager hydrates component health from the status snapshot on startup | `cargo test --test manager_store constraint_engine_manager_hydrates_component_health_from_snapshot` |
 | snapshot tables rebuild from the event log after a `ManagerStore::open` against an empty snapshot table | `cargo test --test manager_store constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapshot_truncation` |
 | manager startup detects orphans — `ComponentSpawned` without matching `ComponentReady` or `ComponentExited` — and appends `ComponentOrphaned` events | `cargo test --test manager_store constraint_manager_startup_appends_component_orphaned_for_unfinished_spawn` |
+| event-log append and snapshot reduce land in one redb write transaction (no daemon crash can persist an event without its snapshot reduction) | `cargo test --test manager_store constraint_event_append_and_snapshot_reduce_share_one_write_transaction` |
 | direct process launcher observes natural child exit and appends `ComponentExited` to manager event log | `cargo test --test direct_process constraint_component_launcher_observes_natural_child_exit_and_appends_event` |
 | persona CLI mutation reaches manager.redb via daemon path | `nix flake check .#persona-daemon-persists-cli-mutation-to-manager-store` |
 | sandbox runner is a Nix-owned app | `nix flake check .#persona-engine-sandbox-script-builds` |

@@ -719,3 +719,78 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
     store.stop_gracefully().await.expect("manager store stops");
     store.wait_for_shutdown().await;
 }
+
+/// Architectural-truth witness: the event-log append and the snapshot
+/// reduce land in one redb write transaction. A daemon crash between
+/// `ENGINE_EVENTS.insert` and the reducer's snapshot writes is
+/// structurally impossible — they share a transaction; redb commits or
+/// rolls back both together. The source scan reads `manager_store.rs`
+/// and asserts that `write_engine_event`'s body contains both the
+/// `ENGINE_EVENTS.insert` and the `reduce_event_into_snapshots` call,
+/// in that order, inside one `self.database.write(` closure.
+#[test]
+fn constraint_event_append_and_snapshot_reduce_share_one_write_transaction() {
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/manager_store.rs"),
+    )
+    .expect("manager_store.rs source readable");
+
+    let signature = "fn write_engine_event(&self, event: &EngineEvent) -> Result<()> {";
+    let body_start = source
+        .find(signature)
+        .expect("write_engine_event signature appears in manager_store.rs");
+    let body_after = &source[body_start..];
+
+    // Scan a generous window past the signature and rely on the
+    // ordering checks below to anchor what counts as the method body.
+    let window_end = body_start
+        + body_after
+            .find("\n    }\n")
+            .expect("write_engine_event body ends with a `}`");
+    let body = &source[body_start..window_end];
+
+    assert!(
+        body.contains("self.database.write("),
+        "write_engine_event must use a single `self.database.write(` closure"
+    );
+    let insert_position = body
+        .find("ENGINE_EVENTS.insert(transaction")
+        .expect("write_engine_event must call `ENGINE_EVENTS.insert(transaction, ...)`");
+    let reduce_position = body
+        .find("Self::reduce_event_into_snapshots(transaction")
+        .expect(
+            "write_engine_event must call `Self::reduce_event_into_snapshots(transaction, ...)`",
+        );
+
+    assert!(
+        insert_position < reduce_position,
+        "event-log insert must precede the snapshot reduce in one transaction"
+    );
+
+    // Confirm the call ordering really is inside one closure: between
+    // the `self.database.write(` opening and the matching `})?)` close,
+    // both the insert and the reduce appear exactly once.
+    let write_open = body
+        .find("self.database.write(")
+        .expect("write_engine_event opens one write transaction");
+    let close_marker = "        })?)";
+    let write_close_relative = body[write_open..]
+        .find(close_marker)
+        .expect("write transaction closes inside the method");
+    let write_close = write_open + write_close_relative;
+    let closure_body = &body[write_open..write_close];
+    assert_eq!(
+        closure_body
+            .matches("ENGINE_EVENTS.insert(transaction")
+            .count(),
+        1,
+        "exactly one event-log insert per call to write_engine_event"
+    );
+    assert_eq!(
+        closure_body
+            .matches("Self::reduce_event_into_snapshots(transaction")
+            .count(),
+        1,
+        "exactly one snapshot reduce per call to write_engine_event"
+    );
+}
