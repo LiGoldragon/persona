@@ -111,6 +111,16 @@ impl EngineState {
             .find(|status| status.name == *component)
     }
 
+    /// Overwrite one component's `health` field from a manager snapshot row.
+    /// `desired_state` and other fields stay untouched: snapshots reflect the
+    /// observed runtime, while `desired_state` is operator intent.
+    pub fn set_component_health(&mut self, component: &ComponentName, health: ComponentHealth) {
+        if let Some(status) = self.component_mut(component) {
+            status.health = health;
+            self.refresh_phase();
+        }
+    }
+
     fn advance_generation(&mut self) {
         self.status.generation =
             EngineGeneration::new(self.status.generation.into_u64().saturating_add(1));

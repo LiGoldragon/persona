@@ -9,7 +9,10 @@ use signal_persona::{
 use signal_persona_auth::EngineId;
 
 use crate::error::{Error, Result};
-use crate::manager_store::{ManagerStore, PersistEngineRecord, ReadEngineRecord};
+use crate::manager_store::{
+    ComponentStatusSnapshotRow, ManagerStore, PersistEngineRecord, ReadEngineRecord,
+    ReadEngineStatusSnapshot,
+};
 use crate::state::EngineState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,9 +79,24 @@ impl EngineManager {
             .ask(ReadEngineRecord::new(engine.clone()))
             .await
             .map_err(|error| Error::actor("read persisted manager engine record", error))?;
-        Ok(record
+        let status_snapshot = store
+            .ask(ReadEngineStatusSnapshot::new(engine.clone()))
+            .await
+            .map_err(|error| Error::actor("read manager status snapshot", error))?;
+        let base_state = record
             .map(|record| EngineState::from_status(record.status().clone()))
-            .unwrap_or_else(EngineState::default_catalog))
+            .unwrap_or_else(EngineState::default_catalog);
+        Ok(Self::overlay_status_snapshot(base_state, status_snapshot))
+    }
+
+    fn overlay_status_snapshot(
+        mut state: EngineState,
+        snapshot_rows: Vec<ComponentStatusSnapshotRow>,
+    ) -> EngineState {
+        for row in snapshot_rows {
+            state.set_component_health(row.component(), row.health());
+        }
+        state
     }
 
     pub async fn stop(reference: ActorRef<Self>) -> Result<()> {

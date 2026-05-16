@@ -4,19 +4,26 @@ use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use sema::{Schema, SchemaVersion, Sema, Table};
-use signal_persona::EngineStatus;
+use signal_persona::{ComponentHealth, ComponentName, EngineStatus};
 use signal_persona_auth::EngineId;
 
 use crate::Result;
-use crate::engine_event::{EngineEvent, EngineEventDraft, EngineEventSequence};
+use crate::engine_event::{
+    ComponentExited, ComponentLifecycleEvent, EngineEvent, EngineEventBody, EngineEventDraft,
+    EngineEventSequence, RestartExhausted,
+};
 
 const MANAGER_SCHEMA: Schema = Schema {
-    version: SchemaVersion::new(2),
+    version: SchemaVersion::new(3),
 };
 
 const ENGINE_RECORDS: Table<&'static str, StoredEngineRecord> =
     Table::new("manager.engine-records");
 const ENGINE_EVENTS: Table<u64, EngineEvent> = Table::new("manager.engine-events");
+const ENGINE_LIFECYCLE_SNAPSHOT: Table<&'static str, ComponentLifecycleSnapshotRow> =
+    Table::new("manager.engine-lifecycle-snapshot");
+const ENGINE_STATUS_SNAPSHOT: Table<&'static str, ComponentStatusSnapshotRow> =
+    Table::new("manager.engine-status-snapshot");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManagerStoreLocation {
@@ -70,6 +77,99 @@ impl StoredEngineRecord {
     }
 }
 
+/// Closed-set process-lifecycle stage for one supervised component within one
+/// engine, materialised by the engine-lifecycle reducer over the
+/// `manager.engine-events` log per `ARCHITECTURE.md` §1.7.
+///
+/// Transitions today: `ComponentSpawned` lifts a row to `Launched`,
+/// `ComponentReady` to `Ready`, `ComponentStopped` to `Stopping`,
+/// `ComponentExited` / `RestartExhausted` to `Exited`. The `SocketBound`
+/// intermediate stage ARCH names is reserved for the future
+/// `ComponentSocketBound` event; the prototype reducer does not emit it
+/// today.
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq,
+)]
+pub enum ComponentProcessState {
+    Launched,
+    Ready,
+    Stopping,
+    Exited,
+}
+
+/// Snapshot row stored in `manager.engine-lifecycle-snapshot`, keyed by
+/// `engine_id::component_name`. The reducer overwrites the row on each
+/// transition; readers project the latest state into `EngineStatus`.
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq,
+)]
+pub struct ComponentLifecycleSnapshotRow {
+    component: ComponentName,
+    process_state: ComponentProcessState,
+}
+
+impl ComponentLifecycleSnapshotRow {
+    pub fn new(component: ComponentName, process_state: ComponentProcessState) -> Self {
+        Self {
+            component,
+            process_state,
+        }
+    }
+
+    pub fn component(&self) -> &ComponentName {
+        &self.component
+    }
+
+    pub fn process_state(&self) -> ComponentProcessState {
+        self.process_state
+    }
+}
+
+/// Snapshot row stored in `manager.engine-status-snapshot`, keyed by
+/// `engine_id::component_name`. Carries the same closed-enum
+/// `ComponentHealth` that `signal_persona::EngineStatus` reports to CLI
+/// status queries, with no extra ARCH-aspirational variants.
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq,
+)]
+pub struct ComponentStatusSnapshotRow {
+    component: ComponentName,
+    health: ComponentHealth,
+}
+
+impl ComponentStatusSnapshotRow {
+    pub fn new(component: ComponentName, health: ComponentHealth) -> Self {
+        Self { component, health }
+    }
+
+    pub fn component(&self) -> &ComponentName {
+        &self.component
+    }
+
+    pub fn health(&self) -> ComponentHealth {
+        self.health
+    }
+}
+
+/// Composite key `engine_id::component_name` used by both snapshot tables.
+/// The `::` separator is unambiguous: `EngineId` and `ComponentName`
+/// values do not contain it in any current shape.
+pub struct SnapshotKey(String);
+
+impl SnapshotKey {
+    pub fn new(engine: &EngineId, component: &ComponentName) -> Self {
+        Self(format!("{}::{}", engine.as_str(), component.as_str()))
+    }
+
+    fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    fn engine_prefix(engine: &EngineId) -> String {
+        format!("{}::", engine.as_str())
+    }
+}
+
 struct ManagerTables {
     database: Sema,
 }
@@ -80,9 +180,13 @@ impl ManagerTables {
         database.write(|transaction| {
             ENGINE_RECORDS.ensure(transaction)?;
             ENGINE_EVENTS.ensure(transaction)?;
+            ENGINE_LIFECYCLE_SNAPSHOT.ensure(transaction)?;
+            ENGINE_STATUS_SNAPSHOT.ensure(transaction)?;
             Ok(())
         })?;
-        Ok(Self { database })
+        let tables = Self { database };
+        tables.rebuild_snapshots_from_event_log()?;
+        Ok(tables)
     }
 
     fn write_engine_record(&self, record: &StoredEngineRecord) -> Result<()> {
@@ -98,9 +202,13 @@ impl ManagerTables {
             .read(|transaction| ENGINE_RECORDS.get(transaction, engine.as_str()))?)
     }
 
+    /// Append one event and reduce it into both snapshot tables in the same
+    /// write transaction, so the event log and the materialised snapshot
+    /// move together or not at all.
     fn write_engine_event(&self, event: &EngineEvent) -> Result<()> {
         Ok(self.database.write(|transaction| {
             ENGINE_EVENTS.insert(transaction, event.key(), event)?;
+            Self::reduce_event_into_snapshots(transaction, event)?;
             Ok(())
         })?)
     }
@@ -126,6 +234,126 @@ impl ManagerTables {
                 .last();
             Ok(sequence)
         })?)
+    }
+
+    fn engine_lifecycle_snapshot(
+        &self,
+        engine: &EngineId,
+    ) -> Result<Vec<ComponentLifecycleSnapshotRow>> {
+        let prefix = SnapshotKey::engine_prefix(engine);
+        Ok(self.database.read(|transaction| {
+            let rows = ENGINE_LIFECYCLE_SNAPSHOT
+                .iter(transaction)?
+                .into_iter()
+                .filter(|(key, _row)| key.starts_with(&prefix))
+                .map(|(_key, row)| row)
+                .collect();
+            Ok(rows)
+        })?)
+    }
+
+    fn engine_status_snapshot(
+        &self,
+        engine: &EngineId,
+    ) -> Result<Vec<ComponentStatusSnapshotRow>> {
+        let prefix = SnapshotKey::engine_prefix(engine);
+        Ok(self.database.read(|transaction| {
+            let rows = ENGINE_STATUS_SNAPSHOT
+                .iter(transaction)?
+                .into_iter()
+                .filter(|(key, _row)| key.starts_with(&prefix))
+                .map(|(_key, row)| row)
+                .collect();
+            Ok(rows)
+        })?)
+    }
+
+    /// Replay every persisted `EngineEvent` into both snapshot tables. Run
+    /// once per `open` so a manager that crashes mid-append still presents
+    /// a snapshot consistent with the event log.
+    fn rebuild_snapshots_from_event_log(&self) -> Result<()> {
+        Ok(self.database.write(|transaction| {
+            let events: Vec<EngineEvent> = ENGINE_EVENTS
+                .iter(transaction)?
+                .into_iter()
+                .map(|(_sequence, event)| event)
+                .collect();
+            for event in &events {
+                Self::reduce_event_into_snapshots(transaction, event)?;
+            }
+            Ok(())
+        })?)
+    }
+
+    fn reduce_event_into_snapshots(
+        transaction: &redb::WriteTransaction,
+        event: &EngineEvent,
+    ) -> sema::Result<()> {
+        let engine = event.engine();
+        match event.body() {
+            EngineEventBody::ComponentSpawned(lifecycle) => Self::write_component_state(
+                transaction,
+                engine,
+                lifecycle.component().clone(),
+                ComponentProcessState::Launched,
+                ComponentHealth::Starting,
+            )?,
+            EngineEventBody::ComponentReady(lifecycle) => Self::write_component_state(
+                transaction,
+                engine,
+                lifecycle.component().clone(),
+                ComponentProcessState::Ready,
+                ComponentHealth::Running,
+            )?,
+            EngineEventBody::ComponentStopped(lifecycle) => Self::write_component_state(
+                transaction,
+                engine,
+                lifecycle.component().clone(),
+                ComponentProcessState::Stopping,
+                ComponentHealth::Stopped,
+            )?,
+            EngineEventBody::ComponentExited(exit) => Self::write_component_state(
+                transaction,
+                engine,
+                exit.component().clone(),
+                ComponentProcessState::Exited,
+                Self::health_from_exit(exit),
+            )?,
+            EngineEventBody::RestartScheduled(_) => {}
+            EngineEventBody::RestartExhausted(restart) => Self::write_component_state(
+                transaction,
+                engine,
+                restart.component().clone(),
+                ComponentProcessState::Exited,
+                ComponentHealth::Failed,
+            )?,
+            EngineEventBody::ComponentUnimplemented(_)
+            | EngineEventBody::EngineStateChanged(_) => {}
+        }
+        Ok(())
+    }
+
+    fn write_component_state(
+        transaction: &redb::WriteTransaction,
+        engine: &EngineId,
+        component: ComponentName,
+        process_state: ComponentProcessState,
+        health: ComponentHealth,
+    ) -> sema::Result<()> {
+        let key = SnapshotKey::new(engine, &component);
+        let lifecycle_row =
+            ComponentLifecycleSnapshotRow::new(component.clone(), process_state);
+        ENGINE_LIFECYCLE_SNAPSHOT.insert(transaction, key.as_str(), &lifecycle_row)?;
+        let status_row = ComponentStatusSnapshotRow::new(component, health);
+        ENGINE_STATUS_SNAPSHOT.insert(transaction, key.as_str(), &status_row)?;
+        Ok(())
+    }
+
+    fn health_from_exit(exit: &ComponentExited) -> ComponentHealth {
+        match exit.exit_code() {
+            Some(0) => ComponentHealth::Stopped,
+            _ => ComponentHealth::Failed,
+        }
     }
 }
 
@@ -174,6 +402,20 @@ impl ManagerStore {
 
     fn read_engine_events(&self, engine: &EngineId) -> Result<Vec<EngineEvent>> {
         self.tables.engine_events(engine)
+    }
+
+    fn read_engine_lifecycle_snapshot(
+        &self,
+        engine: &EngineId,
+    ) -> Result<Vec<ComponentLifecycleSnapshotRow>> {
+        self.tables.engine_lifecycle_snapshot(engine)
+    }
+
+    fn read_engine_status_snapshot(
+        &self,
+        engine: &EngineId,
+    ) -> Result<Vec<ComponentStatusSnapshotRow>> {
+        self.tables.engine_status_snapshot(engine)
     }
 
     fn write_count(&self) -> u64 {
@@ -340,5 +582,49 @@ impl Message<ReadManagerStoreWriteCount> for ManagerStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.write_count()
+    }
+}
+
+pub struct ReadEngineLifecycleSnapshot {
+    engine: EngineId,
+}
+
+impl ReadEngineLifecycleSnapshot {
+    pub fn new(engine: EngineId) -> Self {
+        Self { engine }
+    }
+}
+
+impl Message<ReadEngineLifecycleSnapshot> for ManagerStore {
+    type Reply = Result<Vec<ComponentLifecycleSnapshotRow>>;
+
+    async fn handle(
+        &mut self,
+        message: ReadEngineLifecycleSnapshot,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.read_engine_lifecycle_snapshot(&message.engine)
+    }
+}
+
+pub struct ReadEngineStatusSnapshot {
+    engine: EngineId,
+}
+
+impl ReadEngineStatusSnapshot {
+    pub fn new(engine: EngineId) -> Self {
+        Self { engine }
+    }
+}
+
+impl Message<ReadEngineStatusSnapshot> for ManagerStore {
+    type Reply = Result<Vec<ComponentStatusSnapshotRow>>;
+
+    async fn handle(
+        &mut self,
+        message: ReadEngineStatusSnapshot,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.read_engine_status_snapshot(&message.engine)
     }
 }
