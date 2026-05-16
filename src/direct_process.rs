@@ -391,7 +391,12 @@ impl DirectProcessLauncher {
         envelope: &ComponentSpawnEnvelope,
     ) -> Result<Option<PathBuf>, DirectProcessFailure> {
         match envelope.component() {
-            EngineComponent::Message => Self::write_message_daemon_configuration_file(envelope).map(Some),
+            EngineComponent::Message => {
+                Self::write_message_daemon_configuration_file(envelope).map(Some)
+            }
+            EngineComponent::Introspect => {
+                Self::write_introspect_daemon_configuration_file(envelope).map(Some)
+            }
             _ => Ok(None),
         }
     }
@@ -445,6 +450,81 @@ impl DirectProcessLauncher {
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(
             |source| DirectProcessFailure::Io {
                 operation: "set message daemon configuration file mode",
+                source,
+            },
+        )?;
+        Ok(path)
+    }
+
+    fn write_introspect_daemon_configuration_file(
+        envelope: &ComponentSpawnEnvelope,
+    ) -> Result<PathBuf, DirectProcessFailure> {
+        let router_socket_path = envelope
+            .peers()
+            .iter()
+            .find(|peer| peer.component() == EngineComponent::Router)
+            .ok_or(DirectProcessFailure::MissingRouterPeerForIntrospect)?
+            .domain_socket_path()
+            .to_path_buf();
+        let terminal_socket_path = envelope
+            .peers()
+            .iter()
+            .find(|peer| peer.component() == EngineComponent::Terminal)
+            .ok_or(DirectProcessFailure::MissingTerminalPeerForIntrospect)?
+            .domain_socket_path()
+            .to_path_buf();
+        let configuration = signal_persona_introspect::IntrospectDaemonConfiguration {
+            introspect_socket_path: signal_persona::WirePath::new(
+                envelope.domain_socket_path().to_string_lossy().into_owned(),
+            ),
+            introspect_socket_mode: signal_persona::SocketMode::new(
+                envelope.domain_socket_mode().as_octal(),
+            ),
+            supervision_socket_path: signal_persona::WirePath::new(
+                envelope
+                    .supervision_socket_path()
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            supervision_socket_mode: signal_persona::SocketMode::new(
+                envelope.supervision_socket_mode().as_octal(),
+            ),
+            store_path: signal_persona::WirePath::new(
+                envelope.state_path().to_string_lossy().into_owned(),
+            ),
+            manager_socket_path: signal_persona::WirePath::new(
+                envelope.manager_socket().to_string_lossy().into_owned(),
+            ),
+            router_socket_path: signal_persona::WirePath::new(
+                router_socket_path.to_string_lossy().into_owned(),
+            ),
+            terminal_socket_path: signal_persona::WirePath::new(
+                terminal_socket_path.to_string_lossy().into_owned(),
+            ),
+            owner_identity: envelope.owner_identity().clone(),
+        };
+        let path = envelope
+            .envelope_path()
+            .with_file_name("introspect-daemon.nota");
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|source| DirectProcessFailure::Io {
+                operation: "create introspect daemon configuration directory",
+                source,
+            })?;
+        }
+        let mut encoder = Encoder::new();
+        configuration
+            .encode(&mut encoder)
+            .map_err(DirectProcessFailure::Nota)?;
+        let mut text = encoder.into_string();
+        text.push('\n');
+        std::fs::write(&path, text).map_err(|source| DirectProcessFailure::Io {
+            operation: "write introspect daemon configuration file",
+            source,
+        })?;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(
+            |source| DirectProcessFailure::Io {
+                operation: "set introspect daemon configuration file mode",
                 source,
             },
         )?;
@@ -721,6 +801,10 @@ pub enum DirectProcessFailure {
     EnvelopePathMissingParent { component: EngineComponent },
     #[error("message daemon spawn envelope has no Router peer socket")]
     MissingRouterPeerForMessage,
+    #[error("introspect daemon spawn envelope has no Router peer socket")]
+    MissingRouterPeerForIntrospect,
+    #[error("introspect daemon spawn envelope has no Terminal peer socket")]
+    MissingTerminalPeerForIntrospect,
     #[error("spawn envelope nota: {0}")]
     Nota(#[from] nota_codec::Error),
     #[error("{operation}: {source}")]
