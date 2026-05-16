@@ -397,6 +397,9 @@ impl DirectProcessLauncher {
             EngineComponent::Introspect => {
                 Self::write_introspect_daemon_configuration_file(envelope).map(Some)
             }
+            EngineComponent::Router => {
+                Self::write_router_daemon_configuration_file(envelope).map(Some)
+            }
             _ => Ok(None),
         }
     }
@@ -450,6 +453,60 @@ impl DirectProcessLauncher {
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(
             |source| DirectProcessFailure::Io {
                 operation: "set message daemon configuration file mode",
+                source,
+            },
+        )?;
+        Ok(path)
+    }
+
+    fn write_router_daemon_configuration_file(
+        envelope: &ComponentSpawnEnvelope,
+    ) -> Result<PathBuf, DirectProcessFailure> {
+        let store_path = envelope
+            .state_dir()
+            .join(format!("{}.redb", envelope.component().as_str()));
+        let configuration = signal_persona_router::RouterDaemonConfiguration {
+            router_socket_path: signal_persona::WirePath::new(
+                envelope.domain_socket_path().to_string_lossy().into_owned(),
+            ),
+            router_socket_mode: signal_persona::SocketMode::new(
+                envelope.domain_socket_mode().as_octal(),
+            ),
+            supervision_socket_path: signal_persona::WirePath::new(
+                envelope
+                    .supervision_socket_path()
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            supervision_socket_mode: signal_persona::SocketMode::new(
+                envelope.supervision_socket_mode().as_octal(),
+            ),
+            store_path: signal_persona::WirePath::new(store_path.to_string_lossy().into_owned()),
+            bootstrap_path: None,
+            owner_identity: envelope.owner_identity().clone(),
+        };
+        let path = envelope
+            .envelope_path()
+            .with_file_name("router-daemon.nota");
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|source| DirectProcessFailure::Io {
+                operation: "create router daemon configuration directory",
+                source,
+            })?;
+        }
+        let mut encoder = Encoder::new();
+        configuration
+            .encode(&mut encoder)
+            .map_err(DirectProcessFailure::Nota)?;
+        let mut text = encoder.into_string();
+        text.push('\n');
+        std::fs::write(&path, text).map_err(|source| DirectProcessFailure::Io {
+            operation: "write router daemon configuration file",
+            source,
+        })?;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(
+            |source| DirectProcessFailure::Io {
+                operation: "set router daemon configuration file mode",
                 source,
             },
         )?;

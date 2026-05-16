@@ -25,6 +25,8 @@ router_store="$root/router.redb"
 terminal_store="$root/terminal.redb"
 message_store="$root/message-store"
 router_bootstrap="$root/router-bootstrap.nota"
+router_daemon_configuration="$root/router-daemon.nota"
+router_supervision_socket="$root/router.supervision.sock"
 message_spawn_envelope="$root/message.envelope"
 message_daemon_configuration="$root/message-daemon.nota"
 router_stdout="$root/router.stdout"
@@ -104,7 +106,8 @@ capture_contains_text() {
 }
 
 start_router() {
-  coproc PERSONA_ROUTER_PROCESS { "$router_bin" daemon --socket "$router_socket" --store "$router_store" --bootstrap "$router_bootstrap" 2>&1; }
+  write_router_daemon_configuration
+  coproc PERSONA_ROUTER_PROCESS { "$router_bin" "$router_daemon_configuration" 2>&1; }
   router_pid="$PERSONA_ROUTER_PROCESS_PID"
   read_ready_line "persona-router" "${PERSONA_ROUTER_PROCESS[0]}" "$router_stdout" "persona-router-daemon socket=$router_socket"
 }
@@ -166,6 +169,21 @@ write_message_spawn_envelope() {
     "$router_socket" \
     "$root/persona.sock" \
     >"$message_spawn_envelope"
+}
+
+write_router_daemon_configuration() {
+  local owner_user_id
+  owner_user_id="$(id -u)"
+  # RouterDaemonConfiguration per signal-persona-router:
+  # router_socket_path router_socket_mode supervision_socket_path
+  # supervision_socket_mode store_path bootstrap_path owner_identity
+  printf '(RouterDaemonConfiguration "%s" 384 "%s" 384 "%s" (Some "%s") (UnixUser %s))\n' \
+    "$router_socket" \
+    "$router_supervision_socket" \
+    "$router_store" \
+    "$router_bootstrap" \
+    "$owner_user_id" \
+    >"$router_daemon_configuration"
 }
 
 write_message_daemon_configuration() {

@@ -33,6 +33,7 @@ signal-persona-harness    = { git = "https://github.com/LiGoldragon/signal-perso
 signal-persona-introspect = { git = "https://github.com/LiGoldragon/signal-persona-introspect.git" }
 signal-persona-mind       = { git = "https://github.com/LiGoldragon/signal-persona-mind.git" }
 signal-persona-message    = { git = "https://github.com/LiGoldragon/signal-persona-message.git" }
+signal-persona-router     = { git = "https://github.com/LiGoldragon/signal-persona-router.git" }
 signal-persona-system     = { git = "https://github.com/LiGoldragon/signal-persona-system.git" }
 signal-persona-terminal   = { git = "https://github.com/LiGoldragon/signal-persona-terminal.git" }
 strum                  = { version = "0.28", features = ["derive"] }

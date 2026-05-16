@@ -275,12 +275,12 @@ async fn constraint_component_launcher_does_not_block_manager_mailbox() {
     let fixture = DirectProcessFixture::new("mailbox");
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
     let manager = EngineManager::start().await;
-    let envelope = fixture.envelope(EngineComponent::Router).await;
+    let envelope = fixture.envelope(EngineComponent::Mind).await;
 
     let receipt = DirectProcessFixture::launch(&launcher, envelope)
         .await
         .expect("component process launches");
-    assert_eq!(receipt.component(), EngineComponent::Router);
+    assert_eq!(receipt.component(), EngineComponent::Mind);
 
     let snapshot = launcher
         .ask(ReadLauncherSnapshot)
@@ -297,7 +297,7 @@ async fn constraint_component_launcher_does_not_block_manager_mailbox() {
         .expect("manager mailbox replies while launched child runs");
     assert!(matches!(manager_reply, EngineReply::EngineStatus(_)));
 
-    DirectProcessFixture::stop(&launcher, EngineComponent::Router)
+    DirectProcessFixture::stop(&launcher, EngineComponent::Mind)
         .await
         .expect("component process stops");
     launcher.stop_gracefully().await.expect("launcher stops");
@@ -311,7 +311,7 @@ async fn constraint_component_launcher_does_not_block_manager_mailbox() {
 async fn constraint_component_launcher_reaps_process_group() {
     let fixture = DirectProcessFixture::new("reap");
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
-    let envelope = fixture.envelope(EngineComponent::Router).await;
+    let envelope = fixture.envelope(EngineComponent::Mind).await;
     let receipt = DirectProcessFixture::launch(&launcher, envelope)
         .await
         .expect("component process launches");
@@ -320,7 +320,7 @@ async fn constraint_component_launcher_reaps_process_group() {
     assert!(DirectProcessFixture::process_is_alive(process));
     assert!(DirectProcessFixture::process_is_alive(child_process));
 
-    let stopped = DirectProcessFixture::stop(&launcher, EngineComponent::Router)
+    let stopped = DirectProcessFixture::stop(&launcher, EngineComponent::Mind)
         .await
         .expect("component process stops");
     assert_eq!(stopped.process().into_u32(), process);
@@ -345,7 +345,7 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
     let fixture = DirectProcessFixture::new("envelope");
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
     let envelope = fixture
-        .envelope_with_command(EngineComponent::Router, fixture.envelope_capture_command())
+        .envelope_with_command(EngineComponent::Mind, fixture.envelope_capture_command())
         .await;
     let envelope_path = envelope.envelope_path().to_path_buf();
     let owner_identity = envelope.owner_identity().clone();
@@ -355,15 +355,15 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
         .expect("component process launches");
     let captured = fixture.read_envelope_capture().await;
     assert!(captured.contains("engine=engine-direct-process"));
-    assert!(captured.contains("component=router"));
+    assert!(captured.contains("component=mind"));
     assert!(captured.contains("state="));
-    assert!(captured.contains("router.redb"));
+    assert!(captured.contains("mind.redb"));
     assert!(captured.contains("domain_socket="));
-    assert!(captured.contains("router.sock"));
+    assert!(captured.contains("mind.sock"));
     assert!(captured.contains("supervision_socket="));
-    assert!(captured.contains("router.supervision.sock"));
+    assert!(captured.contains("mind.supervision.sock"));
     assert!(captured.contains("spawn_envelope="));
-    assert!(captured.contains("router.envelope"));
+    assert!(captured.contains("mind.envelope"));
     assert!(captured.contains("manager_socket="));
     assert!(captured.contains("persona.sock"));
     assert!(captured.contains("domain_mode=600"));
@@ -384,11 +384,11 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
     assert_eq!(signal_envelope.engine_id.as_str(), "engine-direct-process");
     assert_eq!(
         signal_envelope.component_kind,
-        signal_persona::ComponentKind::Router
+        signal_persona::ComponentKind::Mind
     );
     assert_eq!(
         signal_envelope.component_name,
-        signal_persona_auth::ComponentName::Router
+        signal_persona_auth::ComponentName::Mind
     );
     assert_eq!(signal_envelope.owner_identity, owner_identity);
     assert!(
@@ -401,19 +401,19 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
         signal_envelope
             .domain_socket_path
             .as_str()
-            .ends_with("router.sock")
+            .ends_with("mind.sock")
     );
     assert_eq!(signal_envelope.domain_socket_mode.into_u32(), 0o600);
     assert!(
         signal_envelope
             .supervision_socket_path
             .as_str()
-            .ends_with("router.supervision.sock")
+            .ends_with("mind.supervision.sock")
     );
     assert_eq!(signal_envelope.supervision_socket_mode.into_u32(), 0o600);
     assert_eq!(signal_envelope.supervision_protocol_version.into_u16(), 1);
 
-    DirectProcessFixture::stop(&launcher, EngineComponent::Router)
+    DirectProcessFixture::stop(&launcher, EngineComponent::Mind)
         .await
         .expect("component process stops");
     launcher.stop_gracefully().await.expect("launcher stops");
@@ -432,7 +432,7 @@ async fn constraint_component_launcher_observes_natural_child_exit_and_appends_e
             .with_exit_notifier(ExitNotifier::new(engine.clone(), store.clone())),
     );
     let envelope = fixture
-        .envelope_with_command(EngineComponent::Router, fixture.short_running_command())
+        .envelope_with_command(EngineComponent::Mind, fixture.short_running_command())
         .await;
     let receipt = DirectProcessFixture::launch(&launcher, envelope)
         .await
@@ -476,7 +476,7 @@ async fn constraint_component_launcher_observes_natural_child_exit_and_appends_e
     let EngineEventBody::ComponentExited(exited) = exited_events[0].body() else {
         unreachable!();
     };
-    assert_eq!(exited.component().as_str(), "persona-router");
+    assert_eq!(exited.component().as_str(), "persona-mind");
     assert_eq!(exited.exit_code(), Some(0));
 
     launcher.stop_gracefully().await.expect("launcher stops");
