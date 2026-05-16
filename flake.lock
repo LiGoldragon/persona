@@ -520,11 +520,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1778918227,
-        "narHash": "sha256-LyKhB+3o8XS89I0jXjUzg5L7wR0WNRLbOUCsG5c1XDc=",
+        "lastModified": 1778920412,
+        "narHash": "sha256-ASPLJOoL5KM2uXx6C3V7JpzzlGhv0lsW+sCu/+3kCwE=",
         "owner": "LiGoldragon",
         "repo": "persona-message",
-        "rev": "ad73f8109bb9020aeba7b8115cb6ee3cc98851d8",
+        "rev": "b0eeb55ae295709f0ee441aa69b94fdfcca04e04",
         "type": "github"
       },
       "original": {
