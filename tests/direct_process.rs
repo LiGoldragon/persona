@@ -5,10 +5,11 @@ use kameo::actor::{ActorRef, Spawn};
 use kameo::error::SendError;
 use nota_codec::{Decoder, NotaDecode};
 use persona::direct_process::{
-    DirectProcessFailure, DirectProcessLauncher, LaunchComponent, LaunchComponentReceipt,
-    ReadLauncherSnapshot, StopComponentProcess, StopComponentReceipt,
+    DirectProcessFailure, DirectProcessLauncher, ExitNotifier, LaunchComponent,
+    LaunchComponentReceipt, ReadLauncherSnapshot, StopComponentProcess, StopComponentReceipt,
 };
 use persona::engine::{ComponentSpawnEnvelope, EngineComponent, PersonaDaemonPaths};
+use persona::engine_event::EngineEventBody;
 use persona::launch::{
     CommandArgument, ComponentCommand, ComponentCommandCatalog, ComponentCommandEntry,
     ComponentCommandEntryInput, ComponentCommandInput, ComponentCommandResolver,
@@ -17,6 +18,7 @@ use persona::launch::{
     ResolvedComponentCommands,
 };
 use persona::manager::{EngineManager, HandleEngineRequest};
+use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadEngineEvents};
 use signal_persona::{EngineReply, EngineRequest, EngineStatusQuery};
 use signal_persona_auth::EngineId;
 
@@ -57,6 +59,19 @@ impl DirectProcessFixture {
 
     fn envelope_capture_file(&self) -> PathBuf {
         self.root.join("spawn-envelope.env")
+    }
+
+    fn short_running_command(&self) -> ComponentCommand {
+        // Exits cleanly after ~250ms so the natural-exit observer fires
+        // while the launcher is still alive to record the event.
+        ComponentCommand::from_input(ComponentCommandInput {
+            executable_path: ExecutablePath::new(self.shell.clone()),
+            arguments: vec![
+                CommandArgument::new("-c"),
+                CommandArgument::new("sleep 0.25; exit 0"),
+            ],
+            environment: Vec::new(),
+        })
     }
 
     fn long_running_command(&self) -> ComponentCommand {
@@ -403,4 +418,69 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
         .expect("component process stops");
     launcher.stop_gracefully().await.expect("launcher stops");
     launcher.wait_for_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_component_launcher_observes_natural_child_exit_and_appends_event() {
+    let fixture = DirectProcessFixture::new("natural-exit");
+    let engine = EngineId::new("engine-direct-process");
+    let manager_store_path = fixture.root.join("manager.redb");
+    let store = ManagerStore::start(ManagerStoreLocation::new(&manager_store_path))
+        .expect("manager store starts");
+    let launcher = DirectProcessLauncher::spawn(
+        DirectProcessLauncher::new()
+            .with_exit_notifier(ExitNotifier::new(engine.clone(), store.clone())),
+    );
+    let envelope = fixture
+        .envelope_with_command(EngineComponent::Router, fixture.short_running_command())
+        .await;
+    let receipt = DirectProcessFixture::launch(&launcher, envelope)
+        .await
+        .expect("component launches");
+    let process = receipt.process().into_u32();
+
+    DirectProcessFixture::wait_until_process_exits(process).await;
+    assert!(!DirectProcessFixture::process_is_alive(process));
+
+    // Pump the launcher's mailbox until the watcher's ChildProcessExited
+    // notification has been processed and the natural-exit counter has
+    // ticked. The launcher's snapshot is a pushed reply via its mailbox;
+    // bounded retries here are mailbox-completion ordering, not polling
+    // for state-change on a remote producer.
+    let mut snapshot = launcher
+        .ask(ReadLauncherSnapshot)
+        .await
+        .expect("launcher snapshot replies");
+    for _attempt in 0..40 {
+        if snapshot.natural_exit_count() >= 1 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        snapshot = launcher
+            .ask(ReadLauncherSnapshot)
+            .await
+            .expect("launcher snapshot replies");
+    }
+    assert_eq!(snapshot.natural_exit_count(), 1);
+    assert!(snapshot.running().is_empty());
+
+    let events = store
+        .ask(ReadEngineEvents::new(engine.clone()))
+        .await
+        .expect("manager events read");
+    let exited_events: Vec<_> = events
+        .iter()
+        .filter(|event| matches!(event.body(), EngineEventBody::ComponentExited(_)))
+        .collect();
+    assert_eq!(exited_events.len(), 1);
+    let EngineEventBody::ComponentExited(exited) = exited_events[0].body() else {
+        unreachable!();
+    };
+    assert_eq!(exited.component().as_str(), "persona-router");
+    assert_eq!(exited.exit_code(), Some(0));
+
+    launcher.stop_gracefully().await.expect("launcher stops");
+    launcher.wait_for_shutdown().await;
+    store.stop_gracefully().await.expect("manager store stops");
+    store.wait_for_shutdown().await;
 }

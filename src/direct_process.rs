@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::os::unix::fs::PermissionsExt;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use std::path::{Path, PathBuf};
@@ -8,10 +9,17 @@ use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use nota_codec::{Encoder, NotaEncode};
+use signal_persona_auth::EngineId;
 use thiserror::Error;
-use tokio::process::{Child, Command};
+use tokio::process::Command;
+use tokio::sync::oneshot;
 
 use crate::engine::{ComponentSpawnEnvelope, EngineComponent};
+use crate::engine_event::{
+    ComponentExited, ComponentExitedInput, EngineEventBody, EngineEventDraft, EngineEventDraftInput,
+    EngineEventSource,
+};
+use crate::manager_store::{AppendEngineEvent, ManagerStore};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChildProcessId(u32);
@@ -51,6 +59,7 @@ pub struct LauncherSnapshot {
     running: Vec<LaunchedComponent>,
     launch_count: u64,
     stop_count: u64,
+    natural_exit_count: u64,
 }
 
 impl kameo::Reply for LauncherSnapshot {
@@ -77,6 +86,7 @@ impl LauncherSnapshot {
             running: input.running,
             launch_count: input.launch_count,
             stop_count: input.stop_count,
+            natural_exit_count: input.natural_exit_count,
         }
     }
 
@@ -91,6 +101,10 @@ impl LauncherSnapshot {
     pub fn stop_count(&self) -> u64 {
         self.stop_count
     }
+
+    pub fn natural_exit_count(&self) -> u64 {
+        self.natural_exit_count
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,32 +112,55 @@ struct LauncherSnapshotInput {
     running: Vec<LaunchedComponent>,
     launch_count: u64,
     stop_count: u64,
+    natural_exit_count: u64,
 }
+
+/// Shared state between the launcher actor and one child's watcher task.
+/// When `stop` runs in the launcher, it drops a `oneshot::Sender` here; the
+/// watcher task, after `child.wait().await` returns, lifts the sender out
+/// of the mutex. If present, the watcher fulfills the stop waiter directly
+/// (bypassing the launcher's mailbox); if absent, the watcher routes the
+/// exit through the launcher's mailbox as a natural-exit notification.
+///
+/// The mutex stays held for the millisecond it takes to read/write the
+/// `Option`; no async work happens under it. This is short-lived
+/// coordination between an actor and its detached worker task, not an
+/// `Arc<Mutex>`-as-ownership shape between two actors.
+type StopHandoff = Arc<Mutex<Option<oneshot::Sender<StopComponentReceipt>>>>;
 
 struct RunningChild {
     process: ChildProcessId,
-    child: Child,
-}
-
-impl RunningChild {
-    fn from_input(input: RunningChildInput) -> Self {
-        Self {
-            process: input.process,
-            child: input.child,
-        }
-    }
-}
-
-struct RunningChildInput {
-    process: ChildProcessId,
-    child: Child,
+    /// Watcher task that owns the `tokio::process::Child` and awaits its
+    /// exit. Aborted on launcher drop so an unsupervised teardown still
+    /// reaps watchers.
+    watcher: tokio::task::JoinHandle<()>,
+    stop_handoff: StopHandoff,
 }
 
 pub struct DirectProcessLauncher {
     children: HashMap<EngineComponent, RunningChild>,
     launch_count: u64,
     stop_count: u64,
+    /// Count of children observed exiting without an explicit stop. Used by
+    /// tests to witness the natural-exit observer pipeline.
+    natural_exit_count: u64,
     graceful_timeout: Duration,
+    /// Optional path back into the manager event log. Present when the
+    /// launcher is wired by a supervisor that knows the engine; absent in
+    /// unit tests that only exercise the process plane.
+    exit_notifier: Option<ExitNotifier>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExitNotifier {
+    engine: EngineId,
+    store: ActorRef<ManagerStore>,
+}
+
+impl ExitNotifier {
+    pub fn new(engine: EngineId, store: ActorRef<ManagerStore>) -> Self {
+        Self { engine, store }
+    }
 }
 
 impl DirectProcessLauncher {
@@ -132,13 +169,21 @@ impl DirectProcessLauncher {
             children: HashMap::new(),
             launch_count: 0,
             stop_count: 0,
+            natural_exit_count: 0,
             graceful_timeout: Duration::from_millis(500),
+            exit_notifier: None,
         }
+    }
+
+    pub fn with_exit_notifier(mut self, notifier: ExitNotifier) -> Self {
+        self.exit_notifier = Some(notifier);
+        self
     }
 
     fn launch(
         &mut self,
         envelope: ComponentSpawnEnvelope,
+        launcher_ref: ActorRef<Self>,
     ) -> Result<LaunchComponentReceipt, DirectProcessFailure> {
         let component = envelope.component();
         if self.children.contains_key(&component) {
@@ -155,9 +200,40 @@ impl DirectProcessLauncher {
             let _ = child.start_kill();
             return Err(DirectProcessFailure::ChildPidMissing { component });
         };
+        let stop_handoff: StopHandoff = Arc::new(Mutex::new(None));
+        let watcher_handoff = stop_handoff.clone();
+        let watcher = tokio::spawn(async move {
+            let exit_code = match child.wait().await {
+                Ok(status) => status.code(),
+                Err(_error) => None,
+            };
+            let stop_sender = watcher_handoff
+                .lock()
+                .expect("stop_handoff mutex not poisoned")
+                .take();
+            match stop_sender {
+                Some(sender) => {
+                    let _ =
+                        sender.send(StopComponentReceipt::new(component, process));
+                }
+                None => {
+                    let _ = launcher_ref
+                        .tell(ChildProcessExited {
+                            component,
+                            process,
+                            exit_code,
+                        })
+                        .await;
+                }
+            }
+        });
         self.children.insert(
             component,
-            RunningChild::from_input(RunningChildInput { process, child }),
+            RunningChild {
+                process,
+                watcher,
+                stop_handoff,
+            },
         );
         self.launch_count = self.launch_count.saturating_add(1);
         Ok(LaunchComponentReceipt::new(component, process))
@@ -203,33 +279,92 @@ impl DirectProcessLauncher {
         &mut self,
         component: EngineComponent,
     ) -> Result<StopComponentReceipt, DirectProcessFailure> {
-        let Some(mut running) = self.children.remove(&component) else {
-            return Err(DirectProcessFailure::ComponentNotRunning { component });
-        };
-        Self::terminate_process_group(running.process, libc::SIGTERM)?;
-        let wait = tokio::time::timeout(self.graceful_timeout, running.child.wait()).await;
-        match wait {
-            Ok(Ok(_status)) => {}
-            Ok(Err(source)) => {
-                return Err(DirectProcessFailure::Io {
-                    operation: "wait for component process",
-                    source,
-                });
+        let (receiver, process, handoff) = {
+            let running = self
+                .children
+                .get_mut(&component)
+                .ok_or(DirectProcessFailure::ComponentNotRunning { component })?;
+            let mut handoff_guard = running
+                .stop_handoff
+                .lock()
+                .expect("stop_handoff mutex not poisoned");
+            if handoff_guard.is_some() {
+                return Err(DirectProcessFailure::ComponentStopAlreadyInFlight { component });
             }
-            Err(_elapsed) => {
-                Self::terminate_process_group(running.process, libc::SIGKILL)?;
-                running
-                    .child
-                    .wait()
-                    .await
-                    .map_err(|source| DirectProcessFailure::Io {
-                        operation: "wait after killing component process",
-                        source,
-                    })?;
+            let (sender, receiver) = oneshot::channel();
+            *handoff_guard = Some(sender);
+            drop(handoff_guard);
+            Self::terminate_process_group(running.process, libc::SIGTERM)?;
+            (receiver, running.process, running.stop_handoff.clone())
+        };
+
+        let receipt = self
+            .await_stop_receipt(component, process, handoff, receiver)
+            .await?;
+        // Remove the entry after the watcher signalled exit. The watcher's
+        // `JoinHandle` finishes shortly; its abort on Drop is a no-op once
+        // the task has already returned.
+        self.children.remove(&component);
+        self.stop_count = self.stop_count.saturating_add(1);
+        Ok(receipt)
+    }
+
+    /// Wait on the watcher's stop signal, escalating to SIGKILL if the
+    /// graceful timeout elapses. The stop handoff and the watcher both stay
+    /// owned by the launcher's `children` map until this method returns;
+    /// `await` happens off the per-child borrow so neighbours stay
+    /// reachable.
+    async fn await_stop_receipt(
+        &self,
+        component: EngineComponent,
+        process: ChildProcessId,
+        _handoff: StopHandoff,
+        receiver: oneshot::Receiver<StopComponentReceipt>,
+    ) -> Result<StopComponentReceipt, DirectProcessFailure> {
+        let timeout = tokio::time::sleep(self.graceful_timeout);
+        tokio::pin!(timeout);
+        tokio::pin!(receiver);
+        loop {
+            tokio::select! {
+                _ = &mut timeout => {
+                    Self::terminate_process_group(process, libc::SIGKILL)?;
+                    // Re-arm the timeout to a far future point so the next
+                    // iteration awaits only on the receiver.
+                    timeout
+                        .as_mut()
+                        .reset(tokio::time::Instant::now() + Duration::from_secs(60));
+                }
+                result = &mut receiver => {
+                    return result.map_err(|_canceled| {
+                        DirectProcessFailure::StopWaiterCanceled { component }
+                    });
+                }
             }
         }
-        self.stop_count = self.stop_count.saturating_add(1);
-        Ok(StopComponentReceipt::new(component, running.process))
+    }
+
+    /// Natural-exit path: the watcher observed `child.wait()` returning with
+    /// no stop handoff present. Append `ComponentExited` to the manager
+    /// event log (when a notifier is wired) and update bookkeeping.
+    async fn handle_child_exited(&mut self, exit: ChildProcessExited) {
+        if self.children.remove(&exit.component).is_none() {
+            return;
+        }
+        self.natural_exit_count = self.natural_exit_count.saturating_add(1);
+        let Some(notifier) = self.exit_notifier.clone() else {
+            return;
+        };
+        let draft = EngineEventDraft::from_input(EngineEventDraftInput {
+            engine: notifier.engine.clone(),
+            source: EngineEventSource::Component(exit.component.component_name()),
+            body: EngineEventBody::ComponentExited(ComponentExited::from_input(
+                ComponentExitedInput {
+                    component: exit.component.component_name(),
+                    exit_code: exit.exit_code,
+                },
+            )),
+        });
+        let _ = notifier.store.ask(AppendEngineEvent::new(draft)).await;
     }
 
     fn snapshot(&self) -> LauncherSnapshot {
@@ -242,6 +377,7 @@ impl DirectProcessLauncher {
             running,
             launch_count: self.launch_count,
             stop_count: self.stop_count,
+            natural_exit_count: self.natural_exit_count,
         })
     }
 
@@ -413,6 +549,7 @@ impl Drop for DirectProcessLauncher {
     fn drop(&mut self) {
         for child in self.children.values() {
             let _ = Self::terminate_process_group(child.process, libc::SIGKILL);
+            child.watcher.abort();
         }
     }
 }
@@ -466,9 +603,10 @@ impl Message<LaunchComponent> for DirectProcessLauncher {
     async fn handle(
         &mut self,
         message: LaunchComponent,
-        _context: &mut Context<Self, Self::Reply>,
+        context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.launch(message.envelope)
+        let launcher_ref = context.actor_ref().clone();
+        self.launch(message.envelope, launcher_ref)
     }
 }
 
@@ -530,12 +668,53 @@ impl Message<ReadLauncherSnapshot> for DirectProcessLauncher {
     }
 }
 
+/// Watcher-task notification: the `tokio::process::Child` for this
+/// component has exited (or its `wait` errored). Routed by the watcher
+/// into the launcher's mailbox so reaping and event-append happen on the
+/// supervised mailbox thread, not in the detached watcher.
+#[derive(Debug, Clone)]
+pub struct ChildProcessExited {
+    component: EngineComponent,
+    process: ChildProcessId,
+    exit_code: Option<i32>,
+}
+
+impl ChildProcessExited {
+    pub fn component(&self) -> EngineComponent {
+        self.component
+    }
+
+    pub fn process(&self) -> ChildProcessId {
+        self.process
+    }
+
+    pub fn exit_code(&self) -> Option<i32> {
+        self.exit_code
+    }
+}
+
+impl Message<ChildProcessExited> for DirectProcessLauncher {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        message: ChildProcessExited,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.handle_child_exited(message).await
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum DirectProcessFailure {
     #[error("component {component:?} already has a running child process")]
     ComponentAlreadyRunning { component: EngineComponent },
     #[error("component {component:?} has no running child process")]
     ComponentNotRunning { component: EngineComponent },
+    #[error("component {component:?} already has a stop in flight")]
+    ComponentStopAlreadyInFlight { component: EngineComponent },
+    #[error("component {component:?} stop waiter was canceled before exit")]
+    StopWaiterCanceled { component: EngineComponent },
     #[error("spawned component {component:?} did not expose a child pid")]
     ChildPidMissing { component: EngineComponent },
     #[error("spawn envelope path for component {component:?} has no parent directory")]
