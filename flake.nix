@@ -1237,6 +1237,60 @@
               cargoTestExtraArgs = "--test manager_store constraint_engine_event_log_nota_projection_is_view -- --exact";
             }
           );
+          persona-manager-store-reduces-lifecycle-events-into-snapshots =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager_store constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables -- --exact";
+                }
+              );
+          persona-engine-manager-hydrates-component-health-from-snapshot =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager_store constraint_engine_manager_hydrates_component_health_from_snapshot -- --exact";
+                }
+              );
+          persona-manager-store-rebuilds-snapshots-from-event-log =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager_store constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapshot_truncation -- --exact";
+                }
+              );
+          persona-manager-store-close-protocol-releases-redb-lock-before-shutdown =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager_store constraint_manager_store_close_protocol_releases_redb_lock_before_shutdown -- --exact";
+                }
+              );
+          persona-manager-startup-appends-orphaned-events-for-unfinished-spawn =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager_store constraint_manager_startup_appends_component_orphaned_for_unfinished_spawn -- --exact";
+                }
+              );
+          persona-manager-store-event-append-and-snapshot-reduce-share-one-transaction =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager_store constraint_event_append_and_snapshot_reduce_share_one_write_transaction -- --exact";
+                }
+              );
           persona-component-ready-requires-socket-metadata-from-spawn-envelope =
             context.craneLib.cargoTest
               (
@@ -1277,6 +1331,14 @@
               inherit (context) cargoArtifacts;
               PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
               cargoTestExtraArgs = "--test direct_process constraint_component_launcher_reaps_process_group -- --exact";
+            }
+          );
+          persona-component-launcher-observes-natural-child-exit = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+              cargoTestExtraArgs = "--test direct_process constraint_component_launcher_observes_natural_child_exit_and_appends_event -- --exact";
             }
           );
           persona-engine-supervisor-launches-prototype-supervised-components-through-process-launcher =
@@ -1326,6 +1388,16 @@
                   cargoTestExtraArgs = "--test daemon constraint_persona_daemon_launches_message_router_topology_through_engine_supervisor -- --exact";
                 }
               );
+          persona-engine-meta-testing-docs-are-nix-backed = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              PERSONA_ARCHITECTURE_DOCUMENT_PATH = "${./ARCHITECTURE.md}";
+              PERSONA_FLAKE_DOCUMENT_PATH = "${./flake.nix}";
+              PERSONA_TESTS_DOCUMENT_PATH = "${./TESTS.md}";
+              cargoTestExtraArgs = "--test meta_testing -- --nocapture";
+            }
+          );
           persona-daemon-launches-nix-built-prototype-topology =
             context.pkgs.runCommand "persona-daemon-launches-nix-built-prototype-topology"
               {

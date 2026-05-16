@@ -94,9 +94,7 @@ fn read_length_prefixed_frame(stream: &mut UnixStream) -> Vec<u8> {
     // as big-endian — see signal-core/src/frame.rs `length_prefix`.
     let length = u32::from_be_bytes(length_bytes) as usize;
     let mut payload = vec![0u8; length];
-    stream
-        .read_exact(&mut payload)
-        .expect("read reply payload");
+    stream.read_exact(&mut payload).expect("read reply payload");
     let mut framed = Vec::with_capacity(4 + length);
     framed.extend_from_slice(&length_bytes);
     framed.extend_from_slice(&payload);

@@ -87,9 +87,7 @@ impl StoredEngineRecord {
 /// intermediate stage ARCH names is reserved for the future
 /// `ComponentSocketBound` event; the prototype reducer does not emit it
 /// today.
-#[derive(
-    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq,
-)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComponentProcessState {
     Launched,
     Ready,
@@ -100,9 +98,7 @@ pub enum ComponentProcessState {
 /// Snapshot row stored in `manager.engine-lifecycle-snapshot`, keyed by
 /// `engine_id::component_name`. The reducer overwrites the row on each
 /// transition; readers project the latest state into `EngineStatus`.
-#[derive(
-    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq,
-)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentLifecycleSnapshotRow {
     component: ComponentName,
     process_state: ComponentProcessState,
@@ -129,9 +125,7 @@ impl ComponentLifecycleSnapshotRow {
 /// `engine_id::component_name`. Carries the same closed-enum
 /// `ComponentHealth` that `signal_persona::EngineStatus` reports to CLI
 /// status queries, with no extra ARCH-aspirational variants.
-#[derive(
-    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq,
-)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStatusSnapshotRow {
     component: ComponentName,
     health: ComponentHealth,
@@ -265,10 +259,7 @@ impl ManagerTables {
         })?)
     }
 
-    fn engine_status_snapshot(
-        &self,
-        engine: &EngineId,
-    ) -> Result<Vec<ComponentStatusSnapshotRow>> {
+    fn engine_status_snapshot(&self, engine: &EngineId) -> Result<Vec<ComponentStatusSnapshotRow>> {
         let prefix = SnapshotKey::engine_prefix(engine);
         Ok(self.database.read(|transaction| {
             let rows = ENGINE_STATUS_SNAPSHOT
@@ -382,8 +373,8 @@ impl ManagerTables {
                 ComponentProcessState::Exited,
                 ComponentHealth::Failed,
             )?,
-            EngineEventBody::ComponentUnimplemented(_)
-            | EngineEventBody::EngineStateChanged(_) => {}
+            EngineEventBody::ComponentUnimplemented(_) | EngineEventBody::EngineStateChanged(_) => {
+            }
         }
         Ok(())
     }
@@ -396,8 +387,7 @@ impl ManagerTables {
         health: ComponentHealth,
     ) -> sema::Result<()> {
         let key = SnapshotKey::new(engine, &component);
-        let lifecycle_row =
-            ComponentLifecycleSnapshotRow::new(component.clone(), process_state);
+        let lifecycle_row = ComponentLifecycleSnapshotRow::new(component.clone(), process_state);
         ENGINE_LIFECYCLE_SNAPSHOT.insert(transaction, key.as_str(), &lifecycle_row)?;
         let status_row = ComponentStatusSnapshotRow::new(component, health);
         ENGINE_STATUS_SNAPSHOT.insert(transaction, key.as_str(), &status_row)?;
@@ -436,10 +426,25 @@ impl ManagerStore {
         Ok(Self::spawn_in_thread(store))
     }
 
+    pub async fn close_and_stop(reference: ActorRef<Self>) -> Result<()> {
+        reference
+            .ask(CloseManagerStore)
+            .await
+            .map_err(|error| crate::Error::actor("close manager store", error))?;
+        reference
+            .stop_gracefully()
+            .await
+            .map_err(|error| crate::Error::actor("stop manager store", error))?;
+        let _shutdown_completion = reference.wait_for_shutdown().await;
+        Ok(())
+    }
+
     fn tables(&self) -> Result<&ManagerTables> {
-        self.tables
-            .as_ref()
-            .ok_or(crate::Error::ManagerStoreClosed)
+        self.tables.as_ref().ok_or(crate::Error::ManagerStoreClosed)
+    }
+
+    fn close_tables(&mut self) {
+        self.tables = None;
     }
 
     fn persist_engine_record(&mut self, record: StoredEngineRecord) -> Result<ManagerStoreReceipt> {
@@ -631,16 +636,16 @@ impl Actor for ManagerStore {
         Ok(store)
     }
 
-    /// Drop the typed table handle so the underlying redb file lock releases
-    /// during `on_stop`, before the mailbox's last sender clone closes. A
-    /// subsequent `ManagerStore::open` on the same path sees an unlocked
-    /// database instead of racing the spawn-thread's tear-down.
+    /// Best-effort fallback for plain actor stops. Callers that need a
+    /// release witness use `CloseManagerStore` / `close_and_stop` so the
+    /// redb handle is dropped through the actor mailbox before shutdown
+    /// completion is observed.
     async fn on_stop(
         &mut self,
         _actor_reference: kameo::actor::WeakActorRef<Self>,
         _reason: kameo::error::ActorStopReason,
     ) -> std::result::Result<(), Self::Error> {
-        self.tables = None;
+        self.close_tables();
         Ok(())
     }
 }
@@ -792,6 +797,21 @@ impl Message<ReadManagerStoreWriteCount> for ManagerStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.write_count()
+    }
+}
+
+pub struct CloseManagerStore;
+
+impl Message<CloseManagerStore> for ManagerStore {
+    type Reply = Result<()>;
+
+    async fn handle(
+        &mut self,
+        _message: CloseManagerStore,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.close_tables();
+        Ok(())
     }
 }
 

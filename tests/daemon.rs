@@ -228,7 +228,7 @@ async fn constraint_persona_daemon_launches_message_router_topology_through_engi
     );
 
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[test]
@@ -275,7 +275,7 @@ async fn constraint_persona_daemon_persists_cli_mutation_to_manager_store() {
     );
 
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -365,7 +365,7 @@ async fn constraint_persona_daemon_launches_prototype_supervised_components_thro
     );
 
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[test]

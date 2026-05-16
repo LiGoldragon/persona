@@ -116,7 +116,7 @@ impl EngineManager {
             .stop_gracefully()
             .await
             .map_err(|error| Error::actor("stop engine manager", error))?;
-        reference.wait_for_shutdown().await;
+        let _shutdown_completion = reference.wait_for_shutdown().await;
         Ok(())
     }
 

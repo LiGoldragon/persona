@@ -33,8 +33,8 @@ use std::path::PathBuf;
 
 use signal_core::{ExchangeIdentifier, NonEmpty, Reply, SignalVerb, SubReply};
 use signal_persona_message::{
-    Frame, FrameBody, MessageOperationKind, MessageReply, MessageRequestUnimplemented,
-    MessageSlot, MessageUnimplementedReason, SubmissionAcceptance,
+    Frame, FrameBody, MessageOperationKind, MessageReply, MessageRequestUnimplemented, MessageSlot,
+    MessageUnimplementedReason, SubmissionAcceptance,
 };
 
 enum CannedReply {
@@ -134,9 +134,7 @@ fn read_length_prefixed_frame(stream: &mut std::os::unix::net::UnixStream) -> Ve
     // as big-endian — see signal-core/src/frame.rs `length_prefix`.
     let length = u32::from_be_bytes(length_bytes) as usize;
     let mut payload = vec![0u8; length];
-    stream
-        .read_exact(&mut payload)
-        .expect("read frame payload");
+    stream.read_exact(&mut payload).expect("read frame payload");
     let mut framed = Vec::with_capacity(4 + length);
     framed.extend_from_slice(&length_bytes);
     framed.extend_from_slice(&payload);
@@ -175,17 +173,13 @@ fn main() {
         Frame::decode_length_prefixed(&captured).expect("decode captured request envelope");
     let request_exchange = match request_frame.into_body() {
         FrameBody::Request { exchange, .. } => exchange,
-        other => panic!(
-            "wire-tap-router expected a Request frame from the caller, got {other:?}"
-        ),
+        other => panic!("wire-tap-router expected a Request frame from the caller, got {other:?}"),
     };
 
     let reply_frame = build_reply_frame(cli.reply, request_exchange);
     let reply_bytes = reply_frame
         .encode_length_prefixed()
         .expect("encode canned reply frame");
-    stream
-        .write_all(&reply_bytes)
-        .expect("write canned reply");
+    stream.write_all(&reply_bytes).expect("write canned reply");
     stream.flush().expect("flush canned reply");
 }

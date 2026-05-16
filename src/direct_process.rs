@@ -16,8 +16,8 @@ use tokio::sync::oneshot;
 
 use crate::engine::{ComponentSpawnEnvelope, EngineComponent};
 use crate::engine_event::{
-    ComponentExited, ComponentExitedInput, EngineEventBody, EngineEventDraft, EngineEventDraftInput,
-    EngineEventSource,
+    ComponentExited, ComponentExitedInput, EngineEventBody, EngineEventDraft,
+    EngineEventDraftInput, EngineEventSource,
 };
 use crate::manager_store::{AppendEngineEvent, ManagerStore};
 
@@ -191,7 +191,8 @@ impl DirectProcessLauncher {
         }
         Self::write_spawn_envelope_file(&envelope)?;
         let typed_configuration_path = Self::write_typed_configuration_file(&envelope)?;
-        let mut command = Self::command_from_envelope(&envelope, typed_configuration_path.as_deref());
+        let mut command =
+            Self::command_from_envelope(&envelope, typed_configuration_path.as_deref());
         let mut child = command.spawn().map_err(|source| DirectProcessFailure::Io {
             operation: "spawn component process",
             source,
@@ -213,8 +214,7 @@ impl DirectProcessLauncher {
                 .take();
             match stop_sender {
                 Some(sender) => {
-                    let _ =
-                        sender.send(StopComponentReceipt::new(component, process));
+                    let _ = sender.send(StopComponentReceipt::new(component, process));
                 }
                 None => {
                     let _ = launcher_ref
@@ -430,7 +430,10 @@ impl DirectProcessLauncher {
                 envelope.domain_socket_mode().as_octal(),
             ),
             supervision_socket_path: signal_persona::WirePath::new(
-                envelope.supervision_socket_path().to_string_lossy().into_owned(),
+                envelope
+                    .supervision_socket_path()
+                    .to_string_lossy()
+                    .into_owned(),
             ),
             supervision_socket_mode: signal_persona::SocketMode::new(
                 envelope.supervision_socket_mode().as_octal(),

@@ -3,8 +3,8 @@ use persona::engine_event::{
     ComponentUnimplementedInput, EngineEventBody, EngineEventDraft, EngineEventDraftInput,
     EngineEventSource, HarnessOperationKind, UnimplementedReason,
 };
-use persona::manager_store::AppendOrphansFromEventLog;
 use persona::manager::EngineManager;
+use persona::manager_store::AppendOrphansFromEventLog;
 use persona::manager_store::{
     AppendEngineEvent, ComponentLifecycleSnapshotRow, ComponentProcessState,
     ComponentStatusSnapshotRow, ManagerStore, ManagerStoreLocation, PersistEngineRecord,
@@ -119,7 +119,7 @@ async fn constraint_manager_store_writes_engine_status_through_writer_actor() {
     assert_eq!(record.engine(), &engine);
     assert_eq!(record.status(), &status);
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -181,7 +181,7 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
         .await
         .expect("engine manager stops");
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -236,7 +236,7 @@ async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_
         .await
         .expect("restored engine manager stops");
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -281,7 +281,7 @@ async fn constraint_engine_event_log_records_typed_manager_events() {
     ));
 
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -332,7 +332,7 @@ async fn constraint_engine_event_log_nota_projection_is_view() {
     );
 
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -354,7 +354,10 @@ async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables(
         .await
         .expect("lifecycle snapshot reads");
     assert_eq!(lifecycle_after_spawn.len(), 1);
-    assert_eq!(lifecycle_after_spawn[0].component().as_str(), "persona-router");
+    assert_eq!(
+        lifecycle_after_spawn[0].component().as_str(),
+        "persona-router"
+    );
     assert_eq!(
         lifecycle_after_spawn[0].process_state(),
         ComponentProcessState::Launched
@@ -374,9 +377,9 @@ async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables(
     let ready_draft = EngineEventDraft::from_input(EngineEventDraftInput {
         engine: engine.clone(),
         source: EngineEventSource::Manager,
-        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(
-            ComponentName::new("persona-router"),
-        )),
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(ComponentName::new(
+            "persona-router",
+        ))),
     });
     store
         .ask(AppendEngineEvent::new(ready_draft))
@@ -403,7 +406,7 @@ async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables(
     );
 
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -422,9 +425,9 @@ async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
     let ready_draft = EngineEventDraft::from_input(EngineEventDraftInput {
         engine: engine.clone(),
         source: EngineEventSource::Manager,
-        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(
-            ComponentName::new("persona-terminal"),
-        )),
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(ComponentName::new(
+            "persona-terminal",
+        ))),
     });
     store
         .ask(AppendEngineEvent::new(ready_draft))
@@ -456,7 +459,7 @@ async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
         .await
         .expect("manager stops after snapshot witness");
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 /// Architectural-truth witness: the event log is authoritative, the
@@ -482,9 +485,9 @@ async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapsh
     let ready_router = EngineEventDraft::from_input(EngineEventDraftInput {
         engine: engine.clone(),
         source: EngineEventSource::Manager,
-        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(
-            ComponentName::new("persona-router"),
-        )),
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(ComponentName::new(
+            "persona-router",
+        ))),
     });
     store
         .ask(AppendEngineEvent::new(ready_router))
@@ -582,7 +585,48 @@ async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapsh
     );
 
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
+}
+
+/// Architectural-truth witness: `ManagerStore` owns an exclusive redb handle,
+/// and its close-then-stop protocol releases that handle before callers treat
+/// shutdown as complete. A new store opening the same path after
+/// `close_and_stop` must succeed and read the data written by the stopped
+/// actor.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_manager_store_close_protocol_releases_redb_lock_before_shutdown() {
+    let fixture = StoreFixture::new("persona-manager-store-release");
+    let engine = EngineId::new("engine-store-release");
+
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    store
+        .ask(AppendEngineEvent::new(StoreFixture::spawned_event(
+            engine.clone(),
+            "persona-router",
+        )))
+        .await
+        .expect("router spawn event appends");
+
+    ManagerStore::close_and_stop(store)
+        .await
+        .expect("manager store close protocol completes");
+
+    let reopened = ManagerStore::start(fixture.location())
+        .expect("manager store redb path reopens after graceful shutdown and wait_for_shutdown");
+    let events = reopened
+        .ask(ReadEngineEvents::new(engine.clone()))
+        .await
+        .expect("events read from reopened store");
+    assert_eq!(events.len(), 1);
+    assert!(matches!(
+        events[0].body(),
+        EngineEventBody::ComponentSpawned(spawned)
+            if spawned.component().as_str() == "persona-router"
+    ));
+
+    ManagerStore::close_and_stop(reopened)
+        .await
+        .expect("reopened manager store close protocol completes");
 }
 
 fn sorted_lifecycle(
@@ -611,11 +655,9 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
     // Simulate a prior daemon arc: spawn two components, mark one
     // ready, leave the other in the open arc that the prior daemon
     // never closed. Re-opening the same store from a new
-    // `ManagerStore::open` would require synchronous flock release; the
-    // current ManagerStore actor releases its lock asynchronously after
-    // `wait_for_shutdown` returns. The orphan-detection logic does not
-    // depend on a process restart — it runs on every `ManagerStore`
-    // that opens its tables. One `ManagerStore` is sufficient to
+    // Reopening the store would be a separate resource-release witness.
+    // The orphan-detection logic itself runs on the store actor after
+    // persisted events exist. One `ManagerStore` is sufficient to
     // witness the orphan scan: the events are persisted, the scan
     // reads them, and the orphan event is appended through the same
     // actor path the manager startup would use.
@@ -630,9 +672,9 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
     let router_ready = EngineEventDraft::from_input(EngineEventDraftInput {
         engine: engine.clone(),
         source: EngineEventSource::Manager,
-        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(
-            ComponentName::new("persona-router"),
-        )),
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(ComponentName::new(
+            "persona-router",
+        ))),
     });
     store
         .ask(AppendEngineEvent::new(router_ready))
@@ -717,7 +759,7 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
     assert!(again.is_empty(), "orphan scan is idempotent");
 
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 /// Architectural-truth witness: the event-log append and the snapshot

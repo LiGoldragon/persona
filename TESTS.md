@@ -30,21 +30,37 @@ checks under this meta repo. When a new `signal-persona-*` contract
 lands, the meta repo imports it so a single `nix flake check` sees
 the contract health alongside the runtime components.
 
-### 1 · Cargo unit/integration tests (`tests/*.rs`)
+### 1 · Rust unit/integration tests (`tests/*.rs`)
 
-Standard `cargo test` paths. Each test file is one integration test.
+Rust integration tests live under `tests/` and are reached through
+`nix flake check`, either via the default check or via named checks
+for load-bearing witnesses. Each test file is one integration test.
 Currently:
 
+- `tests/actor_discipline_truth.rs` — actor nouns carry data and
+  actor source avoids shared-lock ownership.
+- `tests/daemon.rs` — daemon-first CLI/socket/supervisor path.
+- `tests/direct_process.rs` — child process launcher, spawn envelope,
+  stop/reap, and natural-exit witnesses.
+- `tests/engine.rs` — engine layout, socket modes, topology, and
+  spawn-envelope witnesses.
+- `tests/manager.rs` — Kameo actor-path constraints for the engine manager.
+- `tests/manager_store.rs` — manager.redb event log, snapshots,
+  restore, orphan detection, and shutdown lock-release witnesses.
+- `tests/meta_testing.rs` — meta-witnesses that architecture/test docs
+  name live Nix checks and actor-test runtime exceptions stay narrow.
+- `tests/readiness.rs` — socket readiness and mode witnesses.
 - `tests/request.rs` — request shapes.
 - `tests/schema.rs` — NOTA projection records for engine-manager replies.
 - `tests/state.rs` — in-memory engine-manager status reducer.
-- `tests/manager.rs` — Kameo actor-path constraints for the engine manager.
+- `tests/supervisor.rs` — engine supervisor topology and process launch
+  witnesses.
 
 ### 2 · Wire-test shim binaries (`src/bin/wire_*.rs`)
 
 Small CLI binaries that exercise Signal contract repos end to end
 through real bytes on stdin/stdout. **Used by the Nix derivations
-below**, not by `cargo test`.
+below**, not by the Rust integration-test runner directly.
 
 | Binary | Role |
 |---|---|

@@ -270,7 +270,7 @@ impl Drop for DirectProcessFixture {
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test]
 async fn constraint_component_launcher_does_not_block_manager_mailbox() {
     let fixture = DirectProcessFixture::new("mailbox");
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
@@ -301,13 +301,13 @@ async fn constraint_component_launcher_does_not_block_manager_mailbox() {
         .await
         .expect("component process stops");
     launcher.stop_gracefully().await.expect("launcher stops");
-    launcher.wait_for_shutdown().await;
+    let _shutdown_completion = launcher.wait_for_shutdown().await;
     EngineManager::stop(manager)
         .await
         .expect("manager stops after launcher witness");
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test]
 async fn constraint_component_launcher_reaps_process_group() {
     let fixture = DirectProcessFixture::new("reap");
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
@@ -337,10 +337,10 @@ async fn constraint_component_launcher_reaps_process_group() {
     assert_eq!(snapshot.stop_count(), 1);
 
     launcher.stop_gracefully().await.expect("launcher stops");
-    launcher.wait_for_shutdown().await;
+    let _shutdown_completion = launcher.wait_for_shutdown().await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test]
 async fn constraint_component_launcher_passes_spawn_envelope_to_child_environment() {
     let fixture = DirectProcessFixture::new("envelope");
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
@@ -417,7 +417,7 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
         .await
         .expect("component process stops");
     launcher.stop_gracefully().await.expect("launcher stops");
-    launcher.wait_for_shutdown().await;
+    let _shutdown_completion = launcher.wait_for_shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -480,7 +480,7 @@ async fn constraint_component_launcher_observes_natural_child_exit_and_appends_e
     assert_eq!(exited.exit_code(), Some(0));
 
     launcher.stop_gracefully().await.expect("launcher stops");
-    launcher.wait_for_shutdown().await;
+    let _shutdown_completion = launcher.wait_for_shutdown().await;
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }

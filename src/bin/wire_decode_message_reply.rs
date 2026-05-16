@@ -25,9 +25,7 @@ use std::io::{Read, Write};
 
 use nota_codec::{Encoder, NotaEncode};
 use signal_core::{Reply, SubReply};
-use signal_persona_message::{
-    Frame, FrameBody, MessageOperationKind, MessageReply,
-};
+use signal_persona_message::{Frame, FrameBody, MessageOperationKind, MessageReply};
 
 #[derive(Debug)]
 enum Expectation {
@@ -66,7 +64,11 @@ fn parse() -> (Expectation, Option<String>) {
         match arg.as_str() {
             "--expect" => variant = args.next(),
             "--expect-slot" => slot = args.next().map(|v| v.parse::<u64>().expect("slot u64")),
-            "--expect-entry-count" => count = args.next().map(|v| v.parse::<usize>().expect("count usize")),
+            "--expect-entry-count" => {
+                count = args
+                    .next()
+                    .map(|v| v.parse::<usize>().expect("count usize"))
+            }
             "--expect-entry-body" => body = args.next(),
             "--expect-entry-sender" => sender = args.next(),
             "--expect-operation" => operation = args.next().map(|v| parse_operation(&v)),
@@ -179,7 +181,11 @@ fn main() {
             eprintln!(
                 "decoded InboxListing entries={} bodies={:?}",
                 listing.messages.len(),
-                listing.messages.iter().map(|e| e.body.as_str()).collect::<Vec<_>>()
+                listing
+                    .messages
+                    .iter()
+                    .map(|e| e.body.as_str())
+                    .collect::<Vec<_>>()
             );
         }
         (

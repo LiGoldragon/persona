@@ -256,7 +256,8 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     let root = TemporaryEngineRoot::new("spawn-envelope");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
     let owner_identity = OwnerIdentity::UnixUser(UnixUserId::new(4242));
-    let layout = paths.engine_layout_with_owner(EngineId::new("engine-gamma"), owner_identity.clone());
+    let layout =
+        paths.engine_layout_with_owner(EngineId::new("engine-gamma"), owner_identity.clone());
     let resolved_commands = TemporaryEngineRoot::resolved_commands().await;
     let envelope = layout
         .spawn_envelope(EngineComponent::Router, &resolved_commands)

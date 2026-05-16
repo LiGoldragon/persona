@@ -93,7 +93,9 @@ fn parse_operation(value: &str) -> MessageOperationKind {
 fn parse_reason(value: &str) -> MessageUnimplementedReason {
     match value {
         "not-in-prototype-scope" => MessageUnimplementedReason::NotInPrototypeScope,
-        "dependency-router" => MessageUnimplementedReason::DependencyMissing(DependencyKind::Router),
+        "dependency-router" => {
+            MessageUnimplementedReason::DependencyMissing(DependencyKind::Router)
+        }
         "resource-router-socket" => {
             MessageUnimplementedReason::ResourceUnavailable(ResourceKind::RouterSocket)
         }
@@ -114,7 +116,11 @@ fn parse() -> Variant {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--variant" => kind = args.next(),
-            "--slot" => slot = args.next().map(|v| v.parse::<u64>().expect("slot must be u64")),
+            "--slot" => {
+                slot = args
+                    .next()
+                    .map(|v| v.parse::<u64>().expect("slot must be u64"))
+            }
             "--entry" => entries.push(EntrySpec::parse(&args.next().expect("--entry needs value"))),
             "--operation" => operation = args.next().map(|v| parse_operation(&v)),
             "--reason" => reason = args.next().map(|v| parse_reason(&v)),
@@ -137,9 +143,11 @@ fn parse() -> Variant {
 
 fn build_reply(variant: Variant) -> MessageReply {
     match variant {
-        Variant::SubmissionAccepted { slot } => MessageReply::SubmissionAccepted(SubmissionAcceptance {
-            message_slot: MessageSlot::new(slot),
-        }),
+        Variant::SubmissionAccepted { slot } => {
+            MessageReply::SubmissionAccepted(SubmissionAcceptance {
+                message_slot: MessageSlot::new(slot),
+            })
+        }
         Variant::InboxListing { entries } => MessageReply::InboxListing(InboxListing {
             messages: entries.into_iter().map(EntrySpec::into_entry).collect(),
         }),

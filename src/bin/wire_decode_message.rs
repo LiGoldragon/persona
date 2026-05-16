@@ -150,7 +150,9 @@ impl Expectations {
 
 fn write_nota(request: &MessageRequest, path: &str) {
     let mut encoder = Encoder::new();
-    request.encode(&mut encoder).expect("encode request as nota");
+    request
+        .encode(&mut encoder)
+        .expect("encode request as nota");
     let text = encoder.into_string();
     let mut file = std::fs::File::create(path).expect("create capture-nota file");
     file.write_all(text.as_bytes())

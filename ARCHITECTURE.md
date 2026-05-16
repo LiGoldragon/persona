@@ -1034,9 +1034,10 @@ Migration rules:
   overlays per-component health onto the in-memory `EngineState` before
   serving any request. The manager's first `ComponentStatusQuery` reply
   reflects the persisted history.
-- `ManagerStore.on_stop` drops the `ManagerTables` handle so the underlying
-  redb file lock releases during graceful shutdown, before the mailbox's
-  last sender clone closes.
+- `ManagerStore::close_and_stop` first sends a close request through the
+  store actor mailbox, dropping the `ManagerTables` handle, then stops the
+  actor. Plain `on_stop` also drops the handle as a fallback, but the
+  close-then-stop protocol is the path with a redb lock-release witness.
 - `ComponentReady` is appended only after Hello + ReadinessQuery + HealthQuery
   all return non-error replies over the child's supervision socket. Filesystem
   socket existence alone does not promote a component to `Ready`.
@@ -1229,53 +1230,52 @@ The apex repo owns tests that prove cross-component shape:
 | in-band auth proof is not accepted as authority | request decoding and component handlers ignore agent-supplied proof/class fields for local authority. |
 | persona CLI is daemon client | CLI accepts exactly one NOTA request and prints one NOTA reply. |
 | persona-daemon preserves unrelated files | daemon startup refuses a non-socket endpoint path instead of deleting it. |
-| manager catalog writes go through the writer actor | `nix flake check .#persona-manager-store-writes-engine-status-through-writer-actor` |
-| engine manager persists accepted mutations | `nix flake check .#persona-engine-manager-persists-component-mutation-through-manager-store` |
-| engine manager restores persisted snapshot before serving status | `nix flake check .#persona-engine-manager-restores-persisted-snapshot-before-status` |
-| manager store reduces lifecycle events into both snapshot tables in one transaction | `cargo test --test manager_store constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables` |
-| engine manager hydrates component health from the status snapshot on startup | `cargo test --test manager_store constraint_engine_manager_hydrates_component_health_from_snapshot` |
-| snapshot tables rebuild from the event log after a `ManagerStore::open` against an empty snapshot table | `cargo test --test manager_store constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapshot_truncation` |
-| manager startup detects orphans — `ComponentSpawned` without matching `ComponentReady` or `ComponentExited` — and appends `ComponentOrphaned` events | `cargo test --test manager_store constraint_manager_startup_appends_component_orphaned_for_unfinished_spawn` |
-| event-log append and snapshot reduce land in one redb write transaction (no daemon crash can persist an event without its snapshot reduction) | `cargo test --test manager_store constraint_event_append_and_snapshot_reduce_share_one_write_transaction` |
-| direct process launcher observes natural child exit and appends `ComponentExited` to manager event log | `cargo test --test direct_process constraint_component_launcher_observes_natural_child_exit_and_appends_event` |
-| persona CLI mutation reaches manager.redb via daemon path | `nix flake check .#persona-daemon-persists-cli-mutation-to-manager-store` |
-| sandbox runner is a Nix-owned app | `nix flake check .#persona-engine-sandbox-script-builds` |
-| sandbox runner supports each first harness name | `nix flake check .#persona-engine-sandbox-supports-all-harnesses` |
-| sandbox runner documents dedicated auth | `nix flake check .#persona-engine-sandbox-documents-dedicated-auth` |
-| sandbox auth bootstrap emits real dedicated login surfaces | `nix flake check .#persona-engine-sandbox-bootstrap-auth-dry-run` |
-| Pi bootstrap creates isolated config/session directories | `nix flake check .#persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs` |
-| auth isolation witness protects host credential/session files | `nix flake check .#persona-engine-sandbox-auth-isolation-witness` |
-| host attach helper is a Nix-owned app | `nix flake check .#persona-engine-sandbox-attach-script-builds` |
-| sandbox dev-stack smoke is a Nix-owned stateful app | `nix flake check .#persona-engine-sandbox-dev-stack-smoke-script-builds`; run with `nix run .#persona-engine-sandbox-dev-stack-smoke` |
+| manager catalog writes go through the writer actor | `nix build .#checks.x86_64-linux.persona-manager-store-writes-engine-status-through-writer-actor` |
+| engine manager persists accepted mutations | `nix build .#checks.x86_64-linux.persona-engine-manager-persists-component-mutation-through-manager-store` |
+| engine manager restores persisted snapshot before serving status | `nix build .#checks.x86_64-linux.persona-engine-manager-restores-persisted-snapshot-before-status` |
+| manager store reduces lifecycle events into both snapshot tables in one transaction | `nix build .#checks.x86_64-linux.persona-manager-store-reduces-lifecycle-events-into-snapshots` |
+| engine manager hydrates component health from the status snapshot on startup | `nix build .#checks.x86_64-linux.persona-engine-manager-hydrates-component-health-from-snapshot` |
+| snapshot tables rebuild from the event log after a `ManagerStore::open` against an empty snapshot table | `nix build .#checks.x86_64-linux.persona-manager-store-rebuilds-snapshots-from-event-log` |
+| manager store close protocol releases its redb lock before shutdown completion | `nix build .#checks.x86_64-linux.persona-manager-store-close-protocol-releases-redb-lock-before-shutdown` |
+| manager startup detects orphans — `ComponentSpawned` without matching `ComponentReady` or `ComponentExited` — and appends `ComponentOrphaned` events | `nix build .#checks.x86_64-linux.persona-manager-startup-appends-orphaned-events-for-unfinished-spawn` |
+| event-log append and snapshot reduce land in one redb write transaction (no daemon crash can persist an event without its snapshot reduction) | `nix build .#checks.x86_64-linux.persona-manager-store-event-append-and-snapshot-reduce-share-one-transaction` |
+| direct process launcher observes natural child exit and appends `ComponentExited` to manager event log | `nix build .#checks.x86_64-linux.persona-component-launcher-observes-natural-child-exit` |
+| persona CLI mutation reaches manager.redb via daemon path | `nix build .#checks.x86_64-linux.persona-daemon-persists-cli-mutation-to-manager-store` |
+| persona test docs name live Nix witnesses rather than bare cargo review commands | `nix build .#checks.x86_64-linux.persona-engine-meta-testing-docs-are-nix-backed` |
+| sandbox runner is a Nix-owned app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-script-builds` |
+| sandbox runner supports each first harness name | `nix build .#checks.x86_64-linux.persona-engine-sandbox-supports-all-harnesses` |
+| sandbox runner documents dedicated auth | `nix build .#checks.x86_64-linux.persona-engine-sandbox-documents-dedicated-auth` |
+| sandbox auth bootstrap emits real dedicated login surfaces | `nix build .#checks.x86_64-linux.persona-engine-sandbox-bootstrap-auth-dry-run` |
+| Pi bootstrap creates isolated config/session directories | `nix build .#checks.x86_64-linux.persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs` |
+| auth isolation witness protects host credential/session files | `nix build .#checks.x86_64-linux.persona-engine-sandbox-auth-isolation-witness` |
+| host attach helper is a Nix-owned app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-attach-script-builds` |
+| sandbox dev-stack smoke is a Nix-owned stateful app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-dev-stack-smoke-script-builds`; run with `nix run .#persona-engine-sandbox-dev-stack-smoke` |
 | sandbox dev-stack passes a manager-style spawn envelope to persona-message | run `nix run .#persona-engine-sandbox-dev-stack-smoke` and inspect `dev-stack-processes.nota` / `dev-stack-sockets.nota` for `MessageSpawnEnvelope` |
-| sandbox terminal-cell smoke is a Nix-owned stateful app | `nix flake check .#persona-engine-sandbox-terminal-cell-script-builds`; run fixture with `nix run .#persona-engine-sandbox-terminal-cell-fixture-smoke` |
+| sandbox terminal-cell smoke is a Nix-owned stateful app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-terminal-cell-script-builds`; run fixture with `nix run .#persona-engine-sandbox-terminal-cell-fixture-smoke` |
 | sandbox terminal-cell Pi smoke uses local model config without copied auth | run with `nix run .#persona-engine-sandbox-terminal-cell-pi-smoke` and inspect `pi-model-snapshot.nota` plus `terminal-cell-transcript.txt` |
-| host attach helper plans Ghostty without Wayland-in-sandbox | `nix flake check .#persona-engine-sandbox-attach-plans-host-ghostty` |
-| optional bwrap strict profile is documented as a tiny bind set | `nix flake check .#persona-engine-sandbox-documents-bwrap-strict-profile` |
-| engine resources are scoped | `nix flake check .#persona-engine-layout-uses-engine-id-scoped-paths` |
-| socket policy is boundary-specific | `nix flake check .#persona-engine-layout-assigns-socket-modes-by-component-boundary` |
-| engine topology is explicit | `nix flake check .#persona-engine-layout-can-select-message-router-topology` |
-| spawn envelopes carry manager-supplied peers | `nix flake check .#persona-spawn-envelope-carries-component-paths-and-peer-sockets` |
-| message-router topology gives each component one peer | `nix flake check .#persona-message-router-topology-spawn-envelope-has-one-peer-socket` |
-| engine preparation does not write global manager state as a side effect | `nix flake check .#persona-engine-layout-prepares-only-engine-scoped-directories` |
-| component command resolution is Nix-owned | `nix flake check .#persona-component-commands-resolve-from-nix-closure` |
-| launch config overrides are narrow | `nix flake check .#persona-launch-config-overrides-one-component-command` |
-| spawn envelope carries the resolved command | `nix flake check .#persona-spawn-envelope-carries-resolved-component-command` |
-| engine supervisor starts every prototype-supervised process through the launcher actor | `nix flake check .#persona-engine-supervisor-launches-prototype-supervised-components-through-process-launcher` |
-| engine supervisor can launch the focused message-router topology without full-stack side effects | `nix flake check .#persona-engine-supervisor-launches-message-router-topology-without-full-stack` |
-| persona-daemon launch plan reaches the engine supervisor and manager event log | `nix flake check .#persona-daemon-launches-prototype-supervised-components-through-engine-supervisor` |
-| persona-daemon can launch the focused message-router topology | `nix flake check .#persona-daemon-launches-message-router-topology-through-engine-supervisor` |
-| full topology starts from Nix-built prototype launchers | `nix flake check .#persona-daemon-launches-nix-built-prototype-topology` |
-| message-router topology starts from Nix-built prototype launchers and carries a real message payload | `nix flake check .#persona-daemon-launches-nix-built-message-router-topology` |
-| component skeletons answer health/status/readiness | `nix flake check .#persona-component-skeletons-answer-health-status-readiness` |
-| unfinished component behavior is typed | `nix flake check .#persona-component-skeleton-returns-typed-unimplemented` |
-| skeleton decodes every contract variant | `nix flake check .#persona-component-skeleton-decodes-every-contract-variant` |
-| engine events are typed manager state | `nix flake check .#persona-engine-event-log-records-typed-manager-events` |
-| NOTA event logs are projections | `nix flake check .#persona-engine-event-log-nota-projection-is-view` |
-| component launcher does not block manager request handling | `nix flake check .#persona-component-launcher-does-not-block-manager-mailbox` |
-| component launcher passes spawn envelope to child environment | `nix flake check .#persona-component-launcher-passes-spawn-envelope-environment` |
-| component stop cleans up the child process tree | `nix flake check .#persona-component-launcher-reaps-process-group` |
-| sandbox credential roots remain visible under home hiding | `nix flake check .#persona-engine-sandbox-binds-dedicated-credential-root` |
+| host attach helper plans Ghostty without Wayland-in-sandbox | `nix build .#checks.x86_64-linux.persona-engine-sandbox-attach-plans-host-ghostty` |
+| optional bwrap strict profile is documented as a tiny bind set | `nix build .#checks.x86_64-linux.persona-engine-sandbox-documents-bwrap-strict-profile` |
+| engine resources are scoped | `nix build .#checks.x86_64-linux.persona-engine-layout-uses-engine-id-scoped-paths` |
+| socket policy is boundary-specific | `nix build .#checks.x86_64-linux.persona-engine-layout-assigns-socket-modes-by-component-boundary` |
+| engine topology is explicit | `nix build .#checks.x86_64-linux.persona-engine-layout-can-select-message-router-topology` |
+| spawn envelopes carry manager-supplied peers | `nix build .#checks.x86_64-linux.persona-spawn-envelope-carries-component-paths-and-peer-sockets` |
+| message-router topology gives each component one peer | `nix build .#checks.x86_64-linux.persona-message-router-topology-spawn-envelope-has-one-peer-socket` |
+| engine preparation does not write global manager state as a side effect | `nix build .#checks.x86_64-linux.persona-engine-layout-prepares-only-engine-scoped-directories` |
+| component command resolution is Nix-owned | `nix build .#checks.x86_64-linux.persona-component-commands-resolve-from-nix-closure` |
+| launch config overrides are narrow | `nix build .#checks.x86_64-linux.persona-launch-config-overrides-one-component-command` |
+| spawn envelope carries the resolved command | `nix build .#checks.x86_64-linux.persona-spawn-envelope-carries-resolved-component-command` |
+| engine supervisor starts every prototype-supervised process through the launcher actor | `nix build .#checks.x86_64-linux.persona-engine-supervisor-launches-prototype-supervised-components-through-process-launcher` |
+| engine supervisor can launch the focused message-router topology without full-stack side effects | `nix build .#checks.x86_64-linux.persona-engine-supervisor-launches-message-router-topology-without-full-stack` |
+| persona-daemon launch plan reaches the engine supervisor and manager event log | `nix build .#checks.x86_64-linux.persona-daemon-launches-prototype-supervised-components-through-engine-supervisor` |
+| persona-daemon can launch the focused message-router topology | `nix build .#checks.x86_64-linux.persona-daemon-launches-message-router-topology-through-engine-supervisor` |
+| full topology starts from Nix-built prototype launchers | `nix build .#checks.x86_64-linux.persona-daemon-launches-nix-built-prototype-topology` |
+| message-router topology starts from Nix-built prototype launchers and carries a real message payload | `nix build .#checks.x86_64-linux.persona-daemon-launches-nix-built-message-router-topology` |
+| engine events are typed manager state | `nix build .#checks.x86_64-linux.persona-engine-event-log-records-typed-manager-events` |
+| NOTA event logs are projections | `nix build .#checks.x86_64-linux.persona-engine-event-log-nota-projection-is-view` |
+| component launcher does not block manager request handling | `nix build .#checks.x86_64-linux.persona-component-launcher-does-not-block-manager-mailbox` |
+| component launcher passes spawn envelope to child environment | `nix build .#checks.x86_64-linux.persona-component-launcher-passes-spawn-envelope-environment` |
+| component stop cleans up the child process tree | `nix build .#checks.x86_64-linux.persona-component-launcher-reaps-process-group` |
+| sandbox credential roots remain visible under home hiding | `nix build .#checks.x86_64-linux.persona-engine-sandbox-binds-dedicated-credential-root` |
 
 The launcher checks above now cover both the primitive direct-process backend
 and the `persona-daemon` launch-plan path. They prove readiness and socket
@@ -1419,7 +1419,7 @@ src/request.rs   NOTA projection into signal-persona requests and replies
 src/state.rs     in-memory engine-state reducer
 src/bin/persona_component_fixture.rs  typed component/supervision fixture for tests
 src/bin/wire_*   signal-persona-message wire-test shims
-tests/           daemon, manager, request, projection, and state tests
+tests/           daemon, manager, store, supervisor, process, layout, wire, and meta-test witnesses
 ```
 
 ## See Also

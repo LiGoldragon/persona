@@ -146,9 +146,9 @@ async fn constraint_engine_supervisor_launches_message_router_topology_without_f
         .stop_gracefully()
         .await
         .expect("supervisor stops");
-    supervisor.wait_for_shutdown().await;
+    let _shutdown_completion = supervisor.wait_for_shutdown().await;
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -263,7 +263,7 @@ async fn constraint_engine_supervisor_launches_prototype_supervised_components_t
         .stop_gracefully()
         .await
         .expect("supervisor stops");
-    supervisor.wait_for_shutdown().await;
+    let _shutdown_completion = supervisor.wait_for_shutdown().await;
     store.stop_gracefully().await.expect("manager store stops");
-    store.wait_for_shutdown().await;
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }

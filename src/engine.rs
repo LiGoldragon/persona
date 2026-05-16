@@ -611,15 +611,11 @@ impl ComponentSpawnEnvelope {
             component_kind: self.component.component_kind(),
             component_name: self.component.signal_name(),
             owner_identity: self.owner_identity.clone(),
-            state_dir: signal_persona::WirePath::new(
-                self.state_dir.to_string_lossy().into_owned(),
-            ),
+            state_dir: signal_persona::WirePath::new(self.state_dir.to_string_lossy().into_owned()),
             domain_socket_path: signal_persona::WirePath::new(
                 self.domain_socket_path.to_string_lossy().into_owned(),
             ),
-            domain_socket_mode: signal_persona::SocketMode::new(
-                self.domain_socket_mode.as_octal(),
-            ),
+            domain_socket_mode: signal_persona::SocketMode::new(self.domain_socket_mode.as_octal()),
             supervision_socket_path: signal_persona::WirePath::new(
                 self.supervision_socket_path.to_string_lossy().into_owned(),
             ),

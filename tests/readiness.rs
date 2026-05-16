@@ -47,7 +47,7 @@ impl Drop for ReadinessFixture {
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test]
 async fn constraint_component_ready_requires_socket_metadata_from_spawn_envelope() {
     let fixture = ReadinessFixture::new("ready");
     let _listener = fixture.bind_socket(0o600);
@@ -66,10 +66,10 @@ async fn constraint_component_ready_requires_socket_metadata_from_spawn_envelope
     assert_eq!(ready.component(), EngineComponent::Router);
     assert_eq!(ready.mode(), SocketMode::internal_component());
     readiness.stop_gracefully().await.expect("readiness stops");
-    readiness.wait_for_shutdown().await;
+    let _shutdown_completion = readiness.wait_for_shutdown().await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test]
 async fn constraint_component_ready_rejects_wrong_socket_mode() {
     let fixture = ReadinessFixture::new("wrong-mode");
     let _listener = fixture.bind_socket(0o600);
@@ -99,10 +99,10 @@ async fn constraint_component_ready_rejects_wrong_socket_mode() {
         other => panic!("unexpected readiness failure: {other:?}"),
     }
     readiness.stop_gracefully().await.expect("readiness stops");
-    readiness.wait_for_shutdown().await;
+    let _shutdown_completion = readiness.wait_for_shutdown().await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test]
 async fn constraint_component_ready_waits_for_socket_mode_to_settle() {
     let fixture = ReadinessFixture::new("settle-mode");
     let _listener = fixture.bind_socket(0o755);
@@ -131,5 +131,5 @@ async fn constraint_component_ready_waits_for_socket_mode_to_settle() {
     assert_eq!(ready.component(), EngineComponent::Message);
     assert_eq!(ready.mode(), SocketMode::message_ingress());
     readiness.stop_gracefully().await.expect("readiness stops");
-    readiness.wait_for_shutdown().await;
+    let _shutdown_completion = readiness.wait_for_shutdown().await;
 }
