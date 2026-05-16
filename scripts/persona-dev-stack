@@ -19,7 +19,8 @@ mkdir -p "$root"
 
 router_socket="$root/router.sock"
 message_socket="$root/message.sock"
-terminal_socket="$root/responder.terminal.sock"
+terminal_socket="$root/responder.terminal.control.sock"
+terminal_data_socket="$root/responder.terminal.data.sock"
 harness_socket="$root/responder.harness.sock"
 router_store="$root/router.redb"
 terminal_store="$root/terminal.redb"
@@ -139,12 +140,13 @@ start_terminal() {
     "$terminal_daemon" \
       --store "$terminal_store" \
       --name responder \
-      --socket "$terminal_socket" \
+      --control-socket "$terminal_socket" \
+      --data-socket "$terminal_data_socket" \
       -- "$PERSONA_BASH" -lc 'printf "terminal-ready\n"; while IFS= read -r line; do printf "terminal-echo:%s\n" "$line"; done' \
       2>"$terminal_stderr"
   }
   terminal_pid="$PERSONA_TERMINAL_PROCESS_PID"
-  read_ready_line "persona-terminal" "${PERSONA_TERMINAL_PROCESS[0]}" "$terminal_stdout" "persona-terminal-daemon socket=$terminal_socket"
+  read_ready_line "persona-terminal" "${PERSONA_TERMINAL_PROCESS[0]}" "$terminal_stdout" "persona-terminal-daemon control-socket=$terminal_socket data-socket=$terminal_data_socket"
 }
 
 write_router_bootstrap() {
@@ -177,7 +179,8 @@ write_router_daemon_configuration() {
   # RouterDaemonConfiguration per signal-persona-router:
   # router_socket_path router_socket_mode supervision_socket_path
   # supervision_socket_mode store_path bootstrap_path owner_identity
-  printf '(RouterDaemonConfiguration "%s" 384 "%s" 384 "%s" (Some "%s") (UnixUser %s))\n' \
+  # `Option<WirePath>` encodes as the inner value when Some.
+  printf '(RouterDaemonConfiguration "%s" 384 "%s" 384 "%s" "%s" (UnixUser %s))\n' \
     "$router_socket" \
     "$router_supervision_socket" \
     "$router_store" \
