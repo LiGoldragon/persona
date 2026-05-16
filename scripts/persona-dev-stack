@@ -264,7 +264,7 @@ run_smoke() {
   local terminal_capture="$root/terminal-capture.tsv"
   local terminal_capture_after_input="$root/terminal-capture-after-input.tsv"
 
-  "$terminal_signal" --socket "$terminal_socket" --terminal responder connect >"$terminal_connect"
+  "$terminal_signal" --control-socket "$terminal_socket" --terminal responder connect >"$terminal_connect"
   grep -Fq $'TerminalReady\tresponder\t1' "$terminal_connect"
 
   PERSONA_MESSAGE_SOCKET="$message_socket" \
@@ -273,7 +273,7 @@ run_smoke() {
     >"$send_output" 2>"$send_error"
   grep -Fq "(SubmissionAccepted " "$send_output"
 
-  "$terminal_signal" --socket "$terminal_socket" --terminal responder capture >"$terminal_capture"
+  "$terminal_signal" --control-socket "$terminal_socket" --terminal responder capture >"$terminal_capture"
   grep -Fq $'TerminalCaptured\tresponder\t1' "$terminal_capture"
   capture_contains_text "$terminal_capture" "hello from persona meta"
 
@@ -291,10 +291,10 @@ run_smoke() {
     return 1
   fi
 
-  "$terminal_signal" --socket "$terminal_socket" --terminal responder prompt terminal-side-input >"$terminal_input"
+  "$terminal_signal" --control-socket "$terminal_socket" --terminal responder prompt terminal-side-input >"$terminal_input"
   grep -Fq $'TerminalInputAccepted\tresponder\t1' "$terminal_input"
 
-  "$terminal_signal" --socket "$terminal_socket" --terminal responder capture >"$terminal_capture_after_input"
+  "$terminal_signal" --control-socket "$terminal_socket" --terminal responder capture >"$terminal_capture_after_input"
   grep -Fq $'TerminalCaptured\tresponder\t1' "$terminal_capture_after_input"
   capture_contains_text "$terminal_capture_after_input" "terminal-side-input"
 
@@ -334,7 +334,7 @@ case "$mode" in
     printf 'try: source %s\n' "$environment_file"
     printf 'try: message '\''(Send responder "hello")'\''\n'
     printf 'try: message '\''(Inbox responder)'\''\n'
-    printf 'try: persona-terminal-signal --socket "$PERSONA_TERMINAL_SOCKET" --terminal responder capture\n'
+    printf 'try: persona-terminal-signal --control-socket "$PERSONA_TERMINAL_SOCKET" --terminal responder capture\n'
     if [ -n "$harness_daemon" ]; then
       wait -n "$router_pid" "$message_daemon_pid" "$harness_pid" "$terminal_pid"
     else
