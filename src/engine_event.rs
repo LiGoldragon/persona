@@ -145,6 +145,13 @@ pub enum EngineEventBody {
     ComponentReady(ComponentLifecycleEvent),
     ComponentUnimplemented(ComponentUnimplemented),
     ComponentExited(ComponentExited),
+    /// A `ComponentSpawned` recorded by a prior daemon run had no
+    /// matching `ComponentReady` or `ComponentExited` before the
+    /// daemon stopped. The current daemon's startup event-log replay
+    /// found the open arc and is recording the orphan. Supervisor
+    /// restart policy decides what happens next; this event is the
+    /// audit witness that the orphan was detected, not silently lost.
+    ComponentOrphaned(ComponentOrphaned),
     RestartScheduled(RestartScheduled),
     RestartExhausted(RestartExhausted),
     ComponentStopped(ComponentLifecycleEvent),
@@ -251,6 +258,41 @@ impl ComponentExited {
 pub struct ComponentExitedInput {
     pub component: ComponentName,
     pub exit_code: Option<i32>,
+}
+
+/// The `(engine, component)` pair was last seen in
+/// `ComponentProcessState::Launched` by a prior daemon run that never
+/// recorded readiness or exit. The current daemon observed the open arc
+/// during startup event-log replay and is recording the orphan. Carries
+/// the sequence number of the `ComponentSpawned` event that started the
+/// orphan arc so audit can correlate the two events.
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct ComponentOrphaned {
+    component: ComponentName,
+    spawned_sequence: EngineEventSequence,
+}
+
+impl ComponentOrphaned {
+    pub fn from_input(input: ComponentOrphanedInput) -> Self {
+        Self {
+            component: input.component,
+            spawned_sequence: input.spawned_sequence,
+        }
+    }
+
+    pub fn component(&self) -> &ComponentName {
+        &self.component
+    }
+
+    pub fn spawned_sequence(&self) -> EngineEventSequence {
+        self.spawned_sequence
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComponentOrphanedInput {
+    pub component: ComponentName,
+    pub spawned_sequence: EngineEventSequence,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]

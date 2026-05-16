@@ -10,8 +10,8 @@ use signal_persona_auth::EngineId;
 
 use crate::error::{Error, Result};
 use crate::manager_store::{
-    ComponentStatusSnapshotRow, ManagerStore, PersistEngineRecord, ReadEngineRecord,
-    ReadEngineStatusSnapshot,
+    AppendOrphansFromEventLog, ComponentStatusSnapshotRow, ManagerStore, PersistEngineRecord,
+    ReadEngineRecord, ReadEngineStatusSnapshot,
 };
 use crate::state::EngineState;
 
@@ -75,6 +75,18 @@ impl EngineManager {
         engine: &EngineId,
         store: &ActorRef<ManagerStore>,
     ) -> Result<EngineState> {
+        // Detect orphan arcs from the prior daemon run and append typed
+        // `ComponentOrphaned` events before reading the status snapshot.
+        // The reducer projects each orphan into `Exited / Failed`, so
+        // the snapshot the manager hydrates from already reflects every
+        // arc the prior daemon failed to close. `ask` collapses
+        // `Reply = Result<_, _>` into the outer `SendError`, so one
+        // `?` unwraps both layers; the `Vec<EngineEvent>` it returns is
+        // informational and ignored here.
+        let _appended_orphans = store
+            .ask(AppendOrphansFromEventLog)
+            .await
+            .map_err(|error| Error::actor("scan event log for orphan components", error))?;
         let record = store
             .ask(ReadEngineRecord::new(engine.clone()))
             .await

@@ -9,7 +9,8 @@ use signal_persona_auth::EngineId;
 
 use crate::Result;
 use crate::engine_event::{
-    ComponentExited, EngineEvent, EngineEventBody, EngineEventDraft, EngineEventSequence,
+    ComponentExited, ComponentOrphaned, ComponentOrphanedInput, EngineEvent, EngineEventBody,
+    EngineEventDraft, EngineEventDraftInput, EngineEventSequence, EngineEventSource,
 };
 
 const MANAGER_SCHEMA: Schema = Schema {
@@ -224,6 +225,19 @@ impl ManagerTables {
         })?)
     }
 
+    /// Every persisted event, regardless of engine, in sequence order.
+    /// Used by orphan detection so a single scan covers every engine
+    /// the manager has launched against this catalog.
+    fn all_engine_events(&self) -> Result<Vec<EngineEvent>> {
+        Ok(self.database.read(|transaction| {
+            Ok(ENGINE_EVENTS
+                .iter(transaction)?
+                .into_iter()
+                .map(|(_sequence, event)| event)
+                .collect())
+        })?)
+    }
+
     fn highest_event_sequence(&self) -> Result<Option<EngineEventSequence>> {
         Ok(self.database.read(|transaction| {
             let sequence = ENGINE_EVENTS
@@ -353,6 +367,13 @@ impl ManagerTables {
                 ComponentProcessState::Exited,
                 Self::health_from_exit(exit),
             )?,
+            EngineEventBody::ComponentOrphaned(orphan) => Self::write_component_state(
+                transaction,
+                engine,
+                orphan.component().clone(),
+                ComponentProcessState::Exited,
+                ComponentHealth::Failed,
+            )?,
             EngineEventBody::RestartScheduled(_) => {}
             EngineEventBody::RestartExhausted(restart) => Self::write_component_state(
                 transaction,
@@ -464,9 +485,139 @@ impl ManagerStore {
         Ok(())
     }
 
+    /// Scan the engine event log for orphan arcs — `(engine, component)`
+    /// pairs whose most recent lifecycle event is `ComponentSpawned`
+    /// without a matching `ComponentReady`, `ComponentExited`,
+    /// `ComponentOrphaned`, or `RestartExhausted` terminator. For each
+    /// such pair, append one `ComponentOrphaned` event so the snapshot
+    /// reducer projects the component into `Exited / Failed`. Returns
+    /// the orphan events appended; safe to call repeatedly because a
+    /// freshly-orphaned arc gains a terminator (`Orphaned`) and stops
+    /// matching the orphan predicate.
+    pub fn append_orphans_from_event_log(&mut self) -> Result<Vec<EngineEvent>> {
+        let events = self.tables()?.all_engine_events()?;
+        let orphans = Self::orphan_candidates(&events);
+        let mut appended = Vec::with_capacity(orphans.len());
+        for orphan in orphans {
+            let draft = EngineEventDraft::from_input(EngineEventDraftInput {
+                engine: orphan.engine,
+                source: EngineEventSource::Manager,
+                body: EngineEventBody::ComponentOrphaned(ComponentOrphaned::from_input(
+                    ComponentOrphanedInput {
+                        component: orphan.component,
+                        spawned_sequence: orphan.spawned_sequence,
+                    },
+                )),
+            });
+            let sequence = self.event_sequence.next();
+            let event = draft.into_event(sequence);
+            self.tables()?.write_engine_event(&event)?;
+            self.event_sequence = sequence;
+            self.write_count = self.write_count.saturating_add(1);
+            appended.push(event);
+        }
+        Ok(appended)
+    }
+
+    /// Scan the event sequence and return one `OrphanCandidate` per
+    /// `(engine, component)` pair whose most-recent lifecycle-arc event
+    /// is `ComponentSpawned` — the prior daemon recorded the spawn but
+    /// no terminator. Events are visited in sequence order so the most
+    /// recent lifecycle event determines arc state. `EngineId` does not
+    /// implement `Hash`, so the working map keys on owned strings.
+    fn orphan_candidates(events: &[EngineEvent]) -> Vec<OrphanCandidate> {
+        use std::collections::BTreeMap;
+        #[derive(Clone)]
+        struct ArcState {
+            engine: EngineId,
+            component: ComponentName,
+            spawned_sequence: EngineEventSequence,
+            in_flight: bool,
+        }
+        let mut arcs: BTreeMap<(String, String), ArcState> = BTreeMap::new();
+        for event in events {
+            let engine = event.engine().clone();
+            match event.body() {
+                EngineEventBody::ComponentSpawned(lifecycle) => {
+                    let key = (
+                        engine.as_str().to_string(),
+                        lifecycle.component().as_str().to_string(),
+                    );
+                    arcs.insert(
+                        key,
+                        ArcState {
+                            engine,
+                            component: lifecycle.component().clone(),
+                            spawned_sequence: event.sequence(),
+                            in_flight: true,
+                        },
+                    );
+                }
+                EngineEventBody::ComponentReady(lifecycle) => {
+                    let key = (
+                        engine.as_str().to_string(),
+                        lifecycle.component().as_str().to_string(),
+                    );
+                    if let Some(arc) = arcs.get_mut(&key) {
+                        arc.in_flight = false;
+                    }
+                }
+                EngineEventBody::ComponentExited(exit) => {
+                    let key = (
+                        engine.as_str().to_string(),
+                        exit.component().as_str().to_string(),
+                    );
+                    if let Some(arc) = arcs.get_mut(&key) {
+                        arc.in_flight = false;
+                    }
+                }
+                EngineEventBody::ComponentOrphaned(orphan) => {
+                    let key = (
+                        engine.as_str().to_string(),
+                        orphan.component().as_str().to_string(),
+                    );
+                    if let Some(arc) = arcs.get_mut(&key) {
+                        arc.in_flight = false;
+                    }
+                }
+                EngineEventBody::RestartExhausted(restart) => {
+                    let key = (
+                        engine.as_str().to_string(),
+                        restart.component().as_str().to_string(),
+                    );
+                    if let Some(arc) = arcs.get_mut(&key) {
+                        arc.in_flight = false;
+                    }
+                }
+                EngineEventBody::ComponentStopped(_)
+                | EngineEventBody::ComponentUnimplemented(_)
+                | EngineEventBody::RestartScheduled(_)
+                | EngineEventBody::EngineStateChanged(_) => {}
+            }
+        }
+        let mut candidates: Vec<OrphanCandidate> = arcs
+            .into_values()
+            .filter(|arc| arc.in_flight)
+            .map(|arc| OrphanCandidate {
+                engine: arc.engine,
+                component: arc.component,
+                spawned_sequence: arc.spawned_sequence,
+            })
+            .collect();
+        candidates.sort_by_key(|candidate| candidate.spawned_sequence.into_u64());
+        candidates
+    }
+
     fn write_count(&self) -> u64 {
         self.write_count
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OrphanCandidate {
+    engine: EngineId,
+    component: ComponentName,
+    spawned_sequence: EngineEventSequence,
 }
 
 impl Actor for ManagerStore {
@@ -704,5 +855,26 @@ impl Message<RebuildSnapshotsFromEventLog> for ManagerStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.force_rebuild_snapshots()
+    }
+}
+
+/// Manager-startup verb: scan the event log for orphan arcs — pairs of
+/// `(engine, component)` whose most recent lifecycle event is
+/// `ComponentSpawned` with no matching `Ready`, `Exited`, `Orphaned`, or
+/// `RestartExhausted`. For each such pair, append one
+/// `ComponentOrphaned` event so the snapshot reducer projects the
+/// component into `Exited / Failed`. Returns the orphan events appended,
+/// in the order their `ComponentSpawned` rows were recorded.
+pub struct AppendOrphansFromEventLog;
+
+impl Message<AppendOrphansFromEventLog> for ManagerStore {
+    type Reply = Result<Vec<EngineEvent>>;
+
+    async fn handle(
+        &mut self,
+        _message: AppendOrphansFromEventLog,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.append_orphans_from_event_log()
     }
 }

@@ -91,6 +91,12 @@ pub struct ComponentExitedReport {
 }
 
 #[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+pub struct ComponentOrphanedReport {
+    pub component: ComponentName,
+    pub spawned_sequence: u64,
+}
+
+#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
 pub struct RestartScheduledReport {
     pub component: ComponentName,
     pub attempt: u32,
@@ -113,6 +119,7 @@ pub enum EngineEventBodyReport {
     ComponentReady(ComponentLifecycleEventReport),
     ComponentUnimplemented(ComponentUnimplementedReport),
     ComponentExited(ComponentExitedReport),
+    ComponentOrphaned(ComponentOrphanedReport),
     RestartScheduled(RestartScheduledReport),
     RestartExhausted(RestartExhaustedReport),
     ComponentStopped(ComponentLifecycleEventReport),
@@ -206,6 +213,12 @@ impl EngineEventBodyReport {
                 Self::ComponentExited(ComponentExitedReport {
                     component: event.component().clone(),
                     exit_code: event.exit_code(),
+                })
+            }
+            EngineEventBody::ComponentOrphaned(event) => {
+                Self::ComponentOrphaned(ComponentOrphanedReport {
+                    component: event.component().clone(),
+                    spawned_sequence: event.spawned_sequence().into_u64(),
                 })
             }
             EngineEventBody::RestartScheduled(event) => {

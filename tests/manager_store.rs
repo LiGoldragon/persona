@@ -3,6 +3,7 @@ use persona::engine_event::{
     ComponentUnimplementedInput, EngineEventBody, EngineEventDraft, EngineEventDraftInput,
     EngineEventSource, HarnessOperationKind, UnimplementedReason,
 };
+use persona::manager_store::AppendOrphansFromEventLog;
 use persona::manager::EngineManager;
 use persona::manager_store::{
     AppendEngineEvent, ComponentLifecycleSnapshotRow, ComponentProcessState,
@@ -594,4 +595,127 @@ fn sorted_lifecycle(
 fn sorted_status(mut rows: Vec<ComponentStatusSnapshotRow>) -> Vec<ComponentStatusSnapshotRow> {
     rows.sort_by(|a, b| a.component().as_str().cmp(b.component().as_str()));
     rows
+}
+
+/// Architectural-truth witness: a `ComponentSpawned` recorded by a prior
+/// daemon run without a matching `ComponentReady` or `ComponentExited`
+/// is detected as an orphan during the next manager startup, and one
+/// `ComponentOrphaned` event is appended to the event log. The snapshot
+/// reducer then projects the orphan into
+/// `ComponentProcessState::Exited` and `ComponentHealth::Failed`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_spawn() {
+    let fixture = StoreFixture::new("persona-manager-orphan-detection");
+    let engine = EngineId::new("engine-orphan-detection");
+
+    // Simulate a prior daemon arc: spawn two components, mark one
+    // ready, leave the other in the open arc that the prior daemon
+    // never closed. Re-opening the same store from a new
+    // `ManagerStore::open` would require synchronous flock release; the
+    // current ManagerStore actor releases its lock asynchronously after
+    // `wait_for_shutdown` returns. The orphan-detection logic does not
+    // depend on a process restart — it runs on every `ManagerStore`
+    // that opens its tables. One `ManagerStore` is sufficient to
+    // witness the orphan scan: the events are persisted, the scan
+    // reads them, and the orphan event is appended through the same
+    // actor path the manager startup would use.
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    store
+        .ask(AppendEngineEvent::new(StoreFixture::spawned_event(
+            engine.clone(),
+            "persona-router",
+        )))
+        .await
+        .expect("router spawn appends");
+    let router_ready = EngineEventDraft::from_input(EngineEventDraftInput {
+        engine: engine.clone(),
+        source: EngineEventSource::Manager,
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(
+            ComponentName::new("persona-router"),
+        )),
+    });
+    store
+        .ask(AppendEngineEvent::new(router_ready))
+        .await
+        .expect("router ready appends");
+    store
+        .ask(AppendEngineEvent::new(StoreFixture::spawned_event(
+            engine.clone(),
+            "persona-terminal",
+        )))
+        .await
+        .expect("terminal spawn appends");
+
+    // Orphan scan: should find exactly one open arc for
+    // `persona-terminal` and append one `ComponentOrphaned` event.
+    let orphans = store
+        .ask(AppendOrphansFromEventLog)
+        .await
+        .expect("orphan scan completes");
+    assert_eq!(orphans.len(), 1, "exactly one orphan detected");
+    let orphaned = match orphans[0].body() {
+        EngineEventBody::ComponentOrphaned(orphan) => orphan,
+        other => panic!("expected ComponentOrphaned, got {other:?}"),
+    };
+    assert_eq!(orphaned.component().as_str(), "persona-terminal");
+    // The spawned_sequence on the orphan event names the original
+    // spawn (sequence 3: router-spawn=1, router-ready=2, terminal-
+    // spawn=3).
+    assert_eq!(orphaned.spawned_sequence().into_u64(), 3);
+
+    // Snapshot reducer should now project terminal as Exited / Failed.
+    let lifecycle = store
+        .ask(ReadEngineLifecycleSnapshot::new(engine.clone()))
+        .await
+        .expect("lifecycle snapshot reads");
+    let terminal_lifecycle = lifecycle
+        .iter()
+        .find(|row| row.component().as_str() == "persona-terminal")
+        .expect("terminal lifecycle row present");
+    assert_eq!(
+        terminal_lifecycle.process_state(),
+        ComponentProcessState::Exited
+    );
+    let status = store
+        .ask(ReadEngineStatusSnapshot::new(engine.clone()))
+        .await
+        .expect("status snapshot reads");
+    let terminal_status = status
+        .iter()
+        .find(|row| row.component().as_str() == "persona-terminal")
+        .expect("terminal status row present");
+    assert_eq!(
+        terminal_status.health(),
+        signal_persona::ComponentHealth::Failed
+    );
+
+    // Router was ready before "crash"; it must not be marked orphaned.
+    let router_lifecycle = lifecycle
+        .iter()
+        .find(|row| row.component().as_str() == "persona-router")
+        .expect("router lifecycle row present");
+    assert_eq!(
+        router_lifecycle.process_state(),
+        ComponentProcessState::Ready
+    );
+    let router_status = status
+        .iter()
+        .find(|row| row.component().as_str() == "persona-router")
+        .expect("router status row present");
+    assert_eq!(
+        router_status.health(),
+        signal_persona::ComponentHealth::Running
+    );
+
+    // Second orphan-scan must be idempotent: the orphan arc gained a
+    // terminator (the appended `Orphaned`), so the next scan appends
+    // zero new events.
+    let again = store
+        .ask(AppendOrphansFromEventLog)
+        .await
+        .expect("second orphan scan completes");
+    assert!(again.is_empty(), "orphan scan is idempotent");
+
+    store.stop_gracefully().await.expect("manager store stops");
+    store.wait_for_shutdown().await;
 }
