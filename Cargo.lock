@@ -259,6 +259,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nota-config"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/nota-config.git?branch=main#d557fbf1dea78e417aa26a3b2858e810a6b6f292"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "thiserror",
+]
+
+[[package]]
 name = "nota-derive"
 version = "0.1.0"
 source = "git+https://github.com/LiGoldragon/nota-derive.git?branch=main#e24e50afe110810db50a7eb8f9a7963c6761c0af"
@@ -509,9 +519,10 @@ dependencies = [
 [[package]]
 name = "signal-persona-message"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-message.git#7fb5000b57e7661e5e5ec61c1715c767d3c56508"
+source = "git+https://github.com/LiGoldragon/signal-persona-message.git#f1b36a8a554ea9e8f62c629c256e8f6ca0d5566c"
 dependencies = [
  "nota-codec",
+ "nota-config",
  "rkyv",
  "signal-core",
  "signal-persona",

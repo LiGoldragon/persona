@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::os::unix::fs::PermissionsExt;
 use std::time::Duration;
 
+use std::path::{Path, PathBuf};
+
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
@@ -143,7 +145,8 @@ impl DirectProcessLauncher {
             return Err(DirectProcessFailure::ComponentAlreadyRunning { component });
         }
         Self::write_spawn_envelope_file(&envelope)?;
-        let mut command = Self::command_from_envelope(&envelope);
+        let typed_configuration_path = Self::write_typed_configuration_file(&envelope)?;
+        let mut command = Self::command_from_envelope(&envelope, typed_configuration_path.as_deref());
         let mut child = command.spawn().map_err(|source| DirectProcessFailure::Io {
             operation: "spawn component process",
             source,
@@ -242,9 +245,85 @@ impl DirectProcessLauncher {
         })
     }
 
-    fn command_from_envelope(envelope: &ComponentSpawnEnvelope) -> Command {
+    /// Write per-daemon typed configuration files (per designer/183).
+    ///
+    /// Returns `Some(path)` for components that have migrated to the
+    /// typed-configuration argv contract; the caller prepends that
+    /// path as argv. Returns `None` for components still on the
+    /// env-var contract — the launcher's env-var sets still apply.
+    fn write_typed_configuration_file(
+        envelope: &ComponentSpawnEnvelope,
+    ) -> Result<Option<PathBuf>, DirectProcessFailure> {
+        match envelope.component() {
+            EngineComponent::Message => Self::write_message_daemon_configuration_file(envelope).map(Some),
+            _ => Ok(None),
+        }
+    }
+
+    fn write_message_daemon_configuration_file(
+        envelope: &ComponentSpawnEnvelope,
+    ) -> Result<PathBuf, DirectProcessFailure> {
+        let router_socket_path = envelope
+            .peers()
+            .iter()
+            .find(|peer| peer.component() == EngineComponent::Router)
+            .ok_or(DirectProcessFailure::MissingRouterPeerForMessage)?
+            .domain_socket_path();
+        let configuration = signal_persona_message::MessageDaemonConfiguration {
+            message_socket_path: signal_persona::WirePath::new(
+                envelope.domain_socket_path().to_string_lossy().into_owned(),
+            ),
+            message_socket_mode: signal_persona::SocketMode::new(
+                envelope.domain_socket_mode().as_octal(),
+            ),
+            supervision_socket_path: signal_persona::WirePath::new(
+                envelope.supervision_socket_path().to_string_lossy().into_owned(),
+            ),
+            supervision_socket_mode: signal_persona::SocketMode::new(
+                envelope.supervision_socket_mode().as_octal(),
+            ),
+            router_socket_path: signal_persona::WirePath::new(
+                router_socket_path.to_string_lossy().into_owned(),
+            ),
+            owner_identity: envelope.owner_identity().clone(),
+        };
+        let path = envelope
+            .envelope_path()
+            .with_file_name("message-daemon.nota");
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|source| DirectProcessFailure::Io {
+                operation: "create message daemon configuration directory",
+                source,
+            })?;
+        }
+        let mut encoder = Encoder::new();
+        configuration
+            .encode(&mut encoder)
+            .map_err(DirectProcessFailure::Nota)?;
+        let mut text = encoder.into_string();
+        text.push('\n');
+        std::fs::write(&path, text).map_err(|source| DirectProcessFailure::Io {
+            operation: "write message daemon configuration file",
+            source,
+        })?;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(
+            |source| DirectProcessFailure::Io {
+                operation: "set message daemon configuration file mode",
+                source,
+            },
+        )?;
+        Ok(path)
+    }
+
+    fn command_from_envelope(
+        envelope: &ComponentSpawnEnvelope,
+        typed_configuration_path: Option<&Path>,
+    ) -> Command {
         let component_command = envelope.command();
         let mut command = Command::new(component_command.executable_path().as_path());
+        if let Some(path) = typed_configuration_path {
+            command.arg(path);
+        }
         for argument in component_command.arguments() {
             command.arg(argument.as_str());
         }
@@ -461,6 +540,8 @@ pub enum DirectProcessFailure {
     ChildPidMissing { component: EngineComponent },
     #[error("spawn envelope path for component {component:?} has no parent directory")]
     EnvelopePathMissingParent { component: EngineComponent },
+    #[error("message daemon spawn envelope has no Router peer socket")]
+    MissingRouterPeerForMessage,
     #[error("spawn envelope nota: {0}")]
     Nota(#[from] nota_codec::Error),
     #[error("{operation}: {source}")]
