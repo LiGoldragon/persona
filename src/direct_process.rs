@@ -400,6 +400,15 @@ impl DirectProcessLauncher {
             EngineComponent::Router => {
                 Self::write_router_daemon_configuration_file(envelope).map(Some)
             }
+            EngineComponent::Terminal => {
+                Self::write_terminal_daemon_configuration_file(envelope).map(Some)
+            }
+            EngineComponent::Harness => {
+                Self::write_harness_daemon_configuration_file(envelope).map(Some)
+            }
+            EngineComponent::System => {
+                Self::write_system_daemon_configuration_file(envelope).map(Some)
+            }
             _ => Ok(None),
         }
     }
@@ -582,6 +591,129 @@ impl DirectProcessLauncher {
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(
             |source| DirectProcessFailure::Io {
                 operation: "set introspect daemon configuration file mode",
+                source,
+            },
+        )?;
+        Ok(path)
+    }
+
+    fn write_terminal_daemon_configuration_file(
+        envelope: &ComponentSpawnEnvelope,
+    ) -> Result<PathBuf, DirectProcessFailure> {
+        let store_path = envelope
+            .state_dir()
+            .join(format!("{}.redb", envelope.component().as_str()));
+        let configuration = signal_persona_terminal::TerminalDaemonConfiguration {
+            terminal_socket_path: signal_persona::WirePath::new(
+                envelope.domain_socket_path().to_string_lossy().into_owned(),
+            ),
+            terminal_socket_mode: signal_persona::SocketMode::new(
+                envelope.domain_socket_mode().as_octal(),
+            ),
+            supervision_socket_path: signal_persona::WirePath::new(
+                envelope
+                    .supervision_socket_path()
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            supervision_socket_mode: signal_persona::SocketMode::new(
+                envelope.supervision_socket_mode().as_octal(),
+            ),
+            store_path: signal_persona::WirePath::new(store_path.to_string_lossy().into_owned()),
+            owner_identity: envelope.owner_identity().clone(),
+        };
+        Self::write_configuration_nota_file(envelope, &configuration, "terminal-daemon.nota")
+    }
+
+    fn write_harness_daemon_configuration_file(
+        envelope: &ComponentSpawnEnvelope,
+    ) -> Result<PathBuf, DirectProcessFailure> {
+        // The default supervised harness is `Fixture` until the spawn
+        // envelope carries a typed harness kind. The supervised
+        // production stack will widen this; for the prototype path
+        // every supervised harness is fixture-shaped.
+        let configuration = signal_persona_harness::HarnessDaemonConfiguration {
+            harness_socket_path: signal_persona::WirePath::new(
+                envelope.domain_socket_path().to_string_lossy().into_owned(),
+            ),
+            harness_socket_mode: signal_persona::SocketMode::new(
+                envelope.domain_socket_mode().as_octal(),
+            ),
+            supervision_socket_path: signal_persona::WirePath::new(
+                envelope
+                    .supervision_socket_path()
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            supervision_socket_mode: signal_persona::SocketMode::new(
+                envelope.supervision_socket_mode().as_octal(),
+            ),
+            harness_name: signal_persona_harness::HarnessName::new("harness"),
+            harness_kind: signal_persona_harness::HarnessKind::Fixture,
+            terminal_socket_path: envelope
+                .peers()
+                .iter()
+                .find(|peer| peer.component() == EngineComponent::Terminal)
+                .map(|peer| {
+                    signal_persona::WirePath::new(
+                        peer.domain_socket_path().to_string_lossy().into_owned(),
+                    )
+                }),
+            owner_identity: envelope.owner_identity().clone(),
+        };
+        Self::write_configuration_nota_file(envelope, &configuration, "harness-daemon.nota")
+    }
+
+    fn write_system_daemon_configuration_file(
+        envelope: &ComponentSpawnEnvelope,
+    ) -> Result<PathBuf, DirectProcessFailure> {
+        let configuration = signal_persona_system::SystemDaemonConfiguration {
+            system_socket_path: signal_persona::WirePath::new(
+                envelope.domain_socket_path().to_string_lossy().into_owned(),
+            ),
+            system_socket_mode: signal_persona::SocketMode::new(
+                envelope.domain_socket_mode().as_octal(),
+            ),
+            supervision_socket_path: signal_persona::WirePath::new(
+                envelope
+                    .supervision_socket_path()
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            supervision_socket_mode: signal_persona::SocketMode::new(
+                envelope.supervision_socket_mode().as_octal(),
+            ),
+            backend: signal_persona_system::SystemBackend::Niri,
+            owner_identity: envelope.owner_identity().clone(),
+        };
+        Self::write_configuration_nota_file(envelope, &configuration, "system-daemon.nota")
+    }
+
+    fn write_configuration_nota_file<C: NotaEncode>(
+        envelope: &ComponentSpawnEnvelope,
+        configuration: &C,
+        file_name: &str,
+    ) -> Result<PathBuf, DirectProcessFailure> {
+        let path = envelope.envelope_path().with_file_name(file_name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|source| DirectProcessFailure::Io {
+                operation: "create daemon configuration directory",
+                source,
+            })?;
+        }
+        let mut encoder = Encoder::new();
+        configuration
+            .encode(&mut encoder)
+            .map_err(DirectProcessFailure::Nota)?;
+        let mut text = encoder.into_string();
+        text.push('\n');
+        std::fs::write(&path, text).map_err(|source| DirectProcessFailure::Io {
+            operation: "write daemon configuration file",
+            source,
+        })?;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(
+            |source| DirectProcessFailure::Io {
+                operation: "set daemon configuration file mode",
                 source,
             },
         )?;

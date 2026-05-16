@@ -511,11 +511,14 @@ dependencies = [
 [[package]]
 name = "signal-persona-harness"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-harness.git#4a873504a6b3aa24b02d83f9ce0e355e51423663"
+source = "git+https://github.com/LiGoldragon/signal-persona-harness.git#dcebbb12e67240689031997fd34b13a5dfbc3826"
 dependencies = [
  "nota-codec",
+ "nota-config",
  "rkyv",
  "signal-core",
+ "signal-persona",
+ "signal-persona-auth",
  "thiserror",
 ]
 
@@ -577,22 +580,28 @@ dependencies = [
 [[package]]
 name = "signal-persona-system"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-system.git#081698c045f0996488bcb52118adac0ec5909056"
+source = "git+https://github.com/LiGoldragon/signal-persona-system.git#dae8f07491aeadf74feb4ec21471e4e3a7465452"
 dependencies = [
  "nota-codec",
+ "nota-config",
  "rkyv",
  "signal-core",
+ "signal-persona",
+ "signal-persona-auth",
  "thiserror",
 ]
 
 [[package]]
 name = "signal-persona-terminal"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-terminal.git#50809a8ce77ad684e3b34dcf376733564b632ae5"
+source = "git+https://github.com/LiGoldragon/signal-persona-terminal.git#a44a0903c14c66efae5d5ce69d528f836e1f1d9f"
 dependencies = [
  "nota-codec",
+ "nota-config",
  "rkyv",
  "signal-core",
+ "signal-persona",
+ "signal-persona-auth",
  "thiserror",
 ]
 
