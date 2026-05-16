@@ -466,24 +466,45 @@ file until they own durable state. The manager prepares the
 directory at spawn-envelope mint time; the child opens it only if
 it has state to persist.
 
-**Manager state — two reducers and snapshots**: the manager runs
-**two reducers** over its append-only `engine-events` log:
+**Manager state — event log is authoritative; snapshots are acceleration**:
+the manager owns one append-only `engine-events` log inside `manager.redb`.
+The log is the only durable source of truth for engine lifecycle and component
+health. Two snapshot tables — `engine-lifecycle-snapshot` and
+`engine-status-snapshot` — are **materialised projections** over the event log,
+maintained by two reducers:
 
 - **Engine-lifecycle reducer** — per `(EngineId, ComponentName)`, materialises
-  `ComponentProcessState` (closed enum: `Unspawned → Launched → SocketBound →
-  Ready → Stopping → Exited`). Snapshot table: `engine-lifecycle-snapshot`.
+  `ComponentProcessState` (closed enum: `Launched → Ready → Stopping → Exited`,
+  with a future `SocketBound` slot reserved between `Launched` and `Ready` for
+  the push-based readiness contract). Snapshot table:
+  `engine-lifecycle-snapshot`.
 - **Engine-status reducer** — per `(EngineId, ComponentName)`, materialises
-  `ComponentHealthState` (closed enum: `Starting | Running | Degraded |
-  Stopped | Failed`). Snapshot table: `engine-status-snapshot`.
+  `ComponentHealth` (closed enum: `Starting | Running | Degraded | Stopped |
+  Failed`). Snapshot table: `engine-status-snapshot`.
 
-CLI status queries (`ComponentStatusQuery`, `EngineStatusQuery`) read the
-engine-status snapshot only. Audit/debug paths walk the event log or the
-engine-lifecycle snapshot.
+The two reducers run together. One redb write transaction appends the event
+and reduces it into both snapshot tables; the event log and the snapshots
+move together or not at all. A snapshot table can be deleted, truncated, or
+corrupted in any way without losing manager truth: the snapshot rebuilds from
+the event log on next `ManagerStore::open` (see "Manager restore" below).
+This is the **hybrid model**: lazy reducer-on-append plus eager rebuild on
+startup. CLI status queries (`ComponentStatusQuery`, `EngineStatusQuery`)
+read the engine-status snapshot. Audit/debug paths walk the event log
+directly. Snapshots accelerate reads; the event log decides truth.
 
-**Manager restore**: on daemon startup the manager loads the
-latest `StoredEngineRecord` per engine from `manager.redb` and initialises
-both reducer snapshots from their stored state. Event replay is later
-strengthening; the prototype loads snapshots directly.
+**Manager restore**: on daemon startup the manager loads the latest
+`StoredEngineRecord` per engine from `manager.redb`, then replays every
+persisted `EngineEvent` through both reducers, overwriting any existing
+snapshot rows. The two-step open — schema-check + table-ensure, then
+event-log replay into snapshots — runs once per `ManagerStore::open`, so
+the on-disk snapshot state always equals the event log's projection by the
+time the first ask is served. `EngineManager::start_with_store` then reads
+the status snapshot and overlays per-component health onto the in-memory
+`EngineState`, so the manager's first `ComponentStatusQuery` reply matches
+the persisted history. A daemon that crashes between event append and
+snapshot reduce is not possible — both happen in one transaction; a daemon
+that crashes between transactions resumes at the highest persisted event
+sequence with no state lost.
 
 **Socket and supervision verification**: each child binds its own domain
 socket from the envelope and applies the requested mode. Each child also binds
@@ -495,6 +516,44 @@ socket: `ComponentHello`, `ComponentReadinessQuery`, and
 health report lets the manager append `ComponentReady` to the event log. A
 child that fails to bind, binds the wrong mode, gives the wrong identity, or
 does not answer the supervision relation does not progress to `Ready`.
+
+**Bounded reachability probe vs ongoing polling**: the kernel offers no push
+primitive for *"another process has called `bind(2)` on a path I just minted
+for it."* The manager's startup-time check that a child's domain socket
+exists and has the requested mode is a **bounded reachability probe across
+a process boundary** — *"is the child alive and listening"* — not state-change
+polling. It carries `ESSENCE.md` §"Polling is forbidden" §"Named carve-outs"'s
+reachability-probe carveout. The probe terminates: success appends
+`ComponentReady`; timeout returns a typed `ComponentReadinessTimeout`. No
+manager loop continues to ask *"did anything change?"* after the probe
+resolves. Ongoing health observation is push-shaped: the component's
+supervision socket emits typed health events to the manager when its
+own state changes, not on a manager-driven clock.
+
+**Child-exit observation is push, not poll**: the manager does not poll
+child PIDs. Each `DirectProcessLauncher` launch owns its child handle in a
+**dedicated watcher task** that awaits `child.wait()` and pushes one of two
+events: a `StopComponentReceipt` (when the manager initiated a stop) or a
+`ChildProcessExited` (natural exit). The natural-exit path appends a typed
+`EngineEventBody::ComponentExited(ComponentExited { component, exit_code })`
+to the manager event log through the `ExitNotifier`. The exit then
+materialises through the engine-lifecycle reducer into
+`ComponentProcessState::Exited` and through the engine-status reducer into
+`ComponentHealth::Stopped` (exit code 0) or `ComponentHealth::Failed`
+(non-zero). The watcher task is supervised: its panic does not leave a
+child unobserved; the supervision tree replaces the watcher and resumes
+the wait.
+
+**Orphan detection on manager restart**: on `EngineManager::start_with_store`,
+the manager replays the event log and finds any `(EngineId, ComponentName)`
+pair with `ComponentSpawned` but no matching `ComponentReady` *and* no
+matching `ComponentExited`. Such a pair names a child the prior daemon
+launched but never observed reaching readiness and never observed exiting —
+the prior daemon crashed mid-spawn-sequence, or was sent SIGKILL while a
+child was alive. The manager appends a typed `ComponentOrphaned` event for
+each such pair before serving its first request. The supervisor's restart
+policy then decides whether to relaunch, mark `Failed`, or escalate; the
+event is the audit witness that the orphan was detected, not silently lost.
 
 Component process supervision belongs behind an actor boundary. The manager
 may first use a direct child-process backend, but it should be driven by a
@@ -961,6 +1020,46 @@ Migration rules:
   projection.
 - The engine event log is not a terminal transcript. Terminal and harness
   transcript data remains owned by terminal/harness components.
+- The `manager.engine-events` table is append-only. Existing event rows never
+  mutate; the only legal write is `insert` at a fresh sequence key.
+- The `manager.engine-lifecycle-snapshot` and `manager.engine-status-snapshot`
+  tables are materialised by reducer-on-append. Writers append events; no
+  caller writes snapshot rows directly outside the reducer path.
+- Event append and snapshot reduce land in one redb write transaction. A
+  daemon crash cannot leave an event persisted without its snapshot reduction.
+- The snapshot tables can be deleted, truncated, or corrupted in any way
+  without losing manager truth. `ManagerStore::open` rebuilds them from the
+  event log on the next start.
+- `EngineManager::start_with_store` reads the engine-status snapshot and
+  overlays per-component health onto the in-memory `EngineState` before
+  serving any request. The manager's first `ComponentStatusQuery` reply
+  reflects the persisted history.
+- `ManagerStore.on_stop` drops the `ManagerTables` handle so the underlying
+  redb file lock releases during graceful shutdown, before the mailbox's
+  last sender clone closes.
+- `ComponentReady` is appended only after Hello + ReadinessQuery + HealthQuery
+  all return non-error replies over the child's supervision socket. Filesystem
+  socket existence alone does not promote a component to `Ready`.
+- Manager startup-time socket reachability is a bounded reachability probe
+  carrying the `ESSENCE.md` §"Named carve-outs" carveout, not ongoing
+  state-change polling. Ongoing health observation is push-shaped from the
+  component's supervision socket.
+- Each `DirectProcessLauncher`-spawned child is owned by a dedicated watcher
+  task that awaits `child.wait()` and pushes one of two messages: a
+  `StopComponentReceipt` for manager-initiated stops, or a
+  `ChildProcessExited` for natural exits. The launcher's mailbox never holds
+  a `child.wait()` future.
+- A `ChildProcessExited` notification routed through `ExitNotifier` appends
+  one `EngineEventBody::ComponentExited` to the manager event log; the
+  snapshot reducer projects the exit into `ComponentProcessState::Exited`
+  and `ComponentHealth::Stopped`/`Failed` in the same transaction.
+- The child-exit watcher task is supervised. Its panic does not leave a
+  child process unobserved.
+- Manager startup replays the event log to detect orphan components — pairs
+  of `(EngineId, ComponentName)` with `ComponentSpawned` but no matching
+  `ComponentReady` *and* no matching `ComponentExited` — and appends one
+  `EngineEventBody::ComponentOrphaned` event per orphan before serving its
+  first request.
 - Component process supervision is owned by data-bearing Kameo launcher /
   supervisor actors. Request handlers do not spawn, wait, reap, or restart
   child processes directly.
@@ -1069,6 +1168,11 @@ Migration rules:
   The write path is a data-bearing Kameo `ManagerStore` actor, not a CLI
   helper or direct redb call in request decoding.
 - The engine manager event log is typed manager state; text logs are views.
+- The event log is authoritative for manager state. Snapshot tables
+  (`engine-lifecycle-snapshot`, `engine-status-snapshot`) are materialised
+  projections — acceleration for reads, never truth in their own right.
+- Deleting the snapshot tables does not lose manager state. The next open
+  rebuilds them from the event log.
 - Full-engine supervision first proves every prototype-supervised component is
   launched from the Nix-built stack, that each component domain socket reaches
   the envelope-declared type/mode, and that each supervision socket answers the
@@ -1128,6 +1232,11 @@ The apex repo owns tests that prove cross-component shape:
 | manager catalog writes go through the writer actor | `nix flake check .#persona-manager-store-writes-engine-status-through-writer-actor` |
 | engine manager persists accepted mutations | `nix flake check .#persona-engine-manager-persists-component-mutation-through-manager-store` |
 | engine manager restores persisted snapshot before serving status | `nix flake check .#persona-engine-manager-restores-persisted-snapshot-before-status` |
+| manager store reduces lifecycle events into both snapshot tables in one transaction | `cargo test --test manager_store constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables` |
+| engine manager hydrates component health from the status snapshot on startup | `cargo test --test manager_store constraint_engine_manager_hydrates_component_health_from_snapshot` |
+| snapshot tables rebuild from the event log after a `ManagerStore::open` against an empty snapshot table | `cargo test --test manager_store constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapshot_truncation` |
+| manager startup detects orphans — `ComponentSpawned` without matching `ComponentReady` or `ComponentExited` — and appends `ComponentOrphaned` events | `cargo test --test manager_store constraint_manager_startup_appends_component_orphaned_for_unfinished_spawn` |
+| direct process launcher observes natural child exit and appends `ComponentExited` to manager event log | `cargo test --test direct_process constraint_component_launcher_observes_natural_child_exit_and_appends_event` |
 | persona CLI mutation reaches manager.redb via daemon path | `nix flake check .#persona-daemon-persists-cli-mutation-to-manager-store` |
 | sandbox runner is a Nix-owned app | `nix flake check .#persona-engine-sandbox-script-builds` |
 | sandbox runner supports each first harness name | `nix flake check .#persona-engine-sandbox-supports-all-harnesses` |
