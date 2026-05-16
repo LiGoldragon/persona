@@ -291,6 +291,7 @@ dependencies = [
  "kameo",
  "libc",
  "nota-codec",
+ "redb",
  "rkyv",
  "sema",
  "signal-core",

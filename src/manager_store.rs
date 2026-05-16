@@ -9,8 +9,7 @@ use signal_persona_auth::EngineId;
 
 use crate::Result;
 use crate::engine_event::{
-    ComponentExited, ComponentLifecycleEvent, EngineEvent, EngineEventBody, EngineEventDraft,
-    EngineEventSequence, RestartExhausted,
+    ComponentExited, EngineEvent, EngineEventBody, EngineEventDraft, EngineEventSequence,
 };
 
 const MANAGER_SCHEMA: Schema = Schema {
@@ -272,12 +271,14 @@ impl ManagerTables {
     /// once per `open` so a manager that crashes mid-append still presents
     /// a snapshot consistent with the event log.
     fn rebuild_snapshots_from_event_log(&self) -> Result<()> {
-        Ok(self.database.write(|transaction| {
-            let events: Vec<EngineEvent> = ENGINE_EVENTS
+        let events: Vec<EngineEvent> = self.database.read(|transaction| {
+            Ok(ENGINE_EVENTS
                 .iter(transaction)?
                 .into_iter()
                 .map(|(_sequence, event)| event)
-                .collect();
+                .collect())
+        })?;
+        Ok(self.database.write(|transaction| {
             for event in &events {
                 Self::reduce_event_into_snapshots(transaction, event)?;
             }
@@ -358,7 +359,7 @@ impl ManagerTables {
 }
 
 pub struct ManagerStore {
-    tables: ManagerTables,
+    tables: Option<ManagerTables>,
     write_count: u64,
     event_sequence: EngineEventSequence,
 }
@@ -370,7 +371,7 @@ impl ManagerStore {
             .highest_event_sequence()?
             .unwrap_or(EngineEventSequence::new(0));
         Ok(Self {
-            tables,
+            tables: Some(tables),
             write_count: 0,
             event_sequence,
         })
@@ -381,41 +382,47 @@ impl ManagerStore {
         Ok(Self::spawn_in_thread(store))
     }
 
+    fn tables(&self) -> Result<&ManagerTables> {
+        self.tables
+            .as_ref()
+            .ok_or(crate::Error::ManagerStoreClosed)
+    }
+
     fn persist_engine_record(&mut self, record: StoredEngineRecord) -> Result<ManagerStoreReceipt> {
-        self.tables.write_engine_record(&record)?;
+        self.tables()?.write_engine_record(&record)?;
         self.write_count = self.write_count.saturating_add(1);
         Ok(ManagerStoreReceipt::new(record.engine, self.write_count))
     }
 
     fn read_engine_record(&self, engine: &EngineId) -> Result<Option<StoredEngineRecord>> {
-        self.tables.engine_record(engine)
+        self.tables()?.engine_record(engine)
     }
 
     fn append_engine_event(&mut self, draft: EngineEventDraft) -> Result<EngineEventReceipt> {
         let sequence = self.event_sequence.next();
         let event = draft.into_event(sequence);
-        self.tables.write_engine_event(&event)?;
+        self.tables()?.write_engine_event(&event)?;
         self.event_sequence = sequence;
         self.write_count = self.write_count.saturating_add(1);
         Ok(EngineEventReceipt::new(sequence, self.write_count))
     }
 
     fn read_engine_events(&self, engine: &EngineId) -> Result<Vec<EngineEvent>> {
-        self.tables.engine_events(engine)
+        self.tables()?.engine_events(engine)
     }
 
     fn read_engine_lifecycle_snapshot(
         &self,
         engine: &EngineId,
     ) -> Result<Vec<ComponentLifecycleSnapshotRow>> {
-        self.tables.engine_lifecycle_snapshot(engine)
+        self.tables()?.engine_lifecycle_snapshot(engine)
     }
 
     fn read_engine_status_snapshot(
         &self,
         engine: &EngineId,
     ) -> Result<Vec<ComponentStatusSnapshotRow>> {
-        self.tables.engine_status_snapshot(engine)
+        self.tables()?.engine_status_snapshot(engine)
     }
 
     fn write_count(&self) -> u64 {
@@ -432,6 +439,19 @@ impl Actor for ManagerStore {
         _actor_reference: ActorRef<Self>,
     ) -> std::result::Result<Self, Self::Error> {
         Ok(store)
+    }
+
+    /// Drop the typed table handle so the underlying redb file lock releases
+    /// during `on_stop`, before the mailbox's last sender clone closes. A
+    /// subsequent `ManagerStore::open` on the same path sees an unlocked
+    /// database instead of racing the spawn-thread's tear-down.
+    async fn on_stop(
+        &mut self,
+        _actor_reference: kameo::actor::WeakActorRef<Self>,
+        _reason: kameo::error::ActorStopReason,
+    ) -> std::result::Result<(), Self::Error> {
+        self.tables = None;
+        Ok(())
     }
 }
 

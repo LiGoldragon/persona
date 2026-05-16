@@ -54,6 +54,9 @@ pub enum Error {
     #[error("manager store path is missing a parent directory: {path}")]
     ManagerStorePathMissingParent { path: PathBuf },
 
+    #[error("manager store handle has been released after on_stop")]
+    ManagerStoreClosed,
+
     #[error("unknown Persona engine topology: {got}")]
     UnknownEngineTopology { got: String },
 

@@ -5,8 +5,9 @@ use persona::engine_event::{
 };
 use persona::manager::EngineManager;
 use persona::manager_store::{
-    AppendEngineEvent, ManagerStore, ManagerStoreLocation, PersistEngineRecord, ReadEngineEvents,
-    ReadEngineRecord, ReadManagerStoreWriteCount,
+    AppendEngineEvent, ComponentProcessState, ManagerStore, ManagerStoreLocation,
+    PersistEngineRecord, ReadEngineEvents, ReadEngineLifecycleSnapshot, ReadEngineRecord,
+    ReadEngineStatusSnapshot, ReadManagerStoreWriteCount,
 };
 use persona::schema::{
     ComponentOperationReport, EngineEventBodyReport, EngineEventReport, EngineEventSourceKind,
@@ -328,6 +329,130 @@ async fn constraint_engine_event_log_nota_projection_is_view() {
         nota.starts_with("(EngineEventReport 1 engine-event-projection Component persona-harness (ComponentUnimplemented")
     );
 
+    store.stop_gracefully().await.expect("manager store stops");
+    store.wait_for_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables() {
+    let fixture = StoreFixture::new("persona-manager-store-snapshot-reduce");
+    let engine = EngineId::new("engine-snapshot-reduce");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+
+    store
+        .ask(AppendEngineEvent::new(StoreFixture::spawned_event(
+            engine.clone(),
+            "persona-router",
+        )))
+        .await
+        .expect("spawn event appends");
+
+    let lifecycle_after_spawn = store
+        .ask(ReadEngineLifecycleSnapshot::new(engine.clone()))
+        .await
+        .expect("lifecycle snapshot reads");
+    assert_eq!(lifecycle_after_spawn.len(), 1);
+    assert_eq!(lifecycle_after_spawn[0].component().as_str(), "persona-router");
+    assert_eq!(
+        lifecycle_after_spawn[0].process_state(),
+        ComponentProcessState::Launched
+    );
+
+    let status_after_spawn = store
+        .ask(ReadEngineStatusSnapshot::new(engine.clone()))
+        .await
+        .expect("status snapshot reads");
+    assert_eq!(status_after_spawn.len(), 1);
+    assert_eq!(status_after_spawn[0].component().as_str(), "persona-router");
+    assert_eq!(
+        status_after_spawn[0].health(),
+        signal_persona::ComponentHealth::Starting
+    );
+
+    let ready_draft = EngineEventDraft::from_input(EngineEventDraftInput {
+        engine: engine.clone(),
+        source: EngineEventSource::Manager,
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(
+            ComponentName::new("persona-router"),
+        )),
+    });
+    store
+        .ask(AppendEngineEvent::new(ready_draft))
+        .await
+        .expect("ready event appends");
+
+    let lifecycle_after_ready = store
+        .ask(ReadEngineLifecycleSnapshot::new(engine.clone()))
+        .await
+        .expect("lifecycle snapshot reads");
+    assert_eq!(lifecycle_after_ready.len(), 1);
+    assert_eq!(
+        lifecycle_after_ready[0].process_state(),
+        ComponentProcessState::Ready
+    );
+
+    let status_after_ready = store
+        .ask(ReadEngineStatusSnapshot::new(engine.clone()))
+        .await
+        .expect("status snapshot reads");
+    assert_eq!(
+        status_after_ready[0].health(),
+        signal_persona::ComponentHealth::Running
+    );
+
+    store.stop_gracefully().await.expect("manager store stops");
+    store.wait_for_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
+    let fixture = StoreFixture::new("persona-engine-manager-snapshot-hydrate");
+    let engine = EngineId::new("engine-snapshot-hydrate");
+
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    store
+        .ask(AppendEngineEvent::new(StoreFixture::spawned_event(
+            engine.clone(),
+            "persona-terminal",
+        )))
+        .await
+        .expect("spawn event appends");
+    let ready_draft = EngineEventDraft::from_input(EngineEventDraftInput {
+        engine: engine.clone(),
+        source: EngineEventSource::Manager,
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(
+            ComponentName::new("persona-terminal"),
+        )),
+    });
+    store
+        .ask(AppendEngineEvent::new(ready_draft))
+        .await
+        .expect("ready event appends");
+
+    // The first manager runs with the live event stream; its in-memory state
+    // already reflects the appended events. A second manager starting against
+    // the same store proves the snapshot tables — not the in-memory writer —
+    // carry the `Running` health across the restart boundary.
+    let manager = EngineManager::start_with_store(engine.clone(), store.clone())
+        .await
+        .expect("manager starts from snapshot");
+
+    let reply = manager
+        .ask(persona::manager::HandleEngineRequest::new(
+            EngineRequest::ComponentStatusQuery(ComponentStatusQuery {
+                component: ComponentName::new("persona-terminal"),
+            }),
+        ))
+        .await
+        .expect("status query handled through manager");
+    let EngineReply::ComponentStatus(status) = reply else {
+        panic!("expected terminal component status, got {reply:?}");
+    };
+    assert_eq!(status.health, signal_persona::ComponentHealth::Running);
+
+    EngineManager::stop(manager)
+        .await
+        .expect("manager stops after snapshot witness");
     store.stop_gracefully().await.expect("manager store stops");
     store.wait_for_shutdown().await;
 }
