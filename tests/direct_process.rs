@@ -90,6 +90,18 @@ impl DirectProcessFixture {
     fn long_running_command(&self) -> ComponentCommand {
         let script = self.write_script(
             "long-running",
+            "#!/bin/sh\ntrap 'exit 0' TERM\nwhile true; do sleep 1; done\n",
+        );
+        ComponentCommand::from_input(ComponentCommandInput {
+            executable_path: ExecutablePath::new(script),
+            arguments: Vec::new(),
+            environment: Vec::new(),
+        })
+    }
+
+    fn process_group_command(&self) -> ComponentCommand {
+        let script = self.write_script(
+            "process-group",
             "#!/bin/sh\ntrap 'exit 0' TERM\n(trap 'exit 0' TERM; while true; do sleep 1; done) &\nchild=\"$!\"\necho \"$child\" > \"$PERSONA_TEST_CHILD_PID_FILE\"\nwait \"$child\" 2>/dev/null || true\n",
         );
         ComponentCommand::from_input(ComponentCommandInput {
@@ -549,7 +561,9 @@ async fn constraint_component_launcher_does_not_block_manager_mailbox() {
 async fn constraint_component_launcher_reaps_process_group() {
     let fixture = DirectProcessFixture::new("reap");
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
-    let envelope = fixture.envelope(EngineComponent::Mind).await;
+    let envelope = fixture
+        .envelope_with_command(EngineComponent::Mind, fixture.process_group_command())
+        .await;
     let receipt = DirectProcessFixture::launch(&launcher, envelope)
         .await
         .expect("component process launches");

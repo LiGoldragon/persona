@@ -285,11 +285,10 @@ The stateful assertions prove:
 | each terminal transcript contains `*-received:*` and `*-sent:*` markers | Each harness terminal receives a router delivery and initiates the next `message` CLI send. |
 | final owner inbox contains `reviewer completed task` | The last harness-side send returns through `persona-message-daemon` and `persona-router` into a router inbox. |
 
-Current limitation: the terminal-side `message` CLI still enters through the
-owner message socket, so the router stamps these follow-up sends as `owner`.
-The witness proves the physical component route. It does not yet prove
-harness-origin identity stamping; that requires the later harness-origin
-ingress relation rather than the owner CLI socket.
+The older dev-stack chain remains a fixture-oriented route witness. The
+manager-started chain below is the current provenance witness because the
+manager now creates per-harness message ingress sockets and the message daemon
+stamps those sends as component-instance origins.
 
 `persona-daemon-three-harness-chain-smoke` runs the same routed chain through
 the manager-started topology instead of the hand-written dev-stack launcher. It
@@ -306,6 +305,15 @@ route through `persona-message`, `persona-router`, `persona-harness`,
 `persona-terminal-supervisor`, and `terminal-cell`. It is a stateful app
 because terminal-cell owns live PTYs; the pure Nix check only proves the app is
 packaged.
+
+The stateful assertions additionally prove:
+
+| Witness | What it proves |
+|---|---|
+| `message-daemon.nota` contains one `InternalComponentInstanceOrigin Harness <name>` per harness | The manager gives `persona-message` private component ingress sockets for initiator, responder, and reviewer. |
+| each terminal runner sends through its own `message-ingress/<name>.sock` | Harness-side follow-up sends do not re-enter through the owner message socket. |
+| final owner inbox contains sender `reviewer` and body `reviewer completed task` | Router sender identity comes from the reviewer harness component instance, not from owner ingress fallback. |
+| instance-specific `*-daemon.nota` files exist for every harness and terminal | Multi-instance topologies do not overwrite typed daemon configuration files by component kind. |
 
 `persona-engine-sandbox` is the scaffold for the full federation witness from
 `reports/designer/129-sandboxed-persona-engine-test.md`. It creates the
