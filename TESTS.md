@@ -149,6 +149,7 @@ What each tier proves:
 | `constraint_three_harness_chain_topology_allocates_distinct_instances` | Proves the manager layout can allocate three harness instances and three terminal instances under one engine without collapsing them by component kind. |
 | `constraint_message_router_topology_spawn_envelope_has_one_peer_socket` | Proves the focused topology gives `persona-message` exactly one manager-supplied peer socket: `persona-router`. |
 | `constraint_three_harness_chain_spawn_envelope_pairs_harness_with_named_terminal` | Proves a named harness spawn envelope keeps its own instance name and sees its paired named terminal socket. |
+| `constraint_three_harness_chain_router_launch_writes_bootstrap_for_named_harnesses` | Starts the manager launcher for the router instance in the three-harness-chain topology and proves the router configuration points at a manager-written bootstrap registering initiator, responder, and reviewer harness sockets with the direct grants needed for the chain. |
 | `constraint_engine_supervisor_launches_message_router_topology_without_full_stack` | Starts the `EngineSupervisor` actor with the focused topology, proves only `persona-message` and `persona-router` launch, and verifies each child sees one peer. |
 | `constraint_engine_supervisor_launches_three_harness_chain_instances` | Starts the `EngineSupervisor` actor with the three-harness-chain topology and proves eight distinct child instances launch: message, router, three terminals, and three harnesses. |
 | `constraint_engine_supervisor_launches_prototype_supervised_components_through_process_launcher` | Starts the `EngineSupervisor` actor with a component skeleton launch plan, proves all prototype-supervised component processes go through `DirectProcessLauncher`, verifies domain and supervision sockets, completes typed supervision identity/readiness/health round-trips, and reads typed spawn/ready/stop events back from `manager.redb`. |
@@ -166,6 +167,7 @@ What each tier proves:
 | `persona-engine-sandbox-attach-script-builds` | The Nix-created host attach helper is executable. |
 | `persona-engine-sandbox-dev-stack-smoke-script-builds` | The Nix-created stateful sandbox dev-stack smoke app is executable. |
 | `persona-engine-sandbox-dev-stack-chain-smoke-script-builds` | The Nix-created three-harness routed-chain smoke app is executable. |
+| `persona-daemon-three-harness-chain-smoke-script-builds` | The Nix-created manager-started three-harness chain smoke app is executable. The live PTY route is exercised by `nix run .#persona-daemon-three-harness-chain-smoke`, not by a pure builder check. |
 | `persona-engine-sandbox-terminal-cell-script-builds` | The Nix-created terminal-cell smoke apps are executable and the persona flake packages `terminal-cell-daemon`, `terminal-cell-view`, `terminal-cell-send`, `terminal-cell-wait`, and `terminal-cell-capture`. |
 | `persona-engine-sandbox-attach-plans-host-ghostty` | Dry-run host attach emits a Ghostty + `terminal-cell-view` command against the sandbox `run/cell.sock` and records that Wayland is not passed into the sandbox. |
 | `persona-engine-sandbox-documents-bwrap-strict-profile` | Dry-run writes the optional bwrap strict-mount plan as a NOTA artifact with a tiny read-only/read-write bind set and no Wayland passthrough. |
@@ -288,6 +290,22 @@ owner message socket, so the router stamps these follow-up sends as `owner`.
 The witness proves the physical component route. It does not yet prove
 harness-origin identity stamping; that requires the later harness-origin
 ingress relation rather than the owner CLI socket.
+
+`persona-daemon-three-harness-chain-smoke` runs the same routed chain through
+the manager-started topology instead of the hand-written dev-stack launcher. It
+starts `persona-daemon` with `PERSONA_ENGINE_TOPOLOGY=three-harness-chain`,
+uses manager-generated spawn envelopes and typed daemon configuration files,
+has the router consume the manager-written bootstrap, and then drives the
+same:
+
+```text
+owner -> initiator -> responder -> reviewer -> owner inbox
+```
+
+route through `persona-message`, `persona-router`, `persona-harness`,
+`persona-terminal-supervisor`, and `terminal-cell`. It is a stateful app
+because terminal-cell owns live PTYs; the pure Nix check only proves the app is
+packaged.
 
 `persona-engine-sandbox` is the scaffold for the full federation witness from
 `reports/designer/129-sandboxed-persona-engine-test.md`. It creates the

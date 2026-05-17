@@ -194,6 +194,89 @@
               prototypeIntrospectLauncher
             ];
           };
+          threeHarnessTerminalLauncher = mkPrototypeLauncher {
+            name = "persona-three-harness-terminal-launcher";
+            actual = "${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-supervisor";
+            command = ''
+              if [ "''${PERSONA_PEER_0_COMPONENT:?}" != "message" ]; then
+                printf 'expected first peer to be message, got %s\n' "$PERSONA_PEER_0_COMPONENT" >&2
+                exit 1
+              fi
+
+              terminal_name="''${PERSONA_COMPONENT_INSTANCE:?}"
+              terminal_name="''${terminal_name%-terminal}"
+              message_socket="''${PERSONA_PEER_0_SOCKET_PATH:?}"
+              cell_control_socket="$PERSONA_DOMAIN_SOCKET_PATH.cell"
+              cell_data_socket="$PERSONA_DOMAIN_SOCKET_PATH.data"
+              runner="$state_dir/$terminal_name-runner.sh"
+              cell_stdout="$state_dir/$terminal_name.terminal-cell.stdout"
+              cell_stderr="$state_dir/$terminal_name.terminal-cell.stderr"
+
+              cat > "$runner" <<RUNNER
+              #!/usr/bin/env bash
+              set -euo pipefail
+
+              export PERSONA_MESSAGE_SOCKET='$message_socket'
+              message_bin='${inputs.persona-message.packages.${system}.default}/bin/message'
+              agent='$terminal_name'
+
+              printf '%s-runner-ready\n' "\$agent"
+              while IFS= read -r line; do
+                printf '%s-received:%s\n' "\$agent" "\$line"
+                if [ "\$agent" = 'initiator' ] && [ "\$line" = 'start-three-harness-task' ]; then
+                  "\$message_bin" '(Send responder "initiator handed to responder")'
+                  printf '%s-sent:%s\n' "\$agent" 'initiator handed to responder'
+                elif [ "\$agent" = 'responder' ] && [ "\$line" = 'initiator handed to responder' ]; then
+                  "\$message_bin" '(Send reviewer "responder handed to reviewer")'
+                  printf '%s-sent:%s\n' "\$agent" 'responder handed to reviewer'
+                elif [ "\$agent" = 'reviewer' ] && [ "\$line" = 'responder handed to reviewer' ]; then
+                  "\$message_bin" '(Send owner "reviewer completed task")'
+                  printf '%s-sent:%s\n' "\$agent" 'reviewer completed task'
+                fi
+              done
+              RUNNER
+              chmod +x "$runner"
+
+              ${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-daemon \
+                --store "$PERSONA_STATE_PATH" \
+                --name "$terminal_name" \
+                --control-socket "$cell_control_socket" \
+                --data-socket "$cell_data_socket" \
+                -- ${pkgs.bash}/bin/bash "$runner" \
+                > "$cell_stdout" \
+                2> "$cell_stderr" &
+              cell_process="$!"
+              cleanup_terminal_cell() {
+                kill "$cell_process" 2>/dev/null || true
+                wait "$cell_process" 2>/dev/null || true
+              }
+              trap cleanup_terminal_cell EXIT INT TERM
+
+              for _attempt in $(seq 1 100); do
+                if [ -S "$cell_control_socket" ]; then
+                  break
+                fi
+                if ! kill -0 "$cell_process" 2>/dev/null; then
+                  cat "$cell_stdout" >&2 || true
+                  cat "$cell_stderr" >&2 || true
+                  exit 1
+                fi
+                sleep 0.1
+              done
+              test -S "$cell_control_socket"
+
+              ${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-supervisor "$@"
+            '';
+          };
+          threeHarnessComponentLaunchers = pkgs.symlinkJoin {
+            name = "persona-three-harness-component-launchers";
+            paths = [
+              prototypeRouterLauncher
+              prototypeHarnessLauncher
+              threeHarnessTerminalLauncher
+              prototypeMessageLauncher
+            ];
+          };
           personaDevStack =
             mode:
             pkgs.writeShellApplication {
@@ -219,6 +302,21 @@
                 } ${if mode == "chain-smoke" then "" else mode} "$@"
               '';
             };
+          personaDaemonThreeHarnessChainSmoke = pkgs.writeShellApplication {
+            name = "persona-daemon-three-harness-chain-smoke";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.gnugrep
+              pkgs.gnused
+            ];
+            text = ''
+              export PERSONA_DAEMON_BIN=${self.packages.${system}.default}/bin/persona-daemon
+              export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.default}/bin/message
+              export PERSONA_TERMINAL_SIGNAL_BIN=${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-signal
+              export PERSONA_THREE_HARNESS_LAUNCHERS=${threeHarnessComponentLaunchers}
+              exec ${pkgs.bash}/bin/bash ${./scripts/persona-daemon-three-harness-chain-smoke} "$@"
+            '';
+          };
           personaEngineSandbox = pkgs.writeShellApplication {
             name = "persona-engine-sandbox";
             runtimeInputs = [
@@ -331,6 +429,8 @@
             personaEngineSandboxTerminalCellPiSmoke
             personaEngineSandboxTerminalCellFixtureSmoke
             prototypeComponentLaunchers
+            threeHarnessComponentLaunchers
+            personaDaemonThreeHarnessChainSmoke
             terminalCellBinaries
             ;
         };
@@ -374,6 +474,8 @@
           persona-engine-sandbox-terminal-cell-fixture-smoke =
             context.personaEngineSandboxTerminalCellFixtureSmoke;
           persona-prototype-component-launchers = context.prototypeComponentLaunchers;
+          persona-three-harness-component-launchers = context.threeHarnessComponentLaunchers;
+          persona-daemon-three-harness-chain-smoke = context.personaDaemonThreeHarnessChainSmoke;
         }
       );
 
@@ -647,7 +749,7 @@
             workdir="$(mktemp -d)"
             tap_socket="$workdir/tap.sock"
             message_socket="$workdir/message.sock"
-            spawn_envelope="$workdir/message.envelope"
+            message_configuration="$workdir/message-daemon.nota"
             captured_bytes="$workdir/captured.bytes"
             tap_ready="$workdir/tap.ready"
             daemon_stderr="$workdir/daemon.stderr"
@@ -671,25 +773,31 @@
             done
             test -f "$tap_ready"
 
-            # 2. Write the manager-style typed spawn envelope and start
+            # 2. Write the typed daemon configuration and start
             #    persona-message-daemon. It reads owner identity from the
-            #    envelope, binds message.sock, and forwards to tap.sock as
+            #    configuration, binds message.sock, and forwards to tap.sock as
             #    if it were the router.
             builder_uid="$(id -u)"
-            printf '(SpawnEnvelope default Message Message (UnixUser %s) "%s" "%s" 432 "%s" 384 [(PeerSocket Router "%s")] "%s" 1)\n' \
-              "$builder_uid" "$workdir" "$message_socket" "$workdir/message.supervision.sock" "$tap_socket" "$workdir/persona.sock" \
-              > "$spawn_envelope"
-            PERSONA_SPAWN_ENVELOPE="$spawn_envelope" \
-              ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon \
-              "$message_socket" "$tap_socket" 2> "$daemon_stderr" &
+            printf '(MessageDaemonConfiguration "%s" 432 "%s" 384 "%s" (UnixUser %s))\n' \
+              "$message_socket" "$workdir/message.supervision.sock" "$tap_socket" "$builder_uid" \
+              > "$message_configuration"
+            ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon \
+              "$message_configuration" 2> "$daemon_stderr" &
             daemon_pid=$!
 
             # Wait for the message socket to appear.
             for _ in $(seq 1 100); do
               [ -S "$message_socket" ] && break
+              if ! kill -0 "$daemon_pid" 2>/dev/null; then
+                cat "$daemon_stderr" >&2
+                exit 1
+              fi
               sleep 0.05
             done
-            test -S "$message_socket"
+            if [ ! -S "$message_socket" ]; then
+              cat "$daemon_stderr" >&2
+              exit 1
+            fi
 
             # 3. Send a real message through the CLI. The daemon
             #    accepts, reads SO_PEERCRED, compares it to the envelope
@@ -1392,6 +1500,14 @@
               cargoTestExtraArgs = "--test direct_process constraint_component_launcher_observes_natural_child_exit_and_appends_event -- --exact";
             }
           );
+          persona-three-harness-router-bootstrap-is-manager-written = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+              cargoTestExtraArgs = "--test direct_process constraint_three_harness_chain_router_launch_writes_bootstrap_for_named_harnesses -- --exact";
+            }
+          );
           persona-engine-supervisor-launches-prototype-supervised-components-through-process-launcher =
             context.craneLib.cargoTest
               (
@@ -1743,6 +1859,12 @@
                 cp "$work/state/default"/*.env "$out/"
                 touch "$out/passed"
               '';
+          persona-daemon-three-harness-chain-smoke-script-builds =
+            context.pkgs.runCommand "persona-daemon-three-harness-chain-smoke-script-builds" { } ''
+              test -x ${self.packages.${system}.persona-daemon-three-harness-chain-smoke}/bin/persona-daemon-three-harness-chain-smoke
+              mkdir -p "$out"
+              touch "$out/passed"
+            '';
         }
       );
 
@@ -1790,6 +1912,12 @@
           program = "${
             self.packages.${system}.persona-engine-sandbox-dev-stack-chain-smoke
           }/bin/persona-engine-sandbox-dev-stack-chain-smoke";
+        };
+        persona-daemon-three-harness-chain-smoke = {
+          type = "app";
+          program = "${
+            self.packages.${system}.persona-daemon-three-harness-chain-smoke
+          }/bin/persona-daemon-three-harness-chain-smoke";
         };
         persona-engine-sandbox-terminal-cell-pi-smoke = {
           type = "app";

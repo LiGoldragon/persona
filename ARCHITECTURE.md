@@ -1253,6 +1253,9 @@ The apex repo owns tests that prove cross-component shape:
 | sandbox dev-stack passes a manager-style spawn envelope to persona-message | run `nix run .#persona-engine-sandbox-dev-stack-smoke` and inspect `dev-stack-processes.nota` / `dev-stack-sockets.nota` for `MessageSpawnEnvelope` |
 | sandbox three-harness chain is a Nix-owned stateful app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-dev-stack-chain-smoke-script-builds`; run with `nix run .#persona-engine-sandbox-dev-stack-chain-smoke` |
 | sandbox three-harness chain routes through message, router, harness, and terminal | run `nix run .#persona-engine-sandbox-dev-stack-chain-smoke` and inspect `dev-stack-chain-manifest.nota`, terminal captures, and owner inbox for the final `reviewer completed task` |
+| manager-started three-harness chain is a Nix-owned stateful app | `nix build .#checks.x86_64-linux.persona-daemon-three-harness-chain-smoke-script-builds`; run with `nix run .#persona-daemon-three-harness-chain-smoke` |
+| manager writes the router bootstrap for the three-harness chain | `nix build .#checks.x86_64-linux.persona-three-harness-router-bootstrap-is-manager-written` |
+| manager-started three-harness chain routes through message, router, harness, terminal supervisor, and terminal-cell | run `nix run .#persona-daemon-three-harness-chain-smoke` and inspect `router-bootstrap.nota`, terminal captures, and owner inbox for the final `reviewer completed task` |
 | sandbox terminal-cell smoke is a Nix-owned stateful app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-terminal-cell-script-builds`; run fixture with `nix run .#persona-engine-sandbox-terminal-cell-fixture-smoke` |
 | sandbox terminal-cell Pi smoke uses local model config without copied auth | run with `nix run .#persona-engine-sandbox-terminal-cell-pi-smoke` and inspect `pi-model-snapshot.nota` plus `terminal-cell-transcript.txt` |
 | host attach helper plans Ghostty without Wayland-in-sandbox | `nix build .#checks.x86_64-linux.persona-engine-sandbox-attach-plans-host-ghostty` |
@@ -1264,6 +1267,7 @@ The apex repo owns tests that prove cross-component shape:
 | spawn envelopes carry manager-supplied peers | `nix build .#checks.x86_64-linux.persona-spawn-envelope-carries-component-paths-and-peer-sockets` |
 | message-router topology gives each component one peer | `nix build .#checks.x86_64-linux.persona-message-router-topology-spawn-envelope-has-one-peer-socket` |
 | three-harness-chain spawn envelope pairs harness instances with named terminal instances | `nix build .#checks.x86_64-linux.persona-three-harness-chain-spawn-envelope-pairs-harness-with-named-terminal` |
+| three-harness-chain router receives manager-written bootstrap | `nix build .#checks.x86_64-linux.persona-three-harness-router-bootstrap-is-manager-written` |
 | engine preparation does not write global manager state as a side effect | `nix build .#checks.x86_64-linux.persona-engine-layout-prepares-only-engine-scoped-directories` |
 | component command resolution is Nix-owned | `nix build .#checks.x86_64-linux.persona-component-commands-resolve-from-nix-closure` |
 | launch config overrides are narrow | `nix build .#checks.x86_64-linux.persona-launch-config-overrides-one-component-command` |
@@ -1411,6 +1415,7 @@ scripts/persona-engine-sandbox-auth-isolation-witness  Nix witness for host auth
 scripts/persona-engine-sandbox-attach  host Ghostty attach helper for sandbox cell sockets
 scripts/persona-engine-sandbox-terminal-cell-smoke  terminal-cell fixture/Pi live-agent sandbox witness
 scripts/persona-dev-stack-chain  three-harness message/router/harness/terminal chain witness
+scripts/persona-daemon-three-harness-chain-smoke  manager-started three-harness route witness
 src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
 src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records

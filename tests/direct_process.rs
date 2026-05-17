@@ -8,7 +8,10 @@ use persona::direct_process::{
     DirectProcessFailure, DirectProcessLauncher, ExitNotifier, LaunchComponent,
     LaunchComponentReceipt, ReadLauncherSnapshot, StopComponentProcess, StopComponentReceipt,
 };
-use persona::engine::{ComponentSpawnEnvelope, EngineComponent, PersonaDaemonPaths};
+use persona::engine::{
+    ComponentInstanceName, ComponentSpawnEnvelope, EngineComponent, EngineTopology,
+    PersonaDaemonPaths,
+};
 use persona::engine_event::EngineEventBody;
 use persona::launch::{
     CommandArgument, ComponentCommand, ComponentCommandCatalog, ComponentCommandEntry,
@@ -21,6 +24,7 @@ use persona::manager::{EngineManager, HandleEngineRequest};
 use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadEngineEvents};
 use signal_persona::{EngineReply, EngineRequest, EngineStatusQuery};
 use signal_persona_auth::EngineId;
+use signal_persona_router::RouterDaemonConfiguration;
 
 struct DirectProcessFixture {
     root: PathBuf,
@@ -138,9 +142,41 @@ exec sleep 3600",
         )
     }
 
+    fn command_catalog_for_topology(&self, topology: EngineTopology) -> ComponentCommandCatalog {
+        ComponentCommandCatalog::from_entries_for_components(
+            topology
+                .components()
+                .iter()
+                .copied()
+                .map(|component| {
+                    ComponentCommandEntry::from_input(ComponentCommandEntryInput {
+                        component,
+                        command: self.long_running_command(),
+                    })
+                })
+                .collect(),
+            topology.components().iter().copied(),
+        )
+    }
+
     async fn resolved_commands(&self) -> ResolvedComponentCommands {
         let resolver =
             ComponentCommandResolver::spawn(ComponentCommandResolver::new(self.command_catalog()));
+        resolver
+            .ask(ResolveComponentCommands::new(
+                EngineLaunchConfiguration::empty(),
+            ))
+            .await
+            .expect("component commands resolve")
+    }
+
+    async fn resolved_commands_for_topology(
+        &self,
+        topology: EngineTopology,
+    ) -> ResolvedComponentCommands {
+        let resolver = ComponentCommandResolver::spawn(ComponentCommandResolver::new(
+            self.command_catalog_for_topology(topology),
+        ));
         resolver
             .ask(ResolveComponentCommands::new(
                 EngineLaunchConfiguration::empty(),
@@ -268,6 +304,73 @@ impl Drop for DirectProcessFixture {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.root);
     }
+}
+
+#[tokio::test]
+async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named_harnesses() {
+    let fixture = DirectProcessFixture::new("three-harness-router-bootstrap");
+    let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
+    let paths = PersonaDaemonPaths::new(fixture.state_root(), fixture.run_root());
+    let layout = paths.engine_layout_with_topology(
+        EngineId::new("engine-three-harness-router-bootstrap"),
+        EngineTopology::ThreeHarnessChain,
+    );
+    layout
+        .prepare_directories()
+        .expect("engine directories prepared");
+    let resolved = fixture
+        .resolved_commands_for_topology(EngineTopology::ThreeHarnessChain)
+        .await;
+    let envelope = layout
+        .spawn_envelope_for_instance(&ComponentInstanceName::new("router"), &resolved)
+        .expect("router spawn envelope exists");
+    let envelope_path = envelope.envelope_path().to_path_buf();
+
+    DirectProcessFixture::launch(&launcher, envelope)
+        .await
+        .expect("router component launches");
+
+    let configuration_path = envelope_path.with_file_name("router-daemon.nota");
+    let configuration_text =
+        std::fs::read_to_string(&configuration_path).expect("router configuration was written");
+    let mut decoder = Decoder::new(&configuration_text);
+    let configuration =
+        RouterDaemonConfiguration::decode(&mut decoder).expect("router configuration decodes");
+    let bootstrap_path = configuration
+        .bootstrap_path
+        .expect("three-harness topology writes a router bootstrap");
+    let bootstrap_text =
+        std::fs::read_to_string(bootstrap_path.as_str()).expect("router bootstrap was written");
+
+    for name in ["initiator", "responder", "reviewer"] {
+        assert!(
+            bootstrap_text.contains(&format!("(Actor {name} 0")),
+            "bootstrap did not register {name}: {bootstrap_text}"
+        );
+        assert!(
+            bootstrap_text.contains(&format!("{name}.sock")),
+            "bootstrap did not include {name} harness socket: {bootstrap_text}"
+        );
+    }
+    for grant in [
+        "(GrantDirectMessage owner initiator)",
+        "(GrantDirectMessage owner responder)",
+        "(GrantDirectMessage owner reviewer)",
+        "(GrantDirectMessage initiator responder)",
+        "(GrantDirectMessage responder reviewer)",
+        "(GrantDirectMessage reviewer owner)",
+    ] {
+        assert!(
+            bootstrap_text.contains(grant),
+            "bootstrap did not include grant {grant}: {bootstrap_text}"
+        );
+    }
+
+    DirectProcessFixture::stop(&launcher, EngineComponent::Router)
+        .await
+        .expect("router component stops");
+    launcher.stop_gracefully().await.expect("launcher stops");
+    let _shutdown_completion = launcher.wait_for_shutdown().await;
 }
 
 #[tokio::test]

@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${PERSONA_DAEMON_BIN:?PERSONA_DAEMON_BIN must point at persona-daemon}"
+: "${PERSONA_MESSAGE_BIN:?PERSONA_MESSAGE_BIN must point at message}"
+: "${PERSONA_TERMINAL_SIGNAL_BIN:?PERSONA_TERMINAL_SIGNAL_BIN must point at persona-terminal-signal}"
+: "${PERSONA_THREE_HARNESS_LAUNCHERS:?PERSONA_THREE_HARNESS_LAUNCHERS must point at the launcher package}"
+
+root="${PERSONA_STACK_ROOT:-$(mktemp -d -t persona-daemon-three-harness-chain.XXXXXX)}"
+mkdir -p "$root/state" "$root/run" "$root/artifacts"
+manager_socket="$root/persona.sock"
+
+export PERSONA_MANAGER_STORE="$root/manager.redb"
+export PERSONA_STATE_ROOT="$root/state"
+export PERSONA_RUN_ROOT="$root/run"
+export PERSONA_ENGINE_TOPOLOGY=three-harness-chain
+export PERSONA_ROUTER_EXECUTABLE="$PERSONA_THREE_HARNESS_LAUNCHERS/bin/persona-router-prototype-launcher"
+export PERSONA_HARNESS_EXECUTABLE="$PERSONA_THREE_HARNESS_LAUNCHERS/bin/persona-harness-prototype-launcher"
+export PERSONA_TERMINAL_EXECUTABLE="$PERSONA_THREE_HARNESS_LAUNCHERS/bin/persona-three-harness-terminal-launcher"
+export PERSONA_MESSAGE_DAEMON_EXECUTABLE="$PERSONA_THREE_HARNESS_LAUNCHERS/bin/persona-message-prototype-launcher"
+
+"$PERSONA_DAEMON_BIN" "$manager_socket" \
+  > "$root/persona-daemon.stdout" \
+  2> "$root/persona-daemon.stderr" &
+daemon="$!"
+
+cleanup() {
+  kill "$daemon" 2>/dev/null || true
+  if [ -d "$root/state/default" ]; then
+    for capture in "$root/state/default"/*.env; do
+      [ -e "$capture" ] || continue
+      process="$(sed -n 's/^process=//p' "$capture" | head -n 1)"
+      if [ -n "$process" ]; then
+        kill -- "-$process" 2>/dev/null || true
+      fi
+    done
+  fi
+  wait "$daemon" 2>/dev/null || true
+  if [ "${PERSONA_STACK_KEEP_ARTIFACTS:-1}" = "1" ]; then
+    printf 'persona daemon three-harness chain artifacts=%s\n' "$root"
+  else
+    rm -rf "$root"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+wait_for_daemon() {
+  for _attempt in $(seq 1 100); do
+    if grep -Fq "persona-daemon socket=$manager_socket" "$root/persona-daemon.stdout"; then
+      return 0
+    fi
+    if ! kill -0 "$daemon" 2>/dev/null; then
+      cat "$root/persona-daemon.stdout"
+      cat "$root/persona-daemon.stderr" >&2
+      return 1
+    fi
+    sleep 0.1
+  done
+  cat "$root/persona-daemon.stdout"
+  cat "$root/persona-daemon.stderr" >&2
+  return 1
+}
+
+wait_for_component_capture() {
+  instance="$1"
+  capture="$root/state/default/$instance.env"
+  for _attempt in $(seq 1 100); do
+    if [ -f "$capture" ]; then
+      grep -Fx "engine=default" "$capture"
+      grep -Fx "component_instance=$instance" "$capture"
+      grep -Fx "peer_count=7" "$capture"
+      return 0
+    fi
+    sleep 0.1
+  done
+  printf 'missing component capture: %s\n' "$capture" >&2
+  return 1
+}
+
+capture_contains_text() {
+  capture_file="$1"
+  text="$2"
+  hex="$(printf '%s' "$text" | od -An -tx1 -v | tr -d ' \n')"
+  grep -Fq "$hex" "$capture_file"
+}
+
+capture_terminal() {
+  agent="$1"
+  output="$2"
+  "$PERSONA_TERMINAL_SIGNAL_BIN" \
+    --control-socket "$root/run/default/$agent-terminal.sock" \
+    --terminal "$agent" \
+    capture \
+    > "$output"
+  grep -Fq "TerminalCaptured	$agent	1" "$output"
+}
+
+wait_for_terminal_text() {
+  agent="$1"
+  text="$2"
+  output="$root/artifacts/$agent.capture.tsv"
+  for _attempt in $(seq 1 100); do
+    capture_terminal "$agent" "$output"
+    if capture_contains_text "$output" "$text"; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  printf 'terminal %s never captured text: %s\n' "$agent" "$text" >&2
+  cat "$output" >&2
+  return 1
+}
+
+wait_for_owner_inbox() {
+  for _attempt in $(seq 1 100); do
+    PERSONA_MESSAGE_SOCKET="$root/run/default/message.sock" \
+      "$PERSONA_MESSAGE_BIN" \
+        '(Inbox owner)' \
+        > "$root/artifacts/owner-inbox.nota" \
+        2> "$root/artifacts/owner-inbox.stderr"
+    if grep -Fq "reviewer completed task" "$root/artifacts/owner-inbox.nota"; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  cat "$root/artifacts/owner-inbox.nota" >&2
+  return 1
+}
+
+wait_for_daemon
+
+for instance in message router initiator-terminal initiator responder-terminal responder reviewer-terminal reviewer; do
+  wait_for_component_capture "$instance"
+done
+
+grep -Fq "(RegisterActor (Actor initiator 0 (EndpointTransport HarnessSocket" "$root/run/default/router-bootstrap.nota"
+grep -Fq "(RegisterActor (Actor responder 0 (EndpointTransport HarnessSocket" "$root/run/default/router-bootstrap.nota"
+grep -Fq "(RegisterActor (Actor reviewer 0 (EndpointTransport HarnessSocket" "$root/run/default/router-bootstrap.nota"
+grep -Fq "(GrantDirectMessage initiator responder)" "$root/run/default/router-bootstrap.nota"
+grep -Fq "(GrantDirectMessage responder reviewer)" "$root/run/default/router-bootstrap.nota"
+grep -Fq "(GrantDirectMessage reviewer owner)" "$root/run/default/router-bootstrap.nota"
+
+for agent in initiator responder reviewer; do
+  wait_for_terminal_text "$agent" "$agent-runner-ready"
+done
+
+PERSONA_MESSAGE_SOCKET="$root/run/default/message.sock" \
+  "$PERSONA_MESSAGE_BIN" \
+    '(Send initiator start-three-harness-task)' \
+    > "$root/artifacts/owner-send.nota" \
+    2> "$root/artifacts/owner-send.stderr"
+grep -Fq "(SubmissionAccepted " "$root/artifacts/owner-send.nota"
+
+wait_for_owner_inbox
+wait_for_terminal_text initiator "initiator-received:start-three-harness-task"
+wait_for_terminal_text initiator "initiator-sent:initiator handed to responder"
+wait_for_terminal_text responder "responder-received:initiator handed to responder"
+wait_for_terminal_text responder "responder-sent:responder handed to reviewer"
+wait_for_terminal_text reviewer "reviewer-received:responder handed to reviewer"
+wait_for_terminal_text reviewer "reviewer-sent:reviewer completed task"
+
+printf 'persona daemon three-harness chain=passed\n'
+printf 'root=%s\n' "$root"
+printf 'owner inbox=%s\n' "$root/artifacts/owner-inbox.nota"
+printf 'router bootstrap=%s\n' "$root/run/default/router-bootstrap.nota"
