@@ -561,11 +561,11 @@
         "nixpkgs": "nixpkgs_4"
       },
       "locked": {
-        "lastModified": 1779010451,
-        "narHash": "sha256-XcI7sHRIghp/RVuIilYptcvRTHO4sa+Qu7Rt5TNSjhk=",
+        "lastModified": 1779020575,
+        "narHash": "sha256-pnx8FM4gpSiW0IewwYOaTGiMUtV09AsDvYGv0zJja9g=",
         "owner": "LiGoldragon",
         "repo": "persona-router",
-        "rev": "a2d1892833c6cef83b0c639fd9fdd4e72dcb8cde",
+        "rev": "a543a572e38aa6524d4a88f616b3042912386ba5",
         "type": "github"
       },
       "original": {

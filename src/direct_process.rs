@@ -10,6 +10,14 @@ use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use nota_codec::{Encoder, NotaEncode};
 use signal_persona_auth::EngineId;
+use signal_persona_router::{
+    Actor as RouterBootstrapActor, ActorId as RouterBootstrapActorId,
+    EndpointKind as RouterBootstrapEndpointKind,
+    EndpointTransport as RouterBootstrapEndpointTransport,
+    GrantDirectMessage as RouterBootstrapGrantDirectMessage,
+    RegisterActor as RouterBootstrapRegisterActor, RouterBootstrapDocument,
+    RouterBootstrapOperation,
+};
 use thiserror::Error;
 use tokio::process::Command;
 use tokio::sync::oneshot;
@@ -552,7 +560,7 @@ impl DirectProcessLauncher {
         envelope: &ComponentSpawnEnvelope,
     ) -> Result<PathBuf, DirectProcessFailure> {
         let store_path = envelope.state_path().to_path_buf();
-        let bootstrap_path = RouterBootstrapDocument::for_three_harness_chain(envelope)?
+        let bootstrap_path = ThreeHarnessRouterBootstrap::for_envelope(envelope)?
             .map(|document| document.write_next_to(envelope.envelope_path()))
             .transpose()?;
         let configuration = signal_persona_router::RouterDaemonConfiguration {
@@ -958,17 +966,16 @@ impl LaunchComponent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct RouterBootstrapDocument {
-    harnesses: Vec<RouterBootstrapHarness>,
-    grants: Vec<RouterBootstrapGrant>,
+struct ThreeHarnessRouterBootstrap {
+    document: RouterBootstrapDocument,
 }
 
-impl RouterBootstrapDocument {
-    fn for_three_harness_chain(
+impl ThreeHarnessRouterBootstrap {
+    fn for_envelope(
         envelope: &ComponentSpawnEnvelope,
     ) -> Result<Option<Self>, DirectProcessFailure> {
         let required = ["initiator", "responder", "reviewer"];
-        let mut harnesses = Vec::new();
+        let mut operations = Vec::new();
         for name in required {
             let Some(peer) = envelope.peers().iter().find(|peer| {
                 peer.component() == EngineComponent::Harness
@@ -976,34 +983,45 @@ impl RouterBootstrapDocument {
             }) else {
                 return Ok(None);
             };
-            harnesses.push(RouterBootstrapHarness::new(
-                name,
-                peer.domain_socket_path().to_string_lossy().into_owned(),
+            operations.push(RouterBootstrapOperation::RegisterActor(
+                RouterBootstrapRegisterActor::new(RouterBootstrapActor::new(
+                    RouterBootstrapActorId::new(name),
+                    0,
+                    Some(RouterBootstrapEndpointTransport::new(
+                        RouterBootstrapEndpointKind::HarnessSocket,
+                        peer.domain_socket_path().to_string_lossy().into_owned(),
+                        None,
+                    )),
+                )),
             ));
         }
 
-        let grants = vec![
-            RouterBootstrapGrant::new("owner", "initiator"),
-            RouterBootstrapGrant::new("owner", "responder"),
-            RouterBootstrapGrant::new("owner", "reviewer"),
-            RouterBootstrapGrant::new("initiator", "responder"),
-            RouterBootstrapGrant::new("responder", "reviewer"),
-            RouterBootstrapGrant::new("reviewer", "owner"),
-        ];
-        Ok(Some(Self { harnesses, grants }))
+        for (from, to) in [
+            ("owner", "initiator"),
+            ("owner", "responder"),
+            ("owner", "reviewer"),
+            ("initiator", "responder"),
+            ("responder", "reviewer"),
+            ("reviewer", "owner"),
+        ] {
+            operations.push(RouterBootstrapOperation::GrantDirectMessage(
+                RouterBootstrapGrantDirectMessage::new(
+                    RouterBootstrapActorId::new(from),
+                    RouterBootstrapActorId::new(to),
+                ),
+            ));
+        }
+        Ok(Some(Self {
+            document: RouterBootstrapDocument::new(operations),
+        }))
     }
 
     fn write_next_to(&self, envelope_path: &Path) -> Result<PathBuf, DirectProcessFailure> {
         let path = envelope_path.with_file_name("router-bootstrap.nota");
-        let mut text = String::new();
-        for harness in &self.harnesses {
-            text.push_str(harness.register_actor_line()?.as_str());
-            text.push('\n');
-        }
-        for grant in &self.grants {
-            text.push_str(grant.grant_line()?.as_str());
-            text.push('\n');
-        }
+        let text = self
+            .document
+            .to_nota_lines()
+            .map_err(DirectProcessFailure::Nota)?;
         std::fs::write(&path, text).map_err(|source| DirectProcessFailure::Io {
             operation: "write router bootstrap file",
             source,
@@ -1015,83 +1033,6 @@ impl RouterBootstrapDocument {
             },
         )?;
         Ok(path)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RouterBootstrapHarness {
-    name: String,
-    harness_socket_path: String,
-}
-
-impl RouterBootstrapHarness {
-    fn new(name: impl Into<String>, harness_socket_path: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            harness_socket_path: harness_socket_path.into(),
-        }
-    }
-
-    fn register_actor_line(&self) -> Result<String, DirectProcessFailure> {
-        let mut encoder = Encoder::new();
-        encoder
-            .start_record("RegisterActor")
-            .map_err(DirectProcessFailure::Nota)?;
-        encoder
-            .start_record("Actor")
-            .map_err(DirectProcessFailure::Nota)?;
-        self.name
-            .encode(&mut encoder)
-            .map_err(DirectProcessFailure::Nota)?;
-        0_u32
-            .encode(&mut encoder)
-            .map_err(DirectProcessFailure::Nota)?;
-        encoder
-            .start_record("EndpointTransport")
-            .map_err(DirectProcessFailure::Nota)?;
-        encoder
-            .write_pascal_identifier("HarnessSocket")
-            .map_err(DirectProcessFailure::Nota)?;
-        self.harness_socket_path
-            .encode(&mut encoder)
-            .map_err(DirectProcessFailure::Nota)?;
-        encoder
-            .write_pascal_identifier("None")
-            .map_err(DirectProcessFailure::Nota)?;
-        encoder.end_record().map_err(DirectProcessFailure::Nota)?;
-        encoder.end_record().map_err(DirectProcessFailure::Nota)?;
-        encoder.end_record().map_err(DirectProcessFailure::Nota)?;
-        Ok(encoder.into_string())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RouterBootstrapGrant {
-    from: String,
-    to: String,
-}
-
-impl RouterBootstrapGrant {
-    fn new(from: impl Into<String>, to: impl Into<String>) -> Self {
-        Self {
-            from: from.into(),
-            to: to.into(),
-        }
-    }
-
-    fn grant_line(&self) -> Result<String, DirectProcessFailure> {
-        let mut encoder = Encoder::new();
-        encoder
-            .start_record("GrantDirectMessage")
-            .map_err(DirectProcessFailure::Nota)?;
-        self.from
-            .encode(&mut encoder)
-            .map_err(DirectProcessFailure::Nota)?;
-        self.to
-            .encode(&mut encoder)
-            .map_err(DirectProcessFailure::Nota)?;
-        encoder.end_record().map_err(DirectProcessFailure::Nota)?;
-        Ok(encoder.into_string())
     }
 }
 

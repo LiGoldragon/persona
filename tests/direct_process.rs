@@ -25,7 +25,9 @@ use signal_persona::{EngineReply, EngineRequest, EngineStatusQuery};
 use signal_persona_auth::EngineId;
 use signal_persona_harness::{HarnessDaemonConfiguration, HarnessKind};
 use signal_persona_message::MessageDaemonConfiguration;
-use signal_persona_router::RouterDaemonConfiguration;
+use signal_persona_router::{
+    EndpointKind, RouterBootstrapDocument, RouterBootstrapOperation, RouterDaemonConfiguration,
+};
 use signal_persona_terminal::TerminalDaemonConfiguration;
 
 struct DirectProcessFixture {
@@ -359,27 +361,42 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
     let bootstrap_text =
         std::fs::read_to_string(bootstrap_path.as_str()).expect("router bootstrap was written");
 
+    let bootstrap = RouterBootstrapDocument::from_nota_lines(&bootstrap_text)
+        .expect("router bootstrap decodes through contract vocabulary");
+    assert_eq!(bootstrap.operations().len(), 9);
+
     for name in ["initiator", "responder", "reviewer"] {
         assert!(
-            bootstrap_text.contains(&format!("(Actor {name} 0")),
+            bootstrap.operations().iter().any(|operation| matches!(
+                operation,
+                RouterBootstrapOperation::RegisterActor(registration)
+                    if registration.actor.name.as_str() == name
+                        && registration.actor.process == 0
+                        && matches!(
+                            &registration.actor.endpoint,
+                            Some(endpoint)
+                                if endpoint.kind == EndpointKind::HarnessSocket
+                                    && endpoint.target.ends_with(format!("{name}.sock").as_str())
+                        )
+            )),
             "bootstrap did not register {name}: {bootstrap_text}"
         );
-        assert!(
-            bootstrap_text.contains(&format!("{name}.sock")),
-            "bootstrap did not include {name} harness socket: {bootstrap_text}"
-        );
     }
-    for grant in [
-        "(GrantDirectMessage owner initiator)",
-        "(GrantDirectMessage owner responder)",
-        "(GrantDirectMessage owner reviewer)",
-        "(GrantDirectMessage initiator responder)",
-        "(GrantDirectMessage responder reviewer)",
-        "(GrantDirectMessage reviewer owner)",
+    for (from, to) in [
+        ("owner", "initiator"),
+        ("owner", "responder"),
+        ("owner", "reviewer"),
+        ("initiator", "responder"),
+        ("responder", "reviewer"),
+        ("reviewer", "owner"),
     ] {
         assert!(
-            bootstrap_text.contains(grant),
-            "bootstrap did not include grant {grant}: {bootstrap_text}"
+            bootstrap.operations().iter().any(|operation| matches!(
+                operation,
+                RouterBootstrapOperation::GrantDirectMessage(grant)
+                    if grant.from.as_str() == from && grant.to.as_str() == to
+            )),
+            "bootstrap did not include grant {from}->{to}: {bootstrap_text}"
         );
     }
 

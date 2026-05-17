@@ -621,6 +621,12 @@ runs real component daemons inside the unit and carries a message through the
 fixture router-to-harness-to-terminal path; it does not claim router-to-mind
 adjudication or a terminal-cell live-agent path yet.
 
+The managed three-harness topology writes router bootstrap through
+`signal-persona-router::RouterBootstrapDocument`. `persona` chooses the
+topology and writes the startup file, but the `RegisterActor` /
+`GrantDirectMessage` / `InstallStructuralChannels` vocabulary belongs to the
+router contract crate and is decoded by `persona-router` from the same types.
+
 The terminal-cell sandbox lane is a separate witness. It runs
 `terminal-cell-daemon` directly at `$sandbox_dir/run/cell.sock`, launches one
 child harness inside the cell, drives the harness through the packaged
@@ -1077,6 +1083,9 @@ Migration rules:
 - `persona` does not own mind state transitions, router policy, harness
   lifecycle, terminal transport, storage table internals, or Signal records.
 - Every runtime boundary in the stack has a dedicated Signal contract repo.
+- Manager-written router bootstrap uses `signal-persona-router` contract
+  records; `persona` must not carry private duplicate `RegisterActor` or
+  `GrantDirectMessage` record definitions.
 - Cross-component tests prove boundaries by bytes, processes, dependency
   graphs, or durable files; they do not share in-process memory as the witness.
 - State-bearing components own separate redb files and separate Sema table
