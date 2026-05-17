@@ -1251,6 +1251,8 @@ The apex repo owns tests that prove cross-component shape:
 | host attach helper is a Nix-owned app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-attach-script-builds` |
 | sandbox dev-stack smoke is a Nix-owned stateful app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-dev-stack-smoke-script-builds`; run with `nix run .#persona-engine-sandbox-dev-stack-smoke` |
 | sandbox dev-stack passes a manager-style spawn envelope to persona-message | run `nix run .#persona-engine-sandbox-dev-stack-smoke` and inspect `dev-stack-processes.nota` / `dev-stack-sockets.nota` for `MessageSpawnEnvelope` |
+| sandbox three-harness chain is a Nix-owned stateful app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-dev-stack-chain-smoke-script-builds`; run with `nix run .#persona-engine-sandbox-dev-stack-chain-smoke` |
+| sandbox three-harness chain routes through message, router, harness, and terminal | run `nix run .#persona-engine-sandbox-dev-stack-chain-smoke` and inspect `dev-stack-chain-manifest.nota`, terminal captures, and owner inbox for the final `reviewer completed task` |
 | sandbox terminal-cell smoke is a Nix-owned stateful app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-terminal-cell-script-builds`; run fixture with `nix run .#persona-engine-sandbox-terminal-cell-fixture-smoke` |
 | sandbox terminal-cell Pi smoke uses local model config without copied auth | run with `nix run .#persona-engine-sandbox-terminal-cell-pi-smoke` and inspect `pi-model-snapshot.nota` plus `terminal-cell-transcript.txt` |
 | host attach helper plans Ghostty without Wayland-in-sandbox | `nix build .#checks.x86_64-linux.persona-engine-sandbox-attach-plans-host-ghostty` |
@@ -1404,6 +1406,7 @@ scripts/persona-engine-sandbox  systemd-run sandbox scaffold for full-engine wit
 scripts/persona-engine-sandbox-auth-isolation-witness  Nix witness for host auth/session isolation
 scripts/persona-engine-sandbox-attach  host Ghostty attach helper for sandbox cell sockets
 scripts/persona-engine-sandbox-terminal-cell-smoke  terminal-cell fixture/Pi live-agent sandbox witness
+scripts/persona-dev-stack-chain  three-harness message/router/harness/terminal chain witness
 src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
 src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records

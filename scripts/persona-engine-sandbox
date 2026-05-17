@@ -13,7 +13,7 @@ test_lane="dev-stack"
 
 usage() {
   cat <<'EOF'
-usage: persona-engine-sandbox --harness pi|claude|codex|codex-api|fixture [--test dev-stack|terminal-cell] [--sandbox-dir DIR] [--credential-root DIR] [--bootstrap-auth] [--dry-run] [--inside-unit]
+usage: persona-engine-sandbox --harness pi|claude|codex|codex-api|fixture [--test dev-stack|dev-stack-chain|terminal-cell] [--sandbox-dir DIR] [--credential-root DIR] [--bootstrap-auth] [--dry-run] [--inside-unit]
 
 Creates the sandbox directory layout for a disposable Persona engine test and,
 unless --dry-run is supplied, enters it through systemd-run --user.
@@ -82,7 +82,7 @@ case "$harness" in
 esac
 
 case "$test_lane" in
-  dev-stack|terminal-cell) ;;
+  dev-stack|dev-stack-chain|terminal-cell) ;;
   *)
     printf 'unsupported sandbox test lane: %s\n' "$test_lane" >&2
     usage >&2
@@ -115,6 +115,13 @@ dev_stack_stderr="$artifact_dir/dev-stack.stderr"
 dev_stack_run_file="$artifact_dir/dev-stack-run.nota"
 dev_stack_process_file="$artifact_dir/dev-stack-processes.nota"
 dev_stack_socket_file="$artifact_dir/dev-stack-sockets.nota"
+dev_stack_chain_root="$state_dir/dev-stack-chain"
+dev_stack_chain_stdout="$artifact_dir/dev-stack-chain.stdout"
+dev_stack_chain_stderr="$artifact_dir/dev-stack-chain.stderr"
+dev_stack_chain_run_file="$artifact_dir/dev-stack-chain-run.nota"
+dev_stack_chain_process_file="$artifact_dir/dev-stack-chain-processes.nota"
+dev_stack_chain_socket_file="$artifact_dir/dev-stack-chain-sockets.nota"
+dev_stack_chain_manifest_file="$artifact_dir/dev-stack-chain-manifest.nota"
 pi_snapshot_file="$artifact_dir/pi-model-snapshot.nota"
 
 prepare_layout() {
@@ -466,6 +473,7 @@ systemd_command() {
     --service-type=exec
     --setenv=PERSONA_BASH="$PERSONA_BASH"
     --setenv=PERSONA_DEV_STACK_SMOKE="${PERSONA_DEV_STACK_SMOKE:-}"
+    --setenv=PERSONA_DEV_STACK_CHAIN_SMOKE="${PERSONA_DEV_STACK_CHAIN_SMOKE:-}"
     --setenv=PERSONA_TERMINAL_CELL_SMOKE="${PERSONA_TERMINAL_CELL_SMOKE:-}"
     --setenv=PERSONA_HARNESS_PACKAGE="${PERSONA_HARNESS_PACKAGE:-}"
     --setenv=HOME="$home_dir"
@@ -524,6 +532,7 @@ run_inside_unit() {
   . "$artifact_dir/harness-env.sh"
   case "$test_lane" in
     dev-stack) run_dev_stack_smoke ;;
+    dev-stack-chain) run_dev_stack_chain_smoke ;;
     terminal-cell) run_terminal_cell_smoke ;;
   esac
   printf 'persona-engine-sandbox inside-unit=passed test=%s\n' "$test_lane"
@@ -534,6 +543,12 @@ run_inside_unit() {
       printf 'dev-stack=%s\n' "$dev_stack_run_file"
       printf 'processes=%s\n' "$dev_stack_process_file"
       printf 'sockets=%s\n' "$dev_stack_socket_file"
+      ;;
+    dev-stack-chain)
+      printf 'dev-stack-chain=%s\n' "$dev_stack_chain_run_file"
+      printf 'processes=%s\n' "$dev_stack_chain_process_file"
+      printf 'sockets=%s\n' "$dev_stack_chain_socket_file"
+      printf 'chain=%s\n' "$dev_stack_chain_manifest_file"
       ;;
     terminal-cell)
       printf 'terminal-cell=%s\n' "$artifact_dir/terminal-cell-run.nota"
@@ -601,6 +616,61 @@ run_dev_stack_smoke() {
       "$dev_stack_stderr" >&2
     if [ -s "$dev_stack_stderr" ]; then
       cat "$dev_stack_stderr" >&2
+    fi
+    exit "$status"
+  fi
+}
+
+run_dev_stack_chain_smoke() {
+  if [ -z "${PERSONA_DEV_STACK_CHAIN_SMOKE:-}" ]; then
+    printf '%s\n' 'PERSONA_DEV_STACK_CHAIN_SMOKE must point at persona-dev-stack-chain-smoke' >&2
+    exit 2
+  fi
+
+  mkdir -p "$dev_stack_chain_root"
+
+  local status
+  if PERSONA_STACK_ROOT="$dev_stack_chain_root" \
+    PERSONA_STACK_KEEP_ARTIFACTS=1 \
+    "$PERSONA_DEV_STACK_CHAIN_SMOKE" \
+      >"$dev_stack_chain_stdout" \
+      2>"$dev_stack_chain_stderr"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  {
+    printf '%s\n' '(SandboxStackRun'
+    printf '  (Mode DevStackChainSmoke)\n'
+    printf '  (Root "%s")\n' "$dev_stack_chain_root"
+    printf '  (Stdout "%s")\n' "$dev_stack_chain_stdout"
+    printf '  (Stderr "%s")\n' "$dev_stack_chain_stderr"
+    printf '  (ExitCode %s)\n' "$status"
+    if [ "$status" -eq 0 ]; then
+      printf '  (Status Passed)\n'
+    else
+      printf '  (Status Failed)\n'
+    fi
+    printf ')\n'
+  } >"$dev_stack_chain_run_file"
+
+  if [ -f "$dev_stack_chain_root/process-manifest.nota" ]; then
+    cp "$dev_stack_chain_root/process-manifest.nota" "$dev_stack_chain_process_file"
+  fi
+  if [ -f "$dev_stack_chain_root/socket-manifest.nota" ]; then
+    cp "$dev_stack_chain_root/socket-manifest.nota" "$dev_stack_chain_socket_file"
+  fi
+  if [ -f "$dev_stack_chain_root/chain-manifest.nota" ]; then
+    cp "$dev_stack_chain_root/chain-manifest.nota" "$dev_stack_chain_manifest_file"
+  fi
+
+  if [ "$status" -ne 0 ]; then
+    printf 'persona-dev-stack chain smoke failed; stdout=%s stderr=%s\n' \
+      "$dev_stack_chain_stdout" \
+      "$dev_stack_chain_stderr" >&2
+    if [ -s "$dev_stack_chain_stderr" ]; then
+      cat "$dev_stack_chain_stderr" >&2
     fi
     exit "$status"
   fi

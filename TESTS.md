@@ -161,6 +161,7 @@ What each tier proves:
 | `persona-engine-sandbox-auth-isolation-witness` | Runs the actual sandbox runner against fake host Codex/Claude/Pi auth/session files and proves they are not copied, modified, or leaked into artifacts. |
 | `persona-engine-sandbox-attach-script-builds` | The Nix-created host attach helper is executable. |
 | `persona-engine-sandbox-dev-stack-smoke-script-builds` | The Nix-created stateful sandbox dev-stack smoke app is executable. |
+| `persona-engine-sandbox-dev-stack-chain-smoke-script-builds` | The Nix-created three-harness routed-chain smoke app is executable. |
 | `persona-engine-sandbox-terminal-cell-script-builds` | The Nix-created terminal-cell smoke apps are executable and the persona flake packages `terminal-cell-daemon`, `terminal-cell-view`, `terminal-cell-send`, `terminal-cell-wait`, and `terminal-cell-capture`. |
 | `persona-engine-sandbox-attach-plans-host-ghostty` | Dry-run host attach emits a Ghostty + `terminal-cell-view` command against the sandbox `run/cell.sock` and records that Wayland is not passed into the sandbox. |
 | `persona-engine-sandbox-documents-bwrap-strict-profile` | Dry-run writes the optional bwrap strict-mount plan as a NOTA artifact with a tiny read-only/read-write bind set and no Wayland passthrough. |
@@ -183,8 +184,10 @@ The meta repo exposes the current integration runner as Nix apps:
 nix run .#persona-daemon
 nix run .#dev-stack
 nix run .#dev-stack-smoke
+nix run .#dev-stack-chain-smoke
 nix run .#persona-engine-sandbox -- --harness pi --dry-run
 nix run .#persona-engine-sandbox-dev-stack-smoke
+nix run .#persona-engine-sandbox-dev-stack-chain-smoke
 nix run .#persona-engine-sandbox-terminal-cell-fixture-smoke
 nix run .#persona-engine-sandbox-terminal-cell-pi-smoke
 nix run .#persona-engine-sandbox -- --harness codex --bootstrap-auth --dry-run
@@ -256,6 +259,32 @@ The smoke proves the current fixture router-to-harness-to-terminal delivery
 path. It is a stateful app, not a pure
 `checks` derivation, because the terminal daemon owns a live PTY.
 
+`persona-dev-stack-chain-smoke` starts the same component classes, but creates
+three live harnesses: `initiator`, `responder`, and `reviewer`. It writes a
+starting-instructions artifact, registers all three harness sockets in the
+router bootstrap, grants the chain channels, sends the first instruction through
+`message.sock`, and then lets the terminal-side harness runners call the
+Nix-built `message` CLI to continue the chain:
+
+```text
+owner -> initiator -> responder -> reviewer -> owner inbox
+```
+
+The stateful assertions prove:
+
+| Witness | What it proves |
+|---|---|
+| `starting-instructions.nota` names three harnesses and the expected final inbox | The engine sandbox has a concrete task artifact, not only a one-off send. |
+| each `RegisterActor` uses a `HarnessSocket` endpoint | Router delivery goes through `persona-harness`, not directly to terminal sockets. |
+| each terminal transcript contains `*-received:*` and `*-sent:*` markers | Each harness terminal receives a router delivery and initiates the next `message` CLI send. |
+| final owner inbox contains `reviewer completed task` | The last harness-side send returns through `persona-message-daemon` and `persona-router` into a router inbox. |
+
+Current limitation: the terminal-side `message` CLI still enters through the
+owner message socket, so the router stamps these follow-up sends as `owner`.
+The witness proves the physical component route. It does not yet prove
+harness-origin identity stamping; that requires the later harness-origin
+ingress relation rather than the owner CLI socket.
+
 `persona-engine-sandbox` is the scaffold for the full federation witness from
 `reports/designer/129-sandboxed-persona-engine-test.md`. It creates the
 sandbox directory layout, writes NOTA manifests and credential policy
@@ -265,6 +294,11 @@ inside-unit witness runs `persona-dev-stack-smoke` under
 sandbox artifacts directory. That proves the envelope runs real component
 daemons; it is still not the full router-to-mind-to-harness-to-terminal
 federation.
+
+`persona-engine-sandbox-dev-stack-chain-smoke` runs the three-harness chain
+inside the same sandbox layout and copies `dev-stack-chain-run.nota`,
+`dev-stack-chain-processes.nota`, `dev-stack-chain-sockets.nota`, and
+`dev-stack-chain-manifest.nota` into the artifact directory.
 
 Pure Nix checks exercise dry-run mode and packaging. The production-code
 inside-unit smoke is exposed as the stateful app

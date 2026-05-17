@@ -199,7 +199,13 @@
           personaDevStack =
             mode:
             pkgs.writeShellApplication {
-              name = if mode == "smoke" then "persona-dev-stack-smoke" else "persona-dev-stack";
+              name =
+                if mode == "smoke" then
+                  "persona-dev-stack-smoke"
+                else if mode == "chain-smoke" then
+                  "persona-dev-stack-chain-smoke"
+                else
+                  "persona-dev-stack";
               runtimeInputs = [
                 pkgs.coreutils
                 pkgs.gnugrep
@@ -210,7 +216,9 @@
                 export PERSONA_TERMINAL_PACKAGE=${inputs.persona-terminal.packages.${system}.default}
                 export PERSONA_HARNESS_PACKAGE=${inputs.persona-harness.packages.${system}.default}
                 export PERSONA_BASH=${pkgs.bash}/bin/bash
-                exec ${pkgs.bash}/bin/bash ${./scripts/persona-dev-stack} ${mode} "$@"
+                exec ${pkgs.bash}/bin/bash ${
+                  if mode == "chain-smoke" then ./scripts/persona-dev-stack-chain else ./scripts/persona-dev-stack
+                } ${if mode == "chain-smoke" then "" else mode} "$@"
               '';
             };
           personaEngineSandbox = pkgs.writeShellApplication {
@@ -222,6 +230,7 @@
             text = ''
               export PERSONA_BASH=${pkgs.bash}/bin/bash
               export PERSONA_DEV_STACK_SMOKE=${personaDevStack "smoke"}/bin/persona-dev-stack-smoke
+              export PERSONA_DEV_STACK_CHAIN_SMOKE=${personaDevStack "chain-smoke"}/bin/persona-dev-stack-chain-smoke
               export PERSONA_TERMINAL_CELL_SMOKE=${personaEngineSandboxTerminalCellSmoke}/bin/persona-engine-sandbox-terminal-cell-smoke
               export PERSONA_HARNESS_PACKAGE=${inputs.persona-harness.packages.${system}.default}
               exec ${pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox} "$@"
@@ -268,6 +277,19 @@
               exec ${personaEngineSandbox}/bin/persona-engine-sandbox --inside-unit --harness pi "$@"
             '';
           };
+          personaEngineSandboxDevStackChainSmoke = pkgs.writeShellApplication {
+            name = "persona-engine-sandbox-dev-stack-chain-smoke";
+            runtimeInputs = [
+              pkgs.coreutils
+            ];
+            text = ''
+              if [ "$#" -eq 0 ]; then
+                sandbox_dir="$(mktemp -d -t persona-engine-sandbox-dev-stack-chain.XXXXXX)"
+                set -- --sandbox-dir "$sandbox_dir"
+              fi
+              exec ${personaEngineSandbox}/bin/persona-engine-sandbox --inside-unit --test dev-stack-chain --harness pi "$@"
+            '';
+          };
           personaEngineSandboxTerminalCellPiSmoke = pkgs.writeShellApplication {
             name = "persona-engine-sandbox-terminal-cell-pi-smoke";
             runtimeInputs = [
@@ -306,6 +328,7 @@
             personaEngineSandbox
             personaEngineSandboxAttach
             personaEngineSandboxDevStackSmoke
+            personaEngineSandboxDevStackChainSmoke
             personaEngineSandboxTerminalCellSmoke
             personaEngineSandboxTerminalCellPiSmoke
             personaEngineSandboxTerminalCellFixtureSmoke
@@ -342,9 +365,12 @@
           terminal-cell = context.terminalCellBinaries;
           persona-dev-stack = context.personaDevStack "run";
           persona-dev-stack-smoke = context.personaDevStack "smoke";
+          persona-dev-stack-chain-smoke = context.personaDevStack "chain-smoke";
           persona-engine-sandbox = context.personaEngineSandbox;
           persona-engine-sandbox-attach = context.personaEngineSandboxAttach;
           persona-engine-sandbox-dev-stack-smoke = context.personaEngineSandboxDevStackSmoke;
+          persona-engine-sandbox-dev-stack-chain-smoke =
+            context.personaEngineSandboxDevStackChainSmoke;
           persona-engine-sandbox-terminal-cell-smoke = context.personaEngineSandboxTerminalCellSmoke;
           persona-engine-sandbox-terminal-cell-pi-smoke = context.personaEngineSandboxTerminalCellPiSmoke;
           persona-engine-sandbox-terminal-cell-fixture-smoke =
@@ -930,6 +956,7 @@
           persona-dev-stack-script-builds = context.pkgs.runCommand "persona-dev-stack-script-builds" { } ''
             test -x ${self.packages.${system}.persona-dev-stack}/bin/persona-dev-stack
             test -x ${self.packages.${system}.persona-dev-stack-smoke}/bin/persona-dev-stack-smoke
+            test -x ${self.packages.${system}.persona-dev-stack-chain-smoke}/bin/persona-dev-stack-chain-smoke
             touch $out
           '';
           persona-engine-sandbox-script-builds =
@@ -1054,6 +1081,14 @@
                 test -x ${
                   self.packages.${system}.persona-engine-sandbox-dev-stack-smoke
                 }/bin/persona-engine-sandbox-dev-stack-smoke
+                touch $out
+              '';
+          persona-engine-sandbox-dev-stack-chain-smoke-script-builds =
+            context.pkgs.runCommand "persona-engine-sandbox-dev-stack-chain-smoke-script-builds" { }
+              ''
+                test -x ${
+                  self.packages.${system}.persona-engine-sandbox-dev-stack-chain-smoke
+                }/bin/persona-engine-sandbox-dev-stack-chain-smoke
                 touch $out
               '';
           persona-engine-sandbox-terminal-cell-script-builds =
@@ -1688,6 +1723,12 @@
           type = "app";
           program = "${self.packages.${system}.persona-dev-stack-smoke}/bin/persona-dev-stack-smoke";
         };
+        dev-stack-chain-smoke = {
+          type = "app";
+          program = "${
+            self.packages.${system}.persona-dev-stack-chain-smoke
+          }/bin/persona-dev-stack-chain-smoke";
+        };
         persona-daemon = {
           type = "app";
           program = "${self.packages.${system}.default}/bin/persona-daemon";
@@ -1707,6 +1748,12 @@
           program = "${
             self.packages.${system}.persona-engine-sandbox-dev-stack-smoke
           }/bin/persona-engine-sandbox-dev-stack-smoke";
+        };
+        persona-engine-sandbox-dev-stack-chain-smoke = {
+          type = "app";
+          program = "${
+            self.packages.${system}.persona-engine-sandbox-dev-stack-chain-smoke
+          }/bin/persona-engine-sandbox-dev-stack-chain-smoke";
         };
         persona-engine-sandbox-terminal-cell-pi-smoke = {
           type = "app";

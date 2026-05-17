@@ -1,0 +1,406 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${PERSONA_MESSAGE_PACKAGE:?PERSONA_MESSAGE_PACKAGE must point at the built persona-message package}"
+: "${PERSONA_ROUTER_PACKAGE:?PERSONA_ROUTER_PACKAGE must point at the built persona-router package}"
+: "${PERSONA_TERMINAL_PACKAGE:?PERSONA_TERMINAL_PACKAGE must point at the built persona-terminal package}"
+: "${PERSONA_HARNESS_PACKAGE:?PERSONA_HARNESS_PACKAGE must point at the built persona-harness package}"
+: "${PERSONA_BASH:?PERSONA_BASH must point at bash}"
+
+root="${PERSONA_STACK_ROOT:-$(mktemp -d -t persona-dev-stack-chain.XXXXXX)}"
+mkdir -p "$root"
+
+message_bin="$PERSONA_MESSAGE_PACKAGE/bin/message"
+message_daemon_bin="$PERSONA_MESSAGE_PACKAGE/bin/persona-message-daemon"
+router_bin="$PERSONA_ROUTER_PACKAGE/bin/persona-router-daemon"
+terminal_daemon="$PERSONA_TERMINAL_PACKAGE/bin/persona-terminal-daemon"
+terminal_signal="$PERSONA_TERMINAL_PACKAGE/bin/persona-terminal-signal"
+harness_daemon="$PERSONA_HARNESS_PACKAGE/bin/persona-harness-daemon"
+
+router_socket="$root/router.sock"
+message_socket="$root/message.sock"
+router_store="$root/router.redb"
+message_store="$root/message-store"
+router_bootstrap="$root/router-bootstrap.nota"
+router_daemon_configuration="$root/router-daemon.nota"
+router_supervision_socket="$root/router.supervision.sock"
+message_daemon_configuration="$root/message-daemon.nota"
+message_spawn_envelope="$root/message.envelope"
+starting_instructions="$root/starting-instructions.nota"
+process_manifest="$root/process-manifest.nota"
+socket_manifest="$root/socket-manifest.nota"
+chain_manifest="$root/chain-manifest.nota"
+
+router_stdout="$root/router.stdout"
+router_stderr="$root/router.stderr"
+message_daemon_stdout="$root/message-daemon.stdout"
+message_daemon_stderr="$root/message-daemon.stderr"
+owner_send_output="$root/owner-send.nota"
+owner_inbox_output="$root/owner-inbox.nota"
+
+agents=(initiator responder reviewer)
+processes=()
+router_pid=""
+message_daemon_pid=""
+declare -A terminal_pids=()
+declare -A harness_pids=()
+
+cleanup() {
+  for process in "${processes[@]}"; do
+    kill "$process" 2>/dev/null || true
+  done
+  for process in "${processes[@]}"; do
+    wait "$process" 2>/dev/null || true
+  done
+
+  if [ "${PERSONA_STACK_KEEP_ARTIFACTS:-1}" = "1" ]; then
+    printf 'persona dev stack chain artifacts=%s\n' "$root"
+  else
+    rm -rf "$root"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+terminal_socket() {
+  printf '%s/%s.terminal.control.sock\n' "$root" "$1"
+}
+
+terminal_data_socket() {
+  printf '%s/%s.terminal.data.sock\n' "$root" "$1"
+}
+
+terminal_store() {
+  printf '%s/%s.terminal.redb\n' "$root" "$1"
+}
+
+harness_socket() {
+  printf '%s/%s.harness.sock\n' "$root" "$1"
+}
+
+wait_for_line() {
+  local name="$1"
+  local file="$2"
+  local expected="$3"
+
+  for _ in $(seq 1 100); do
+    if [ -f "$file" ] && grep -Fxq "$expected" "$file"; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  printf '%s did not report expected line: %s\n' "$name" "$expected" >&2
+  if [ -f "$file" ]; then
+    cat "$file" >&2
+  fi
+  return 1
+}
+
+capture_contains_text() {
+  local capture_file="$1"
+  local text="$2"
+  local hex
+
+  hex="$(printf '%s' "$text" | od -An -tx1 -v | tr -d ' \n')"
+  grep -Fq "$hex" "$capture_file"
+}
+
+write_starting_instructions() {
+  cat >"$starting_instructions" <<EOF
+(EngineStartingInstructions
+  (Task "Prove a three-harness message chain through persona-message, persona-router, persona-harness, and persona-terminal.")
+  (Harness initiator)
+  (Harness responder)
+  (Harness reviewer)
+  (InitialMessage (Send initiator start-three-harness-task))
+  (ExpectedFinalInbox (Inbox owner) "reviewer completed task")
+)
+EOF
+}
+
+write_agent_runner() {
+  local agent="$1"
+  local runner="$root/$agent-runner.sh"
+
+  cat >"$runner" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PERSONA_MESSAGE_SOCKET='$message_socket'
+export PERSONA_MESSAGE_STORE='$message_store'
+message_bin='$message_bin'
+agent='$agent'
+
+printf '%s-runner-ready\n' "\$agent"
+while IFS= read -r line; do
+  printf '%s-received:%s\n' "\$agent" "\$line"
+  if [ "\$agent" = 'initiator' ] && [ "\$line" = 'start-three-harness-task' ]; then
+    "\$message_bin" '(Send responder "initiator handed to responder")'
+    printf '%s-sent:%s\n' "\$agent" 'initiator handed to responder'
+  elif [ "\$agent" = 'responder' ] && [ "\$line" = 'initiator handed to responder' ]; then
+    "\$message_bin" '(Send reviewer "responder handed to reviewer")'
+    printf '%s-sent:%s\n' "\$agent" 'responder handed to reviewer'
+  elif [ "\$agent" = 'reviewer' ] && [ "\$line" = 'responder handed to reviewer' ]; then
+    "\$message_bin" '(Send owner "reviewer completed task")'
+    printf '%s-sent:%s\n' "\$agent" 'reviewer completed task'
+  fi
+done
+EOF
+  chmod +x "$runner"
+}
+
+start_terminal() {
+  local agent="$1"
+  local stdout="$root/$agent.terminal.stdout"
+  local stderr="$root/$agent.terminal.stderr"
+  local control_socket
+  local data_socket
+  control_socket="$(terminal_socket "$agent")"
+  data_socket="$(terminal_data_socket "$agent")"
+
+  write_agent_runner "$agent"
+  "$terminal_daemon" \
+    --store "$(terminal_store "$agent")" \
+    --name "$agent" \
+    --control-socket "$control_socket" \
+    --data-socket "$data_socket" \
+    -- "$PERSONA_BASH" "$root/$agent-runner.sh" \
+    >"$stdout" \
+    2>"$stderr" &
+  terminal_pids["$agent"]="$!"
+  processes+=("${terminal_pids[$agent]}")
+  wait_for_line \
+    "persona-terminal-$agent" \
+    "$stdout" \
+    "persona-terminal-daemon control-socket=$control_socket data-socket=$data_socket"
+}
+
+start_harness() {
+  local agent="$1"
+  local stdout="$root/$agent.harness.stdout"
+  local stderr="$root/$agent.harness.stderr"
+  local socket
+  socket="$(harness_socket "$agent")"
+
+  "$harness_daemon" \
+    --socket "$socket" \
+    --harness "$agent" \
+    --terminal-socket "$(terminal_socket "$agent")" \
+    >"$stdout" \
+    2>&1 &
+  harness_pids["$agent"]="$!"
+  processes+=("${harness_pids[$agent]}")
+  wait_for_line "persona-harness-$agent" "$stdout" "persona-harness-daemon socket=$socket"
+}
+
+write_router_bootstrap() {
+  {
+    for agent in "${agents[@]}"; do
+      printf '(RegisterActor (Actor %s %s (EndpointTransport HarnessSocket "%s" None)))\n' \
+        "$agent" \
+        "${harness_pids[$agent]}" \
+        "$(harness_socket "$agent")"
+    done
+    printf '%s\n' '(GrantDirectMessage owner initiator)'
+    printf '%s\n' '(GrantDirectMessage owner responder)'
+    printf '%s\n' '(GrantDirectMessage owner reviewer)'
+    printf '%s\n' '(GrantDirectMessage initiator responder)'
+    printf '%s\n' '(GrantDirectMessage responder reviewer)'
+    printf '%s\n' '(GrantDirectMessage reviewer owner)'
+  } >"$router_bootstrap"
+}
+
+write_router_daemon_configuration() {
+  local owner_user_id
+  owner_user_id="$(id -u)"
+  printf '(RouterDaemonConfiguration "%s" 384 "%s" 384 "%s" "%s" (UnixUser %s))\n' \
+    "$router_socket" \
+    "$router_supervision_socket" \
+    "$router_store" \
+    "$router_bootstrap" \
+    "$owner_user_id" \
+    >"$router_daemon_configuration"
+}
+
+write_message_spawn_envelope() {
+  local owner_user_id
+  owner_user_id="$(id -u)"
+  printf '(SpawnEnvelope dev-stack-chain Message Message (UnixUser %s) "%s" "%s" 432 "%s" 384 [(PeerSocket Router "%s")] "%s" 1)\n' \
+    "$owner_user_id" \
+    "$root" \
+    "$message_socket" \
+    "$root/message.supervision.sock" \
+    "$router_socket" \
+    "$root/persona.sock" \
+    >"$message_spawn_envelope"
+}
+
+write_message_daemon_configuration() {
+  local owner_user_id
+  owner_user_id="$(id -u)"
+  printf '(MessageDaemonConfiguration "%s" 432 "%s" 384 "%s" (UnixUser %s))\n' \
+    "$message_socket" \
+    "$root/message.supervision.sock" \
+    "$router_socket" \
+    "$owner_user_id" \
+    >"$message_daemon_configuration"
+}
+
+start_router() {
+  write_router_daemon_configuration
+  "$router_bin" "$router_daemon_configuration" >"$router_stdout" 2>&1 &
+  router_pid="$!"
+  processes+=("$router_pid")
+  wait_for_line "persona-router" "$router_stdout" "persona-router-daemon socket=$router_socket"
+}
+
+start_message_daemon() {
+  write_message_spawn_envelope
+  write_message_daemon_configuration
+  "$message_daemon_bin" "$message_daemon_configuration" \
+    >"$message_daemon_stdout" \
+    2>&1 &
+  message_daemon_pid="$!"
+  processes+=("$message_daemon_pid")
+  wait_for_line "persona-message-daemon" "$message_daemon_stdout" "persona-message-daemon socket=$message_socket"
+}
+
+connect_terminal() {
+  local agent="$1"
+  local connect_output="$root/$agent.terminal-connect.tsv"
+  "$terminal_signal" \
+    --control-socket "$(terminal_socket "$agent")" \
+    --terminal "$agent" \
+    connect \
+    >"$connect_output"
+  grep -Fq "TerminalReady	$agent	1" "$connect_output"
+}
+
+capture_terminal() {
+  local agent="$1"
+  local capture_output="$2"
+  "$terminal_signal" \
+    --control-socket "$(terminal_socket "$agent")" \
+    --terminal "$agent" \
+    capture \
+    >"$capture_output"
+  grep -Fq "TerminalCaptured	$agent	1" "$capture_output"
+}
+
+wait_for_capture_text() {
+  local agent="$1"
+  local text="$2"
+  local capture_output="$root/$agent.capture.tsv"
+
+  for _ in $(seq 1 100); do
+    capture_terminal "$agent" "$capture_output"
+    if capture_contains_text "$capture_output" "$text"; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  printf 'terminal %s never captured text: %s\n' "$agent" "$text" >&2
+  cat "$capture_output" >&2
+  return 1
+}
+
+wait_for_owner_inbox() {
+  for _ in $(seq 1 100); do
+    PERSONA_MESSAGE_SOCKET="$message_socket" \
+      PERSONA_MESSAGE_STORE="$message_store" \
+      "$message_bin" '(Inbox owner)' \
+      >"$owner_inbox_output"
+    if grep -Fq "reviewer completed task" "$owner_inbox_output"; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  printf 'owner inbox never received final reviewer message\n' >&2
+  cat "$owner_inbox_output" >&2
+  return 1
+}
+
+write_manifests() {
+  {
+    printf '%s\n' '(PersonaDevStackChainProcesses'
+    printf '  (Root "%s")\n' "$root"
+    printf '  (RouterPid %s)\n' "$router_pid"
+    printf '  (MessageDaemonPid %s)\n' "$message_daemon_pid"
+    for agent in "${agents[@]}"; do
+      printf '  (Harness "%s" "%s")\n' "$agent" "$root/$agent.harness.stdout"
+      printf '  (Terminal "%s" "%s")\n' "$agent" "$root/$agent.terminal.stdout"
+    done
+    printf '  (MessageSpawnEnvelope "%s")\n' "$message_spawn_envelope"
+    printf ')\n'
+  } >"$process_manifest"
+
+  {
+    printf '%s\n' '(PersonaDevStackChainSockets'
+    printf '  (Root "%s")\n' "$root"
+    printf '  (RouterSocket "%s")\n' "$router_socket"
+    printf '  (MessageSocket "%s")\n' "$message_socket"
+    printf '  (RouterStore "%s")\n' "$router_store"
+    for agent in "${agents[@]}"; do
+      printf '  (HarnessSocket "%s" "%s")\n' "$agent" "$(harness_socket "$agent")"
+      printf '  (TerminalSocket "%s" "%s")\n' "$agent" "$(terminal_socket "$agent")"
+      printf '  (TerminalStore "%s" "%s")\n' "$agent" "$(terminal_store "$agent")"
+    done
+    printf '  (RouterBootstrap "%s")\n' "$router_bootstrap"
+    printf ')\n'
+  } >"$socket_manifest"
+}
+
+run_chain() {
+  write_starting_instructions
+  for agent in "${agents[@]}"; do
+    start_terminal "$agent"
+    start_harness "$agent"
+  done
+
+  write_router_bootstrap
+  start_router
+  start_message_daemon
+  write_manifests
+
+  for agent in "${agents[@]}"; do
+    connect_terminal "$agent"
+  done
+
+  PERSONA_MESSAGE_SOCKET="$message_socket" \
+    PERSONA_MESSAGE_STORE="$message_store" \
+    "$message_bin" '(Send initiator start-three-harness-task)' \
+    >"$owner_send_output"
+  grep -Fq "(SubmissionAccepted " "$owner_send_output"
+
+  wait_for_capture_text initiator "initiator-received:start-three-harness-task"
+  wait_for_capture_text initiator "initiator-sent:initiator handed to responder"
+  wait_for_capture_text responder "responder-received:initiator handed to responder"
+  wait_for_capture_text responder "responder-sent:responder handed to reviewer"
+  wait_for_capture_text reviewer "reviewer-received:responder handed to reviewer"
+  wait_for_capture_text reviewer "reviewer-sent:reviewer completed task"
+  wait_for_owner_inbox
+
+  {
+    printf '%s\n' '(PersonaDevStackChain'
+    printf '  (StartingInstructions "%s")\n' "$starting_instructions"
+    printf '  (OwnerSend "%s")\n' "$owner_send_output"
+    printf '  (OwnerInbox "%s")\n' "$owner_inbox_output"
+    for agent in "${agents[@]}"; do
+      printf '  (TerminalCapture "%s" "%s")\n' "$agent" "$root/$agent.capture.tsv"
+    done
+    printf '  (Status Passed)\n'
+    printf ')\n'
+  } >"$chain_manifest"
+
+  printf 'persona dev stack chain=passed\n'
+  printf 'root=%s\n' "$root"
+  printf 'starting instructions=%s\n' "$starting_instructions"
+  printf 'chain manifest=%s\n' "$chain_manifest"
+  printf 'owner inbox=%s\n' "$owner_inbox_output"
+  printf 'process manifest=%s\n' "$process_manifest"
+  printf 'socket manifest=%s\n' "$socket_manifest"
+}
+
+run_chain
