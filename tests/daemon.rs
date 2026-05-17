@@ -57,6 +57,10 @@ impl DaemonFixture {
         Self::start_with_engine_topology(EngineTopology::MessageRouter)
     }
 
+    fn start_with_three_harness_chain_components() -> Self {
+        Self::start_with_engine_topology(EngineTopology::ThreeHarnessChain)
+    }
+
     fn start_with_engine_topology(topology: EngineTopology) -> Self {
         let root = Self::unique_root();
         let _ = std::fs::remove_dir_all(&root);
@@ -133,6 +137,13 @@ impl DaemonFixture {
             .join(format!("{}.env", component.as_str()))
     }
 
+    fn component_instance_capture(&self, instance_name: &str) -> PathBuf {
+        self.root
+            .join("state")
+            .join("default")
+            .join(format!("{instance_name}.env"))
+    }
+
     fn wait_for_component_capture(&self, component: EngineComponent) -> String {
         let path = self.component_capture(component);
         for _attempt in 0..80 {
@@ -147,8 +158,12 @@ impl DaemonFixture {
     }
 
     fn stop_component_process_groups(&self) {
-        for component in EngineComponent::prototype_supervised_components() {
-            let Ok(text) = std::fs::read_to_string(self.component_capture(component)) else {
+        let capture_dir = self.root.join("state").join("default");
+        let Ok(entries) = std::fs::read_dir(capture_dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let Ok(text) = std::fs::read_to_string(entry.path()) else {
                 continue;
             };
             let Some(process) = text.lines().find_map(|line| {
@@ -172,6 +187,65 @@ impl Drop for DaemonFixture {
         self.stop_component_process_groups();
         let _ = std::fs::remove_dir_all(&self.root);
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_persona_daemon_launches_three_harness_chain_topology_through_engine_supervisor()
+{
+    let mut fixture = DaemonFixture::start_with_three_harness_chain_components();
+    let topology = EngineTopology::ThreeHarnessChain;
+
+    for (instance_name, component, peer_count) in [
+        ("message", EngineComponent::Message, 7),
+        ("router", EngineComponent::Router, 7),
+        ("initiator-terminal", EngineComponent::Terminal, 7),
+        ("initiator", EngineComponent::Harness, 7),
+        ("responder-terminal", EngineComponent::Terminal, 7),
+        ("responder", EngineComponent::Harness, 7),
+        ("reviewer-terminal", EngineComponent::Terminal, 7),
+        ("reviewer", EngineComponent::Harness, 7),
+    ] {
+        let path = fixture.component_instance_capture(instance_name);
+        let mut capture = String::new();
+        for _attempt in 0..80 {
+            if let Ok(text) = std::fs::read_to_string(&path)
+                && text.contains("peer_count=")
+            {
+                capture = text;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        assert!(
+            !capture.is_empty(),
+            "component instance capture did not appear: {}",
+            path.display()
+        );
+        assert!(capture.contains("engine=default"));
+        assert!(capture.contains(&format!("component={}", component.as_str())));
+        assert!(capture.contains(&format!("component_instance={instance_name}")));
+        assert!(capture.contains(&format!("peer_count={peer_count}")));
+    }
+
+    fixture.stop_daemon();
+
+    let store = persona::manager_store::ManagerStore::start(
+        persona::manager_store::ManagerStoreLocation::new(&fixture.manager_store),
+    )
+    .expect("manager store starts for inspection");
+    let events = store
+        .ask(persona::manager_store::ReadEngineEvents::new(
+            signal_persona_auth::EngineId::new("default"),
+        ))
+        .await
+        .expect("default engine events read through manager store actor");
+    assert_eq!(
+        events.len(),
+        topology.component_topology_entries().len() * 2
+    );
+
+    store.stop_gracefully().await.expect("manager store stops");
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

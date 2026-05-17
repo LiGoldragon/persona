@@ -14,7 +14,7 @@ use thiserror::Error;
 use tokio::process::Command;
 use tokio::sync::oneshot;
 
-use crate::engine::{ComponentSpawnEnvelope, EngineComponent};
+use crate::engine::{ComponentInstanceName, ComponentSpawnEnvelope, EngineComponent};
 use crate::engine_event::{
     ComponentExited, ComponentExitedInput, EngineEventBody, EngineEventDraft,
     EngineEventDraftInput, EngineEventSource,
@@ -36,13 +36,26 @@ impl ChildProcessId {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LaunchedComponent {
+    component_instance: ComponentInstanceName,
     component: EngineComponent,
     process: ChildProcessId,
 }
 
 impl LaunchedComponent {
-    pub(crate) fn new(component: EngineComponent, process: ChildProcessId) -> Self {
-        Self { component, process }
+    pub(crate) fn new_instance(
+        component_instance: ComponentInstanceName,
+        component: EngineComponent,
+        process: ChildProcessId,
+    ) -> Self {
+        Self {
+            component_instance,
+            component,
+            process,
+        }
+    }
+
+    pub fn component_instance(&self) -> &ComponentInstanceName {
+        &self.component_instance
     }
 
     pub fn component(&self) -> EngineComponent {
@@ -129,6 +142,8 @@ struct LauncherSnapshotInput {
 type StopHandoff = Arc<Mutex<Option<oneshot::Sender<StopComponentReceipt>>>>;
 
 struct RunningChild {
+    component_instance: ComponentInstanceName,
+    component: EngineComponent,
     process: ChildProcessId,
     /// Watcher task that owns the `tokio::process::Child` and awaits its
     /// exit. Aborted on launcher drop so an unsupervised teardown still
@@ -138,7 +153,7 @@ struct RunningChild {
 }
 
 pub struct DirectProcessLauncher {
-    children: HashMap<EngineComponent, RunningChild>,
+    children: HashMap<ComponentInstanceName, RunningChild>,
     launch_count: u64,
     stop_count: u64,
     /// Count of children observed exiting without an explicit stop. Used by
@@ -186,8 +201,11 @@ impl DirectProcessLauncher {
         launcher_ref: ActorRef<Self>,
     ) -> Result<LaunchComponentReceipt, DirectProcessFailure> {
         let component = envelope.component();
-        if self.children.contains_key(&component) {
-            return Err(DirectProcessFailure::ComponentAlreadyRunning { component });
+        let component_instance = envelope.component_instance().clone();
+        if self.children.contains_key(&component_instance) {
+            return Err(DirectProcessFailure::ComponentAlreadyRunning {
+                component_instance: component_instance.clone(),
+            });
         }
         Self::write_spawn_envelope_file(&envelope)?;
         let typed_configuration_path = Self::write_typed_configuration_file(&envelope)?;
@@ -203,6 +221,7 @@ impl DirectProcessLauncher {
         };
         let stop_handoff: StopHandoff = Arc::new(Mutex::new(None));
         let watcher_handoff = stop_handoff.clone();
+        let watcher_component_instance = component_instance.clone();
         let watcher = tokio::spawn(async move {
             let exit_code = match child.wait().await {
                 Ok(status) => status.code(),
@@ -214,11 +233,16 @@ impl DirectProcessLauncher {
                 .take();
             match stop_sender {
                 Some(sender) => {
-                    let _ = sender.send(StopComponentReceipt::new(component, process));
+                    let _ = sender.send(StopComponentReceipt::new_instance(
+                        watcher_component_instance,
+                        component,
+                        process,
+                    ));
                 }
                 None => {
                     let _ = launcher_ref
                         .tell(ChildProcessExited {
+                            component_instance: watcher_component_instance,
                             component,
                             process,
                             exit_code,
@@ -228,15 +252,21 @@ impl DirectProcessLauncher {
             }
         });
         self.children.insert(
-            component,
+            component_instance.clone(),
             RunningChild {
+                component_instance: component_instance.clone(),
+                component,
                 process,
                 watcher,
                 stop_handoff,
             },
         );
         self.launch_count = self.launch_count.saturating_add(1);
-        Ok(LaunchComponentReceipt::new(component, process))
+        Ok(LaunchComponentReceipt::new_instance(
+            component_instance,
+            component,
+            process,
+        ))
     }
 
     fn write_spawn_envelope_file(
@@ -277,35 +307,45 @@ impl DirectProcessLauncher {
 
     async fn stop(
         &mut self,
-        component: EngineComponent,
+        component_instance: ComponentInstanceName,
     ) -> Result<StopComponentReceipt, DirectProcessFailure> {
-        let (receiver, process, handoff) = {
-            let running = self
-                .children
-                .get_mut(&component)
-                .ok_or(DirectProcessFailure::ComponentNotRunning { component })?;
+        let (component, receiver, process, handoff) = {
+            let running = self.children.get_mut(&component_instance).ok_or_else(|| {
+                DirectProcessFailure::ComponentNotRunning {
+                    component_instance: component_instance.clone(),
+                }
+            })?;
+            let component = running.component;
             let mut handoff_guard = running
                 .stop_handoff
                 .lock()
                 .expect("stop_handoff mutex not poisoned");
             if handoff_guard.is_some() {
-                return Err(DirectProcessFailure::ComponentStopAlreadyInFlight { component });
+                return Err(DirectProcessFailure::ComponentStopAlreadyInFlight {
+                    component_instance,
+                });
             }
             let (sender, receiver) = oneshot::channel();
             *handoff_guard = Some(sender);
             drop(handoff_guard);
             Self::terminate_process_group(running.process, libc::SIGTERM)?;
-            (receiver, running.process, running.stop_handoff.clone())
+            (
+                component,
+                receiver,
+                running.process,
+                running.stop_handoff.clone(),
+            )
         };
 
         let receipt = self
-            .await_stop_receipt(component, process, handoff, receiver)
+            .await_stop_receipt(component_instance.clone(), process, handoff, receiver)
             .await?;
         // Remove the entry after the watcher signalled exit. The watcher's
         // `JoinHandle` finishes shortly; its abort on Drop is a no-op once
         // the task has already returned.
-        self.children.remove(&component);
+        self.children.remove(&component_instance);
         self.stop_count = self.stop_count.saturating_add(1);
+        debug_assert_eq!(receipt.component(), component);
         Ok(receipt)
     }
 
@@ -316,7 +356,7 @@ impl DirectProcessLauncher {
     /// reachable.
     async fn await_stop_receipt(
         &self,
-        component: EngineComponent,
+        component_instance: ComponentInstanceName,
         process: ChildProcessId,
         _handoff: StopHandoff,
         receiver: oneshot::Receiver<StopComponentReceipt>,
@@ -336,7 +376,7 @@ impl DirectProcessLauncher {
                 }
                 result = &mut receiver => {
                     return result.map_err(|_canceled| {
-                        DirectProcessFailure::StopWaiterCanceled { component }
+                        DirectProcessFailure::StopWaiterCanceled { component_instance }
                     });
                 }
             }
@@ -347,7 +387,7 @@ impl DirectProcessLauncher {
     /// no stop handoff present. Append `ComponentExited` to the manager
     /// event log (when a notifier is wired) and update bookkeeping.
     async fn handle_child_exited(&mut self, exit: ChildProcessExited) {
-        if self.children.remove(&exit.component).is_none() {
+        if self.children.remove(&exit.component_instance).is_none() {
             return;
         }
         self.natural_exit_count = self.natural_exit_count.saturating_add(1);
@@ -370,8 +410,14 @@ impl DirectProcessLauncher {
     fn snapshot(&self) -> LauncherSnapshot {
         let running = self
             .children
-            .iter()
-            .map(|(component, child)| LaunchedComponent::new(*component, child.process))
+            .values()
+            .map(|child| {
+                LaunchedComponent::new_instance(
+                    child.component_instance.clone(),
+                    child.component,
+                    child.process,
+                )
+            })
             .collect();
         LauncherSnapshot::from_input(LauncherSnapshotInput {
             running,
@@ -651,20 +697,39 @@ impl DirectProcessLauncher {
             supervision_socket_mode: signal_persona::SocketMode::new(
                 envelope.supervision_socket_mode().as_octal(),
             ),
-            harness_name: signal_persona_harness::HarnessName::new("harness"),
+            harness_name: signal_persona_harness::HarnessName::new(
+                envelope.component_instance().as_str(),
+            ),
             harness_kind: signal_persona_harness::HarnessKind::Fixture,
-            terminal_socket_path: envelope
-                .peers()
-                .iter()
-                .find(|peer| peer.component() == EngineComponent::Terminal)
-                .map(|peer| {
-                    signal_persona::WirePath::new(
-                        peer.domain_socket_path().to_string_lossy().into_owned(),
-                    )
-                }),
+            terminal_socket_path: Self::paired_terminal_socket_path(envelope),
             owner_identity: envelope.owner_identity().clone(),
         };
         Self::write_configuration_nota_file(envelope, &configuration, "harness-daemon.nota")
+    }
+
+    fn paired_terminal_socket_path(
+        envelope: &ComponentSpawnEnvelope,
+    ) -> Option<signal_persona::WirePath> {
+        let paired_terminal_instance = ComponentInstanceName::new(format!(
+            "{}-terminal",
+            envelope.component_instance().as_str()
+        ));
+        let terminal_peer = envelope
+            .peers()
+            .iter()
+            .find(|peer| peer.instance_name() == &paired_terminal_instance)
+            .or_else(|| {
+                envelope
+                    .peers()
+                    .iter()
+                    .find(|peer| peer.component() == EngineComponent::Terminal)
+            })?;
+        Some(signal_persona::WirePath::new(
+            terminal_peer
+                .domain_socket_path()
+                .to_string_lossy()
+                .into_owned(),
+        ))
     }
 
     fn write_system_daemon_configuration_file(
@@ -740,6 +805,11 @@ impl DirectProcessLauncher {
         }
         command.env("PERSONA_ENGINE_ID", envelope.engine().as_str());
         command.env("PERSONA_COMPONENT", envelope.component().as_str());
+        command.env("PERSONA_COMPONENT_KIND", envelope.component().as_str());
+        command.env(
+            "PERSONA_COMPONENT_INSTANCE",
+            envelope.component_instance().as_str(),
+        );
         command.env("PERSONA_STATE_PATH", envelope.state_path());
         command.env("PERSONA_SOCKET_PATH", envelope.domain_socket_path());
         command.env("PERSONA_DOMAIN_SOCKET_PATH", envelope.domain_socket_path());
@@ -769,6 +839,10 @@ impl DirectProcessLauncher {
             command.env(
                 format!("PERSONA_PEER_{index}_COMPONENT"),
                 peer.component().as_str(),
+            );
+            command.env(
+                format!("PERSONA_PEER_{index}_COMPONENT_INSTANCE"),
+                peer.instance_name().as_str(),
             );
             command.env(
                 format!("PERSONA_PEER_{index}_SOCKET_PATH"),
@@ -851,13 +925,26 @@ impl LaunchComponent {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LaunchComponentReceipt {
+    component_instance: ComponentInstanceName,
     component: EngineComponent,
     process: ChildProcessId,
 }
 
 impl LaunchComponentReceipt {
-    fn new(component: EngineComponent, process: ChildProcessId) -> Self {
-        Self { component, process }
+    fn new_instance(
+        component_instance: ComponentInstanceName,
+        component: EngineComponent,
+        process: ChildProcessId,
+    ) -> Self {
+        Self {
+            component_instance,
+            component,
+            process,
+        }
+    }
+
+    pub fn component_instance(&self) -> &ComponentInstanceName {
+        &self.component_instance
     }
 
     pub fn component(&self) -> EngineComponent {
@@ -882,26 +969,43 @@ impl Message<LaunchComponent> for DirectProcessLauncher {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct StopComponentProcess {
-    component: EngineComponent,
+    component_instance: ComponentInstanceName,
 }
 
 impl StopComponentProcess {
-    pub const fn new(component: EngineComponent) -> Self {
-        Self { component }
+    pub fn new(component: EngineComponent) -> Self {
+        Self::for_instance(ComponentInstanceName::from_component(component))
+    }
+
+    pub fn for_instance(component_instance: ComponentInstanceName) -> Self {
+        Self { component_instance }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StopComponentReceipt {
+    component_instance: ComponentInstanceName,
     component: EngineComponent,
     process: ChildProcessId,
 }
 
 impl StopComponentReceipt {
-    fn new(component: EngineComponent, process: ChildProcessId) -> Self {
-        Self { component, process }
+    fn new_instance(
+        component_instance: ComponentInstanceName,
+        component: EngineComponent,
+        process: ChildProcessId,
+    ) -> Self {
+        Self {
+            component_instance,
+            component,
+            process,
+        }
+    }
+
+    pub fn component_instance(&self) -> &ComponentInstanceName {
+        &self.component_instance
     }
 
     pub fn component(&self) -> EngineComponent {
@@ -921,7 +1025,7 @@ impl Message<StopComponentProcess> for DirectProcessLauncher {
         message: StopComponentProcess,
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.stop(message.component).await
+        self.stop(message.component_instance).await
     }
 }
 
@@ -946,12 +1050,17 @@ impl Message<ReadLauncherSnapshot> for DirectProcessLauncher {
 /// supervised mailbox thread, not in the detached watcher.
 #[derive(Debug, Clone)]
 pub struct ChildProcessExited {
+    component_instance: ComponentInstanceName,
     component: EngineComponent,
     process: ChildProcessId,
     exit_code: Option<i32>,
 }
 
 impl ChildProcessExited {
+    pub fn component_instance(&self) -> &ComponentInstanceName {
+        &self.component_instance
+    }
+
     pub fn component(&self) -> EngineComponent {
         self.component
     }
@@ -979,14 +1088,22 @@ impl Message<ChildProcessExited> for DirectProcessLauncher {
 
 #[derive(Debug, Error)]
 pub enum DirectProcessFailure {
-    #[error("component {component:?} already has a running child process")]
-    ComponentAlreadyRunning { component: EngineComponent },
-    #[error("component {component:?} has no running child process")]
-    ComponentNotRunning { component: EngineComponent },
-    #[error("component {component:?} already has a stop in flight")]
-    ComponentStopAlreadyInFlight { component: EngineComponent },
-    #[error("component {component:?} stop waiter was canceled before exit")]
-    StopWaiterCanceled { component: EngineComponent },
+    #[error("component instance {component_instance:?} already has a running child process")]
+    ComponentAlreadyRunning {
+        component_instance: ComponentInstanceName,
+    },
+    #[error("component instance {component_instance:?} has no running child process")]
+    ComponentNotRunning {
+        component_instance: ComponentInstanceName,
+    },
+    #[error("component instance {component_instance:?} already has a stop in flight")]
+    ComponentStopAlreadyInFlight {
+        component_instance: ComponentInstanceName,
+    },
+    #[error("component instance {component_instance:?} stop waiter was canceled before exit")]
+    StopWaiterCanceled {
+        component_instance: ComponentInstanceName,
+    },
     #[error("spawned component {component:?} did not expose a child pid")]
     ChildPidMissing { component: EngineComponent },
     #[error("spawn envelope path for component {component:?} has no parent directory")]

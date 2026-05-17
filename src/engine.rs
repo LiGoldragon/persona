@@ -101,11 +101,11 @@ impl PersonaDaemonPaths {
         let state_dir = self.state_root.join(engine.as_str());
         let run_dir = self.run_root.join(engine.as_str());
         let components = topology
-            .components()
+            .component_topology_entries()
             .iter()
             .copied()
-            .map(|component| {
-                ComponentLayout::new(component, state_dir.as_path(), run_dir.as_path())
+            .map(|entry| {
+                ComponentLayout::from_topology_entry(entry, state_dir.as_path(), run_dir.as_path())
             })
             .collect();
         EngineLayout {
@@ -170,22 +170,50 @@ impl EngineLayout {
             .find(|layout| layout.component == component)
     }
 
+    pub fn component_instance(
+        &self,
+        instance_name: &ComponentInstanceName,
+    ) -> Option<&ComponentLayout> {
+        self.components
+            .iter()
+            .find(|layout| &layout.instance_name == instance_name)
+    }
+
     pub fn spawn_envelope(
         &self,
         component: EngineComponent,
         resolved_commands: &ResolvedComponentCommands,
     ) -> Option<ComponentSpawnEnvelope> {
         let layout = self.component(component)?;
+        self.spawn_envelope_for_layout(layout, resolved_commands)
+    }
+
+    pub fn spawn_envelope_for_instance(
+        &self,
+        instance_name: &ComponentInstanceName,
+        resolved_commands: &ResolvedComponentCommands,
+    ) -> Option<ComponentSpawnEnvelope> {
+        let layout = self.component_instance(instance_name)?;
+        self.spawn_envelope_for_layout(layout, resolved_commands)
+    }
+
+    fn spawn_envelope_for_layout(
+        &self,
+        layout: &ComponentLayout,
+        resolved_commands: &ResolvedComponentCommands,
+    ) -> Option<ComponentSpawnEnvelope> {
+        let component = layout.component;
         let command = resolved_commands.command_for(component)?.clone();
         let peers = self
             .components
             .iter()
-            .filter(|peer| peer.component != component)
+            .filter(|peer| peer.instance_name != layout.instance_name)
             .map(ComponentPeerSocket::from_layout)
             .collect();
         Some(ComponentSpawnEnvelope {
             engine: self.engine.clone(),
             owner_identity: self.owner_identity.clone(),
+            component_instance: layout.instance_name.clone(),
             component,
             state_dir: self.state_dir.clone(),
             state_path: layout.state_path.clone(),
@@ -230,6 +258,7 @@ impl PreparedEngineLayout {
 pub enum EngineTopology {
     FullPrototype,
     MessageRouter,
+    ThreeHarnessChain,
 }
 
 impl EngineTopology {
@@ -237,6 +266,15 @@ impl EngineTopology {
         match self {
             Self::FullPrototype => &PROTOTYPE_SUPERVISED_COMPONENTS,
             Self::MessageRouter => &MESSAGE_ROUTER_COMPONENTS,
+            Self::ThreeHarnessChain => &THREE_HARNESS_CHAIN_COMPONENTS,
+        }
+    }
+
+    pub const fn component_topology_entries(self) -> &'static [ComponentTopologyEntry] {
+        match self {
+            Self::FullPrototype => &PROTOTYPE_SUPERVISED_COMPONENT_ENTRIES,
+            Self::MessageRouter => &MESSAGE_ROUTER_COMPONENT_ENTRIES,
+            Self::ThreeHarnessChain => &THREE_HARNESS_CHAIN_COMPONENT_ENTRIES,
         }
     }
 
@@ -244,6 +282,7 @@ impl EngineTopology {
         match self {
             Self::FullPrototype => "full-prototype",
             Self::MessageRouter => "message-router",
+            Self::ThreeHarnessChain => "three-harness-chain",
         }
     }
 
@@ -251,8 +290,36 @@ impl EngineTopology {
         match value {
             "full-prototype" => Some(Self::FullPrototype),
             "message-router" => Some(Self::MessageRouter),
+            "three-harness-chain" => Some(Self::ThreeHarnessChain),
             _ => None,
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ComponentTopologyEntry {
+    component: EngineComponent,
+    instance_name: &'static str,
+}
+
+impl ComponentTopologyEntry {
+    pub const fn new(component: EngineComponent, instance_name: &'static str) -> Self {
+        Self {
+            component,
+            instance_name,
+        }
+    }
+
+    pub const fn for_component(component: EngineComponent) -> Self {
+        Self::new(component, component.as_str())
+    }
+
+    pub const fn component(self) -> EngineComponent {
+        self.component
+    }
+
+    pub const fn instance_name(self) -> &'static str {
+        self.instance_name
     }
 }
 
@@ -288,6 +355,39 @@ const PROTOTYPE_SUPERVISED_COMPONENTS: [EngineComponent; 7] = [
 
 const MESSAGE_ROUTER_COMPONENTS: [EngineComponent; 2] =
     [EngineComponent::Message, EngineComponent::Router];
+
+const THREE_HARNESS_CHAIN_COMPONENTS: [EngineComponent; 4] = [
+    EngineComponent::Message,
+    EngineComponent::Router,
+    EngineComponent::Harness,
+    EngineComponent::Terminal,
+];
+
+const PROTOTYPE_SUPERVISED_COMPONENT_ENTRIES: [ComponentTopologyEntry; 7] = [
+    ComponentTopologyEntry::for_component(EngineComponent::Mind),
+    ComponentTopologyEntry::for_component(EngineComponent::Router),
+    ComponentTopologyEntry::for_component(EngineComponent::System),
+    ComponentTopologyEntry::for_component(EngineComponent::Harness),
+    ComponentTopologyEntry::for_component(EngineComponent::Terminal),
+    ComponentTopologyEntry::for_component(EngineComponent::Message),
+    ComponentTopologyEntry::for_component(EngineComponent::Introspect),
+];
+
+const MESSAGE_ROUTER_COMPONENT_ENTRIES: [ComponentTopologyEntry; 2] = [
+    ComponentTopologyEntry::for_component(EngineComponent::Message),
+    ComponentTopologyEntry::for_component(EngineComponent::Router),
+];
+
+const THREE_HARNESS_CHAIN_COMPONENT_ENTRIES: [ComponentTopologyEntry; 8] = [
+    ComponentTopologyEntry::for_component(EngineComponent::Message),
+    ComponentTopologyEntry::for_component(EngineComponent::Router),
+    ComponentTopologyEntry::new(EngineComponent::Terminal, "initiator-terminal"),
+    ComponentTopologyEntry::new(EngineComponent::Harness, "initiator"),
+    ComponentTopologyEntry::new(EngineComponent::Terminal, "responder-terminal"),
+    ComponentTopologyEntry::new(EngineComponent::Harness, "responder"),
+    ComponentTopologyEntry::new(EngineComponent::Terminal, "reviewer-terminal"),
+    ComponentTopologyEntry::new(EngineComponent::Harness, "reviewer"),
+];
 
 impl EngineComponent {
     pub const fn operational_delivery_components() -> [Self; 6] {
@@ -448,8 +548,26 @@ impl EngineComponent {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ComponentInstanceName(String);
+
+impl ComponentInstanceName {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn from_component(component: EngineComponent) -> Self {
+        Self::new(component.as_str())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComponentLayout {
+    instance_name: ComponentInstanceName,
     component: EngineComponent,
     state_path: PathBuf,
     envelope_path: PathBuf,
@@ -458,22 +576,33 @@ pub struct ComponentLayout {
 }
 
 impl ComponentLayout {
-    fn new(component: EngineComponent, state_dir: &Path, run_dir: &Path) -> Self {
+    fn from_topology_entry(
+        entry: ComponentTopologyEntry,
+        state_dir: &Path,
+        run_dir: &Path,
+    ) -> Self {
+        let component = entry.component();
+        let instance_name = ComponentInstanceName::new(entry.instance_name());
         Self {
-            component,
-            state_path: state_dir.join(component.state_file()),
-            envelope_path: run_dir.join(component.envelope_file()),
+            state_path: state_dir.join(format!("{}.redb", instance_name.as_str())),
+            envelope_path: run_dir.join(format!("{}.envelope", instance_name.as_str())),
             domain_socket: ComponentSocket {
                 component,
-                path: run_dir.join(component.socket_file()),
+                path: run_dir.join(format!("{}.sock", instance_name.as_str())),
                 mode: component.socket_mode(),
             },
             supervision_socket: ComponentSocket {
                 component,
-                path: run_dir.join(component.supervision_socket_file()),
+                path: run_dir.join(format!("{}.supervision.sock", instance_name.as_str())),
                 mode: component.supervision_socket_mode(),
             },
+            instance_name,
+            component,
         }
+    }
+
+    pub fn instance_name(&self) -> &ComponentInstanceName {
+        &self.instance_name
     }
 
     pub fn component(&self) -> EngineComponent {
@@ -539,6 +668,7 @@ impl SocketMode {
 pub struct ComponentSpawnEnvelope {
     engine: EngineId,
     owner_identity: OwnerIdentity,
+    component_instance: ComponentInstanceName,
     component: EngineComponent,
     state_dir: PathBuf,
     state_path: PathBuf,
@@ -563,6 +693,10 @@ impl ComponentSpawnEnvelope {
 
     pub fn component(&self) -> EngineComponent {
         self.component
+    }
+
+    pub fn component_instance(&self) -> &ComponentInstanceName {
+        &self.component_instance
     }
 
     pub fn state_dir(&self) -> &Path {
@@ -637,6 +771,7 @@ impl ComponentSpawnEnvelope {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComponentPeerSocket {
+    instance_name: ComponentInstanceName,
     component: EngineComponent,
     domain_socket_path: PathBuf,
 }
@@ -644,9 +779,14 @@ pub struct ComponentPeerSocket {
 impl ComponentPeerSocket {
     fn from_layout(layout: &ComponentLayout) -> Self {
         Self {
+            instance_name: layout.instance_name.clone(),
             component: layout.component,
             domain_socket_path: layout.domain_socket.path.clone(),
         }
+    }
+
+    pub fn instance_name(&self) -> &ComponentInstanceName {
+        &self.instance_name
     }
 
     pub fn component(&self) -> EngineComponent {

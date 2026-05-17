@@ -1260,14 +1260,18 @@ The apex repo owns tests that prove cross-component shape:
 | engine resources are scoped | `nix build .#checks.x86_64-linux.persona-engine-layout-uses-engine-id-scoped-paths` |
 | socket policy is boundary-specific | `nix build .#checks.x86_64-linux.persona-engine-layout-assigns-socket-modes-by-component-boundary` |
 | engine topology is explicit | `nix build .#checks.x86_64-linux.persona-engine-layout-can-select-message-router-topology` |
+| three-harness-chain topology allocates real component instances | `nix build .#checks.x86_64-linux.persona-engine-layout-allocates-three-harness-chain-instances` |
 | spawn envelopes carry manager-supplied peers | `nix build .#checks.x86_64-linux.persona-spawn-envelope-carries-component-paths-and-peer-sockets` |
 | message-router topology gives each component one peer | `nix build .#checks.x86_64-linux.persona-message-router-topology-spawn-envelope-has-one-peer-socket` |
+| three-harness-chain spawn envelope pairs harness instances with named terminal instances | `nix build .#checks.x86_64-linux.persona-three-harness-chain-spawn-envelope-pairs-harness-with-named-terminal` |
 | engine preparation does not write global manager state as a side effect | `nix build .#checks.x86_64-linux.persona-engine-layout-prepares-only-engine-scoped-directories` |
 | component command resolution is Nix-owned | `nix build .#checks.x86_64-linux.persona-component-commands-resolve-from-nix-closure` |
 | launch config overrides are narrow | `nix build .#checks.x86_64-linux.persona-launch-config-overrides-one-component-command` |
 | spawn envelope carries the resolved command | `nix build .#checks.x86_64-linux.persona-spawn-envelope-carries-resolved-component-command` |
 | engine supervisor starts every prototype-supervised process through the launcher actor | `nix build .#checks.x86_64-linux.persona-engine-supervisor-launches-prototype-supervised-components-through-process-launcher` |
 | engine supervisor can launch the focused message-router topology without full-stack side effects | `nix build .#checks.x86_64-linux.persona-engine-supervisor-launches-message-router-topology-without-full-stack` |
+| engine supervisor launches three-harness-chain as distinct child instances | `nix build .#checks.x86_64-linux.persona-engine-supervisor-launches-three-harness-chain-instances` |
+| persona-daemon launches three-harness-chain through the engine supervisor | `nix build .#checks.x86_64-linux.persona-daemon-launches-three-harness-chain-topology-through-engine-supervisor` |
 | persona-daemon launch plan reaches the engine supervisor and manager event log | `nix build .#checks.x86_64-linux.persona-daemon-launches-prototype-supervised-components-through-engine-supervisor` |
 | persona-daemon can launch the focused message-router topology | `nix build .#checks.x86_64-linux.persona-daemon-launches-message-router-topology-through-engine-supervisor` |
 | full topology starts from Nix-built prototype launchers | `nix build .#checks.x86_64-linux.persona-daemon-launches-nix-built-prototype-topology` |

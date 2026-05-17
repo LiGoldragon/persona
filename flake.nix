@@ -116,6 +116,7 @@
                 {
                   printf 'engine=%s\n' "''${PERSONA_ENGINE_ID:?}"
                   printf 'component=%s\n' "''${PERSONA_COMPONENT:?}"
+                  printf 'component_instance=%s\n' "''${PERSONA_COMPONENT_INSTANCE:?}"
                   printf 'process=%s\n' "$$"
                   printf 'domain_socket=%s\n' "''${PERSONA_DOMAIN_SOCKET_PATH:?}"
                   printf 'supervision_socket=%s\n' "''${PERSONA_SUPERVISION_SOCKET_PATH:?}"
@@ -125,7 +126,7 @@
                   printf 'supervision_mode=%s\n' "''${PERSONA_SUPERVISION_SOCKET_MODE:?}"
                   printf 'peer_count=%s\n' "''${PERSONA_PEER_SOCKET_COUNT:?}"
                   printf 'actual=%s\n' '${actual}'
-                } > "$state_dir/$PERSONA_COMPONENT.env"
+                } > "$state_dir/$PERSONA_COMPONENT_INSTANCE.env"
                 ${command}
               '';
             };
@@ -1186,6 +1187,15 @@
               cargoTestExtraArgs = "--test engine constraint_engine_layout_can_select_message_router_topology -- --exact";
             }
           );
+          persona-engine-layout-allocates-three-harness-chain-instances =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test engine constraint_three_harness_chain_topology_allocates_distinct_instances -- --exact";
+                }
+              );
           persona-spawn-envelope-carries-component-paths-and-peer-sockets = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -1200,6 +1210,15 @@
                 // {
                   inherit (context) cargoArtifacts;
                   cargoTestExtraArgs = "--test engine constraint_message_router_topology_spawn_envelope_has_one_peer_socket -- --exact";
+                }
+              );
+          persona-three-harness-chain-spawn-envelope-pairs-harness-with-named-terminal =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test engine constraint_three_harness_chain_spawn_envelope_pairs_harness_with_named_terminal -- --exact";
                 }
               );
           persona-engine-layout-prepares-only-engine-scoped-directories = context.craneLib.cargoTest (
@@ -1393,6 +1412,16 @@
                   cargoTestExtraArgs = "--test supervisor constraint_engine_supervisor_launches_message_router_topology_without_full_stack -- --exact";
                 }
               );
+          persona-engine-supervisor-launches-three-harness-chain-instances =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+                  cargoTestExtraArgs = "--test supervisor constraint_engine_supervisor_launches_three_harness_chain_instances -- --exact";
+                }
+              );
           persona-daemon-persists-cli-mutation-to-manager-store = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -1418,6 +1447,16 @@
                   inherit (context) cargoArtifacts;
                   PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
                   cargoTestExtraArgs = "--test daemon constraint_persona_daemon_launches_message_router_topology_through_engine_supervisor -- --exact";
+                }
+              );
+          persona-daemon-launches-three-harness-chain-topology-through-engine-supervisor =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+                  cargoTestExtraArgs = "--test daemon constraint_persona_daemon_launches_three_harness_chain_topology_through_engine_supervisor -- --exact";
                 }
               );
           persona-engine-meta-testing-docs-are-nix-backed = context.craneLib.cargoTest (

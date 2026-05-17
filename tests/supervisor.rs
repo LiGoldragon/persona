@@ -53,6 +53,12 @@ impl SupervisorFixture {
             .join(format!("{}.env", component.as_str()))
     }
 
+    fn component_instance_capture(&self, instance_name: &str) -> PathBuf {
+        self.state_root()
+            .join(self.engine.as_str())
+            .join(format!("{instance_name}.env"))
+    }
+
     fn command_catalog(&self) -> ComponentCommandCatalog {
         ComponentCommandCatalog::from_repeated_executable(
             support::component_socket_fixture(self.root.as_path())
@@ -97,6 +103,59 @@ impl Drop for SupervisorFixture {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.root);
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_engine_supervisor_launches_three_harness_chain_instances() {
+    let fixture = SupervisorFixture::new("three-harness-chain-supervision");
+    let topology = EngineTopology::ThreeHarnessChain;
+    let store = ManagerStore::start(ManagerStoreLocation::new(fixture.manager_store()))
+        .expect("manager store starts");
+    let supervisor = EngineSupervisor::spawn(EngineSupervisor::new(EngineSupervisorInput {
+        layout: fixture.layout_for_topology(topology),
+        command_catalog: fixture.command_catalog_for_topology(topology),
+        launch_configuration: EngineLaunchConfiguration::empty(),
+        store: Some(store.clone()),
+    }));
+
+    let report = supervisor
+        .ask(StartPrototypeSupervision)
+        .await
+        .expect("three-harness-chain supervision starts");
+    assert_eq!(report.components().len(), 8);
+
+    for (instance_name, component) in [
+        ("message", EngineComponent::Message),
+        ("router", EngineComponent::Router),
+        ("initiator-terminal", EngineComponent::Terminal),
+        ("initiator", EngineComponent::Harness),
+        ("responder-terminal", EngineComponent::Terminal),
+        ("responder", EngineComponent::Harness),
+        ("reviewer-terminal", EngineComponent::Terminal),
+        ("reviewer", EngineComponent::Harness),
+    ] {
+        let capture =
+            SupervisorFixture::wait_for_capture(&fixture.component_instance_capture(instance_name))
+                .await;
+        assert!(capture.contains("engine=supervisor-test"));
+        assert!(capture.contains(&format!("component={}", component.as_str())));
+        assert!(capture.contains(&format!("component_instance={instance_name}")));
+        assert!(capture.contains("peer_count=7"));
+    }
+
+    let stopped = supervisor
+        .ask(StopPrototypeSupervision)
+        .await
+        .expect("three-harness-chain supervision stops");
+    assert_eq!(stopped.components().len(), 8);
+
+    supervisor
+        .stop_gracefully()
+        .await
+        .expect("supervisor stops");
+    let _shutdown_completion = supervisor.wait_for_shutdown().await;
+    store.stop_gracefully().await.expect("manager store stops");
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

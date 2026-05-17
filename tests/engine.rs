@@ -4,7 +4,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use kameo::actor::Spawn;
 use kameo::error::SendError;
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
-use persona::engine::{EngineComponent, EngineTopology, PersonaDaemonPaths, SocketMode};
+use persona::engine::{
+    ComponentInstanceName, EngineComponent, EngineTopology, PersonaDaemonPaths, SocketMode,
+};
 use persona::launch::{
     CommandArgument, CommandResolutionFailure, ComponentCommand, ComponentCommandCatalog,
     ComponentCommandEntry, ComponentCommandEntryInput, ComponentCommandInput,
@@ -97,6 +99,21 @@ impl TemporaryEngineRoot {
                 .map(Self::command_entry)
                 .collect(),
             EngineComponent::message_router_components(),
+        )
+    }
+
+    fn three_harness_chain_command_catalog() -> ComponentCommandCatalog {
+        ComponentCommandCatalog::from_entries_for_components(
+            EngineTopology::ThreeHarnessChain
+                .components()
+                .iter()
+                .copied()
+                .map(Self::command_entry)
+                .collect(),
+            EngineTopology::ThreeHarnessChain
+                .components()
+                .iter()
+                .copied(),
         )
     }
 
@@ -197,6 +214,63 @@ fn constraint_engine_layout_can_select_message_router_topology() {
 }
 
 #[test]
+fn constraint_three_harness_chain_topology_allocates_distinct_instances() {
+    let root = TemporaryEngineRoot::new("three-harness-chain-layout");
+    let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
+    let layout = paths.engine_layout_with_topology(
+        EngineId::new("engine-three-harness-chain"),
+        EngineTopology::ThreeHarnessChain,
+    );
+
+    let harness_count = layout
+        .components()
+        .iter()
+        .filter(|layout| layout.component() == EngineComponent::Harness)
+        .count();
+    let terminal_count = layout
+        .components()
+        .iter()
+        .filter(|layout| layout.component() == EngineComponent::Terminal)
+        .count();
+    let mut socket_paths = layout
+        .components()
+        .iter()
+        .map(|layout| layout.domain_socket().path().to_path_buf())
+        .collect::<Vec<_>>();
+    socket_paths.sort();
+    socket_paths.dedup();
+
+    assert_eq!(layout.components().len(), 8);
+    assert_eq!(harness_count, 3);
+    assert_eq!(terminal_count, 3);
+    assert!(
+        layout
+            .component_instance(&ComponentInstanceName::new("initiator"))
+            .is_some()
+    );
+    assert!(
+        layout
+            .component_instance(&ComponentInstanceName::new("responder"))
+            .is_some()
+    );
+    assert!(
+        layout
+            .component_instance(&ComponentInstanceName::new("reviewer"))
+            .is_some()
+    );
+    assert!(
+        layout
+            .component_instance(&ComponentInstanceName::new("initiator-terminal"))
+            .is_some()
+    );
+    assert_eq!(
+        socket_paths.len(),
+        layout.components().len(),
+        "each component instance must own a distinct domain socket"
+    );
+}
+
+#[test]
 fn constraint_prototype_supervision_includes_introspect_but_delivery_does_not() {
     assert_eq!(EngineComponent::operational_delivery_components().len(), 6);
     assert_eq!(EngineComponent::prototype_supervised_components().len(), 7);
@@ -266,6 +340,7 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     assert_eq!(envelope.engine().as_str(), "engine-gamma");
     assert_eq!(envelope.owner_identity(), &owner_identity);
     assert_eq!(envelope.component(), EngineComponent::Router);
+    assert_eq!(envelope.component_instance().as_str(), "router");
     assert!(envelope.state_dir().ends_with("engine-gamma"));
     assert!(envelope.state_path().ends_with("router.redb"));
     assert!(envelope.domain_socket_path().ends_with("router.sock"));
@@ -369,6 +444,43 @@ async fn constraint_message_router_topology_spawn_envelope_has_one_peer_socket()
         envelope.peers()[0]
             .domain_socket_path()
             .ends_with("router.sock")
+    );
+}
+
+#[tokio::test]
+async fn constraint_three_harness_chain_spawn_envelope_pairs_harness_with_named_terminal() {
+    let root = TemporaryEngineRoot::new("three-harness-chain-envelope");
+    let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
+    let layout = paths.engine_layout_with_topology(
+        EngineId::new("engine-three-harness-chain"),
+        EngineTopology::ThreeHarnessChain,
+    );
+    let resolved_commands = TemporaryEngineRoot::resolver_result(
+        TemporaryEngineRoot::three_harness_chain_command_catalog(),
+        EngineLaunchConfiguration::empty(),
+    )
+    .await
+    .expect("three-harness-chain commands resolve");
+
+    let responder = layout
+        .spawn_envelope_for_instance(&ComponentInstanceName::new("responder"), &resolved_commands)
+        .expect("responder harness spawn envelope exists");
+
+    assert_eq!(responder.component(), EngineComponent::Harness);
+    assert_eq!(responder.component_instance().as_str(), "responder");
+    assert!(responder.domain_socket_path().ends_with("responder.sock"));
+    assert!(
+        responder
+            .supervision_socket_path()
+            .ends_with("responder.supervision.sock")
+    );
+    assert!(
+        responder
+            .peers()
+            .iter()
+            .any(|peer| peer.instance_name().as_str() == "responder-terminal"
+                && peer.component() == EngineComponent::Terminal),
+        "responder harness must see its paired terminal instance"
     );
 }
 

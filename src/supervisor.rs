@@ -89,15 +89,11 @@ impl EngineSupervisor {
         };
 
         let mut launched = Vec::new();
-        for component in self
-            .layout
-            .components()
-            .iter()
-            .map(|layout| layout.component())
-        {
+        for layout in self.layout.components().iter() {
+            let component = layout.component();
             let envelope = self
                 .layout
-                .spawn_envelope(component, &resolved)
+                .spawn_envelope_for_instance(layout.instance_name(), &resolved)
                 .ok_or(EngineSupervisorFailure::MissingSpawnEnvelope { component })?;
             let readiness_expectation = ComponentSocketExpectation::from_envelope(&envelope);
             let supervision_socket_expectation =
@@ -128,7 +124,8 @@ impl EngineSupervisor {
                 ComponentLifecycleEvent::new(receipt.component().component_name()),
             ))
             .await?;
-            launched.push(LaunchedComponent::new(
+            launched.push(LaunchedComponent::new_instance(
+                receipt.component_instance().clone(),
                 receipt.component(),
                 receipt.process(),
             ));
@@ -153,7 +150,9 @@ impl EngineSupervisor {
         for launched in snapshot.running().iter().rev() {
             let receipt = match self
                 .launcher
-                .ask(StopComponentProcess::new(launched.component()))
+                .ask(StopComponentProcess::for_instance(
+                    launched.component_instance().clone(),
+                ))
                 .await
             {
                 Ok(receipt) => receipt,
@@ -171,7 +170,8 @@ impl EngineSupervisor {
                 ComponentLifecycleEvent::new(receipt.component().component_name()),
             ))
             .await?;
-            stopped.push(LaunchedComponent::new(
+            stopped.push(LaunchedComponent::new_instance(
+                receipt.component_instance().clone(),
                 receipt.component(),
                 receipt.process(),
             ));

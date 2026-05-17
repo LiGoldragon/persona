@@ -66,11 +66,13 @@ impl FixtureProcess {
     }
 
     fn write_capture(&self, state_dir: &Path) {
-        let capture = state_dir.join(format!("{}.env", self.component.as_str()));
+        let component_instance = Self::required_env("PERSONA_COMPONENT_INSTANCE");
+        let capture = state_dir.join(format!("{component_instance}.env"));
         let text = format!(
-            "engine={}\ncomponent={}\nprocess={}\ndomain_socket={}\nsupervision_socket={}\nspawn_envelope={}\nmanager_socket={}\ndomain_mode={}\nsupervision_mode={}\npeer_count={}\n",
+            "engine={}\ncomponent={}\ncomponent_instance={}\nprocess={}\ndomain_socket={}\nsupervision_socket={}\nspawn_envelope={}\nmanager_socket={}\ndomain_mode={}\nsupervision_mode={}\npeer_count={}\n",
             Self::required_env("PERSONA_ENGINE_ID"),
             self.component.as_str(),
+            component_instance,
             std::process::id(),
             self.domain_socket.path().display(),
             self.supervision_socket.path().display(),
