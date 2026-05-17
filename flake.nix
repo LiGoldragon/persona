@@ -26,6 +26,14 @@
     signal-persona-system.inputs.nixpkgs.follows = "nixpkgs";
     signal-persona-system.inputs.fenix.follows = "fenix";
     signal-persona-system.inputs.crane.follows = "crane";
+    signal-persona-terminal.url = "github:LiGoldragon/signal-persona-terminal";
+    signal-persona-terminal.inputs.nixpkgs.follows = "nixpkgs";
+    signal-persona-terminal.inputs.fenix.follows = "fenix";
+    signal-persona-terminal.inputs.crane.follows = "crane";
+    owner-signal-persona-terminal.url = "github:LiGoldragon/owner-signal-persona-terminal";
+    owner-signal-persona-terminal.inputs.nixpkgs.follows = "nixpkgs";
+    owner-signal-persona-terminal.inputs.fenix.follows = "fenix";
+    owner-signal-persona-terminal.inputs.crane.follows = "crane";
     persona-system.url = "github:LiGoldragon/persona-system";
     persona-system.inputs.nixpkgs.follows = "nixpkgs";
     persona-system.inputs.fenix.follows = "fenix";
@@ -510,6 +518,9 @@
           signal-persona = inputs.signal-persona.packages.${system}.default;
           signal-persona-mind = inputs.signal-persona-mind.packages.${system}.default;
           signal-persona-system = inputs.signal-persona-system.packages.${system}.default;
+          signal-persona-terminal = inputs.signal-persona-terminal.packages.${system}.default;
+          owner-signal-persona-terminal =
+            inputs.owner-signal-persona-terminal.packages.${system}.default;
           persona-system = inputs.persona-system.packages.${system}.default;
           persona-terminal = inputs.persona-terminal.packages.${system}.default;
           terminal-cell = context.terminalCellBinaries;
@@ -569,6 +580,9 @@
           signal-persona-system-doc = inputs.signal-persona-system.checks.${system}.doc;
           signal-persona-system-fmt = inputs.signal-persona-system.checks.${system}.fmt;
           signal-persona-system-clippy = inputs.signal-persona-system.checks.${system}.clippy;
+          signal-persona-terminal = inputs.signal-persona-terminal.checks.${system}.test;
+          owner-signal-persona-terminal =
+            inputs.owner-signal-persona-terminal.checks.${system}.test;
           persona-system = inputs.persona-system.checks.${system}.default;
           persona-terminal = inputs.persona-terminal.checks.${system}.default;
 

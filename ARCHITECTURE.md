@@ -201,7 +201,7 @@ orchestrate component a tested engine slot to target.
 | `persona-message` | Message ingress component: `message` NOTA CLI plus supervised `persona-message-daemon`; the daemon forwards typed message frames to the internal router socket. |
 | `persona-system` | System/window focus observation adapters. |
 | `persona-harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
-| `persona-terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. It exposes one component communication socket plus one supervision socket. |
+| `persona-terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. It exposes an ordinary terminal communication surface, an owner-only terminal lifecycle surface, plus one supervision socket. |
 | `terminal-cell` | Low-level PTY/transcript library consumed by `persona-terminal`; standalone daemon form is a development/test harness. |
 | `sema` | Typed database kernel library over redb/rkyv. |
 | `signal-core` | Signal wire kernel: frames, channel macro, shared wire primitives. |
@@ -209,6 +209,8 @@ orchestrate component a tested engine slot to target.
 | `signal-persona-message` | Message ingress contract. |
 | `signal-persona-system` | System observation contract. |
 | `signal-persona-harness` | Router/harness delivery and observation contract. |
+| `signal-persona-terminal` | Ordinary terminal transport, prompt-gate, injection, session-registry-read, and worker-lifecycle contract. |
+| `owner-signal-persona-terminal` | Owner-only terminal session lifecycle mutation contract (`CreateSession`, `RetireSession`) used by the orchestrate/harness/terminal authority chain. |
 | `nexus` | Semantic text vocabulary written in NOTA syntax. |
 | `nota` / `nota-codec` / `nota-derive` | NOTA language, parser/codec, and derive support. |
 
@@ -219,6 +221,8 @@ graph LR
     signal_core --> message_contract[signal persona message]
     signal_core --> system_contract[signal persona system]
     signal_core --> harness_contract[signal persona harness]
+    signal_core --> terminal_contract[signal persona terminal]
+    signal_core --> owner_terminal_contract[owner signal persona terminal]
     mind_contract --> mind[persona mind]
     orchestrate_contract --> orchestrate[persona orchestrate]
     mind --> orchestrate
@@ -228,6 +232,8 @@ graph LR
     system_contract --> router
     harness_contract --> router
     harness_contract --> harness[persona harness]
+    terminal_contract --> terminal[persona terminal]
+    owner_terminal_contract --> terminal
 ```
 
 ## 1.5 · Engine Manager Model
@@ -912,10 +918,12 @@ stream-shaped.
 
 ### 5.3 · persona-terminal owns communication; terminal-cell owns the cell primitive
 
-`persona-terminal` is the Persona component. It exposes the component
+`persona-terminal` is the Persona component. It exposes the ordinary component
 communication socket that speaks `signal-persona-terminal` frames
-(length-prefixed rkyv) and the component supervision socket. The production
-daemon embeds `terminal-cell` as its low-level PTY/transcript library.
+(length-prefixed rkyv), an owner-only terminal surface that speaks
+`owner-signal-persona-terminal` frames for session lifecycle mutation, and the
+component supervision socket. The production daemon embeds `terminal-cell` as
+its low-level PTY/transcript library.
 
 `terminal-cell` still has a local control/data split inside the terminal
 primitive. The local control endpoint carries gate ops, prompt registration,
