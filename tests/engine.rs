@@ -50,6 +50,7 @@ impl TemporaryEngineRoot {
     fn closure_command(component: EngineComponent) -> ComponentCommand {
         let command_name = match component {
             EngineComponent::Mind => "persona-mind-daemon",
+            EngineComponent::Orchestrate => "persona-orchestrate-daemon",
             EngineComponent::Router => "persona-router-daemon",
             EngineComponent::System => "persona-system-daemon",
             EngineComponent::Harness => "persona-harness-daemon",
@@ -111,6 +112,21 @@ impl TemporaryEngineRoot {
                 .map(Self::command_entry)
                 .collect(),
             EngineTopology::ThreeHarnessChain
+                .components()
+                .iter()
+                .copied(),
+        )
+    }
+
+    fn mind_orchestrate_command_catalog() -> ComponentCommandCatalog {
+        ComponentCommandCatalog::from_entries_for_components(
+            EngineTopology::MindOrchestrate
+                .components()
+                .iter()
+                .copied()
+                .map(Self::command_entry)
+                .collect(),
+            EngineTopology::MindOrchestrate
                 .components()
                 .iter()
                 .copied(),
@@ -211,6 +227,21 @@ fn constraint_engine_layout_can_select_message_router_topology() {
     assert!(layout.component(EngineComponent::Message).is_some());
     assert!(layout.component(EngineComponent::Router).is_some());
     assert!(layout.component(EngineComponent::Mind).is_none());
+}
+
+#[test]
+fn constraint_engine_layout_can_select_mind_orchestrate_topology() {
+    let root = TemporaryEngineRoot::new("mind-orchestrate-layout");
+    let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
+    let layout = paths.engine_layout_with_topology(
+        EngineId::new("engine-mind-orchestrate"),
+        EngineTopology::MindOrchestrate,
+    );
+
+    assert_eq!(layout.components().len(), 2);
+    assert!(layout.component(EngineComponent::Mind).is_some());
+    assert!(layout.component(EngineComponent::Orchestrate).is_some());
+    assert!(layout.component(EngineComponent::Router).is_none());
 }
 
 #[test]
@@ -325,6 +356,30 @@ fn constraint_engine_layout_assigns_socket_modes_by_component_boundary() {
     assert_eq!(message.supervision_socket().mode().as_octal(), 0o600);
 }
 
+#[test]
+fn constraint_orchestrate_component_uses_internal_socket_modes() {
+    let root = TemporaryEngineRoot::new("orchestrate-socket-mode");
+    let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
+    let layout = paths.engine_layout_with_topology(
+        EngineId::new("engine-mind-orchestrate"),
+        EngineTopology::MindOrchestrate,
+    );
+    let orchestrate = layout
+        .component(EngineComponent::Orchestrate)
+        .expect("orchestrate layout exists");
+
+    assert_eq!(
+        orchestrate.domain_socket().mode(),
+        SocketMode::internal_component()
+    );
+    assert_eq!(orchestrate.domain_socket().mode().as_octal(), 0o600);
+    assert_eq!(
+        orchestrate.supervision_socket().mode(),
+        SocketMode::internal_component()
+    );
+    assert_eq!(orchestrate.supervision_socket().mode().as_octal(), 0o600);
+}
+
 #[tokio::test]
 async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     let root = TemporaryEngineRoot::new("spawn-envelope");
@@ -418,6 +473,48 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     let recovered =
         signal_persona::SpawnEnvelope::decode(&mut decoder).expect("decode signal spawn envelope");
     assert_eq!(recovered, signal_envelope);
+}
+
+#[tokio::test]
+async fn constraint_mind_orchestrate_topology_spawn_envelope_has_one_peer_socket() {
+    let root = TemporaryEngineRoot::new("mind-orchestrate-envelope");
+    let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
+    let layout = paths.engine_layout_with_topology(
+        EngineId::new("engine-mind-orchestrate"),
+        EngineTopology::MindOrchestrate,
+    );
+    let resolved_commands = TemporaryEngineRoot::resolver_result(
+        TemporaryEngineRoot::mind_orchestrate_command_catalog(),
+        EngineLaunchConfiguration::empty(),
+    )
+    .await
+    .expect("mind-orchestrate commands resolve");
+    let envelope = layout
+        .spawn_envelope(EngineComponent::Orchestrate, &resolved_commands)
+        .expect("orchestrate spawn envelope exists");
+
+    assert_eq!(envelope.component(), EngineComponent::Orchestrate);
+    assert_eq!(envelope.component_instance().as_str(), "orchestrate");
+    assert!(envelope.state_path().ends_with("orchestrate.redb"));
+    assert!(envelope.domain_socket_path().ends_with("orchestrate.sock"));
+    assert!(
+        envelope
+            .supervision_socket_path()
+            .ends_with("orchestrate.supervision.sock")
+    );
+    assert_eq!(envelope.peers().len(), 1);
+    assert_eq!(envelope.peers()[0].component(), EngineComponent::Mind);
+    assert!(envelope.peers()[0].domain_socket_path().ends_with("mind.sock"));
+
+    let signal_envelope = envelope.signal_spawn_envelope();
+    assert_eq!(
+        signal_envelope.component_kind,
+        signal_persona::ComponentKind::Orchestrate
+    );
+    assert_eq!(
+        signal_envelope.component_name,
+        signal_persona_auth::ComponentName::Orchestrate
+    );
 }
 
 #[tokio::test]

@@ -113,6 +113,7 @@ impl FixtureComponent {
     fn from_name(name: String) -> Self {
         let kind = match name.as_str() {
             "mind" => ComponentKind::Mind,
+            "orchestrate" => ComponentKind::Orchestrate,
             "router" => ComponentKind::Router,
             "system" => ComponentKind::System,
             "harness" => ComponentKind::Harness,

@@ -64,6 +64,7 @@ graph TB
     manager --> engine_a[engine A federation]
     manager --> engine_b[engine B federation]
     engine_a --> mind_daemon[persona mind daemon]
+    engine_a --> orchestrate[persona orchestrate]
     engine_a --> router[persona router]
     engine_a --> system[persona system]
     engine_a --> harness[persona harness]
@@ -171,6 +172,22 @@ consumer.
 - Likely future consumers: window-focus-aware notifications,
   multi-engine UI coordination, multi-monitor layout observations.
 
+## 0.8 · Persona-orchestrate slot
+
+`persona-orchestrate` is the planned orchestration-machinery component:
+agent spawning, supervision, scheduling, escalation, and executor
+lifecycle. `persona-mind` remains the authority root and state owner for
+role/work records; orchestrate is the machinery that carries out mind's
+down-tree `Mutate` orders.
+
+The engine manager now reserves the component principal, component kind,
+socket names, state path, spawn envelope mapping, and a small
+`mind-orchestrate` topology. The default prototype topology does not launch
+orchestrate until the `signal-persona-orchestrate` contract and
+`persona-orchestrate` runtime repo land. That keeps today's sandbox honest
+while giving SOA's `tools/orchestrate` Rust port and the upcoming
+orchestrate component a tested engine slot to target.
+
 ## 1 · Component Map
 
 | Repository | Role |
@@ -178,6 +195,8 @@ consumer.
 | `persona` | Engine manager, `persona-daemon` home, apex Nix/deployment/test composition, and meta architecture. |
 | `persona-mind` | Central state component and command-line mind runtime. |
 | `signal-persona-mind` | Typed contract for role coordination, activity, and work graph operations. |
+| `persona-orchestrate` | Planned orchestration machinery component: spawn/supervise/schedule/escalate agents under mind authority. |
+| `signal-persona-orchestrate` | Planned contract for orchestrate machinery orders, confirmations, and lifecycle streams. |
 | `persona-router` | Message routing, delivery state, gate state, and pending-delivery decisions. |
 | `persona-message` | Message ingress component: `message` NOTA CLI plus supervised `persona-message-daemon`; the daemon forwards typed message frames to the internal router socket. |
 | `persona-system` | System/window focus observation adapters. |
@@ -196,10 +215,13 @@ consumer.
 ```mermaid
 graph LR
     signal_core[signal core] --> mind_contract[signal persona mind]
+    signal_core --> orchestrate_contract[signal persona orchestrate]
     signal_core --> message_contract[signal persona message]
     signal_core --> system_contract[signal persona system]
     signal_core --> harness_contract[signal persona harness]
     mind_contract --> mind[persona mind]
+    orchestrate_contract --> orchestrate[persona orchestrate]
+    mind --> orchestrate
     message_contract --> message[persona message]
     message_contract --> router[persona router]
     system_contract --> system[persona system]
@@ -227,9 +249,9 @@ Per-engine resources are always scoped by engine id:
 | Resource | Shape |
 |---|---|
 | State directory | `/var/lib/persona/<engine-id>/` |
-| Component redb files | `/var/lib/persona/<engine-id>/{mind,router,harness,terminal}.redb` |
+| Component redb files | `/var/lib/persona/<engine-id>/{mind,orchestrate,router,harness,terminal,...}.redb` for active topology components |
 | Socket directory | `/var/run/persona/<engine-id>/` |
-| Component sockets | `/var/run/persona/<engine-id>/{mind,router,system,harness,terminal,message}.sock` |
+| Component sockets | `/var/run/persona/<engine-id>/{mind,orchestrate,router,system,harness,terminal,message,...}.sock` for active topology components |
 | Manager redb | `/var/lib/persona/manager.redb` |
 | Manager socket | `/var/run/persona/persona.sock` |
 

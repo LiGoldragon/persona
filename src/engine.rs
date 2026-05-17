@@ -258,6 +258,7 @@ impl PreparedEngineLayout {
 pub enum EngineTopology {
     FullPrototype,
     MessageRouter,
+    MindOrchestrate,
     ThreeHarnessChain,
 }
 
@@ -266,6 +267,7 @@ impl EngineTopology {
         match self {
             Self::FullPrototype => &PROTOTYPE_SUPERVISED_COMPONENTS,
             Self::MessageRouter => &MESSAGE_ROUTER_COMPONENTS,
+            Self::MindOrchestrate => &MIND_ORCHESTRATE_COMPONENTS,
             Self::ThreeHarnessChain => &THREE_HARNESS_CHAIN_COMPONENTS,
         }
     }
@@ -274,6 +276,7 @@ impl EngineTopology {
         match self {
             Self::FullPrototype => &PROTOTYPE_SUPERVISED_COMPONENT_ENTRIES,
             Self::MessageRouter => &MESSAGE_ROUTER_COMPONENT_ENTRIES,
+            Self::MindOrchestrate => &MIND_ORCHESTRATE_COMPONENT_ENTRIES,
             Self::ThreeHarnessChain => &THREE_HARNESS_CHAIN_COMPONENT_ENTRIES,
         }
     }
@@ -282,6 +285,7 @@ impl EngineTopology {
         match self {
             Self::FullPrototype => "full-prototype",
             Self::MessageRouter => "message-router",
+            Self::MindOrchestrate => "mind-orchestrate",
             Self::ThreeHarnessChain => "three-harness-chain",
         }
     }
@@ -290,6 +294,7 @@ impl EngineTopology {
         match value {
             "full-prototype" => Some(Self::FullPrototype),
             "message-router" => Some(Self::MessageRouter),
+            "mind-orchestrate" => Some(Self::MindOrchestrate),
             "three-harness-chain" => Some(Self::ThreeHarnessChain),
             _ => None,
         }
@@ -326,6 +331,7 @@ impl ComponentTopologyEntry {
 #[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EngineComponent {
     Mind,
+    Orchestrate,
     Router,
     System,
     Harness,
@@ -356,6 +362,9 @@ const PROTOTYPE_SUPERVISED_COMPONENTS: [EngineComponent; 7] = [
 const MESSAGE_ROUTER_COMPONENTS: [EngineComponent; 2] =
     [EngineComponent::Message, EngineComponent::Router];
 
+const MIND_ORCHESTRATE_COMPONENTS: [EngineComponent; 2] =
+    [EngineComponent::Mind, EngineComponent::Orchestrate];
+
 const THREE_HARNESS_CHAIN_COMPONENTS: [EngineComponent; 4] = [
     EngineComponent::Message,
     EngineComponent::Router,
@@ -376,6 +385,11 @@ const PROTOTYPE_SUPERVISED_COMPONENT_ENTRIES: [ComponentTopologyEntry; 7] = [
 const MESSAGE_ROUTER_COMPONENT_ENTRIES: [ComponentTopologyEntry; 2] = [
     ComponentTopologyEntry::for_component(EngineComponent::Message),
     ComponentTopologyEntry::for_component(EngineComponent::Router),
+];
+
+const MIND_ORCHESTRATE_COMPONENT_ENTRIES: [ComponentTopologyEntry; 2] = [
+    ComponentTopologyEntry::for_component(EngineComponent::Mind),
+    ComponentTopologyEntry::for_component(EngineComponent::Orchestrate),
 ];
 
 const THREE_HARNESS_CHAIN_COMPONENT_ENTRIES: [ComponentTopologyEntry; 8] = [
@@ -405,6 +419,7 @@ impl EngineComponent {
     pub const fn component_kind(self) -> signal_persona::ComponentKind {
         match self {
             Self::Mind => signal_persona::ComponentKind::Mind,
+            Self::Orchestrate => signal_persona::ComponentKind::Orchestrate,
             Self::Router => signal_persona::ComponentKind::Router,
             Self::System => signal_persona::ComponentKind::System,
             Self::Harness => signal_persona::ComponentKind::Harness,
@@ -421,6 +436,7 @@ impl EngineComponent {
     pub fn from_component_name(component: &signal_persona::ComponentName) -> Option<Self> {
         match component.as_str() {
             "persona-mind" => Some(Self::Mind),
+            "persona-orchestrate" => Some(Self::Orchestrate),
             "persona-router" => Some(Self::Router),
             "persona-system" => Some(Self::System),
             "persona-harness" => Some(Self::Harness),
@@ -434,6 +450,7 @@ impl EngineComponent {
     pub const fn signal_name(self) -> SignalComponentName {
         match self {
             Self::Mind => SignalComponentName::Mind,
+            Self::Orchestrate => SignalComponentName::Orchestrate,
             Self::Router => SignalComponentName::Router,
             Self::System => SignalComponentName::System,
             Self::Harness => SignalComponentName::Harness,
@@ -446,6 +463,7 @@ impl EngineComponent {
     pub const fn socket_file(self) -> &'static str {
         match self {
             Self::Mind => "mind.sock",
+            Self::Orchestrate => "orchestrate.sock",
             Self::Router => "router.sock",
             Self::System => "system.sock",
             Self::Harness => "harness.sock",
@@ -458,6 +476,7 @@ impl EngineComponent {
     pub const fn supervision_socket_file(self) -> &'static str {
         match self {
             Self::Mind => "mind.supervision.sock",
+            Self::Orchestrate => "orchestrate.supervision.sock",
             Self::Router => "router.supervision.sock",
             Self::System => "system.supervision.sock",
             Self::Harness => "harness.supervision.sock",
@@ -470,6 +489,7 @@ impl EngineComponent {
     pub const fn envelope_file(self) -> &'static str {
         match self {
             Self::Mind => "mind.envelope",
+            Self::Orchestrate => "orchestrate.envelope",
             Self::Router => "router.envelope",
             Self::System => "system.envelope",
             Self::Harness => "harness.envelope",
@@ -482,6 +502,7 @@ impl EngineComponent {
     pub const fn state_file(self) -> &'static str {
         match self {
             Self::Mind => "mind.redb",
+            Self::Orchestrate => "orchestrate.redb",
             Self::Router => "router.redb",
             Self::System => "system.redb",
             Self::Harness => "harness.redb",
@@ -494,6 +515,7 @@ impl EngineComponent {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Mind => "mind",
+            Self::Orchestrate => "orchestrate",
             Self::Router => "router",
             Self::System => "system",
             Self::Harness => "harness",
@@ -506,6 +528,7 @@ impl EngineComponent {
     pub const fn as_component_name(self) -> &'static str {
         match self {
             Self::Mind => "persona-mind",
+            Self::Orchestrate => "persona-orchestrate",
             Self::Router => "persona-router",
             Self::System => "persona-system",
             Self::Harness => "persona-harness",
@@ -518,6 +541,7 @@ impl EngineComponent {
     pub const fn executable_environment_variable(self) -> &'static str {
         match self {
             Self::Mind => "PERSONA_MIND_EXECUTABLE",
+            Self::Orchestrate => "PERSONA_ORCHESTRATE_EXECUTABLE",
             Self::Router => "PERSONA_ROUTER_EXECUTABLE",
             Self::System => "PERSONA_SYSTEM_EXECUTABLE",
             Self::Harness => "PERSONA_HARNESS_EXECUTABLE",
@@ -531,6 +555,7 @@ impl EngineComponent {
         match self {
             Self::Message => SocketMode::message_ingress(),
             Self::Mind
+            | Self::Orchestrate
             | Self::Router
             | Self::System
             | Self::Harness

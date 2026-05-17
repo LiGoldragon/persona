@@ -765,11 +765,11 @@
         "nixpkgs": "nixpkgs_6"
       },
       "locked": {
-        "lastModified": 1778866882,
-        "narHash": "sha256-vz4tuSky0iCJdva8VrBipyMg4Fa3V8dnRu5tHOcysC0=",
+        "lastModified": 1779026975,
+        "narHash": "sha256-MGaFX1dzCeuqVdHk0KKZ+Eh9uR/y9BuWPh2ewjCYqsw=",
         "owner": "LiGoldragon",
         "repo": "signal-persona",
-        "rev": "b1c42ff781f974d4a70e323595e9ba7fc5d2c09a",
+        "rev": "cd57f48e7007dc16cd7e4586aa4461048e88424c",
         "type": "github"
       },
       "original": {
