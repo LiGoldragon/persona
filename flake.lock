@@ -607,11 +607,11 @@
         "nixpkgs": "nixpkgs_5"
       },
       "locked": {
-        "lastModified": 1779024319,
-        "narHash": "sha256-W8oPVd68jIMLMSymr5A2qUE7qhq/JE8Q2rXaPpSKX3g=",
+        "lastModified": 1779032537,
+        "narHash": "sha256-fWimiL6Lb8LCu1e02Hhyrt6zYA5OiU2ggTU6THSc8HE=",
         "owner": "LiGoldragon",
         "repo": "persona-terminal",
-        "rev": "4e2be5258f44198d14a1d50f4972b287ba3a20fd",
+        "rev": "8153a0ca94cdee6f59c9d9716a8770a0889d225d",
         "type": "github"
       },
       "original": {
@@ -904,11 +904,11 @@
     "terminal-cell": {
       "flake": false,
       "locked": {
-        "lastModified": 1778849546,
-        "narHash": "sha256-tkaIkmJlKphPtOIXU3AG0HqkFI8r7UOUZSx51uqyfdI=",
+        "lastModified": 1779032568,
+        "narHash": "sha256-ZfjKIu3SSiZygAI2HZCVXZIUt9sspqGuFYpv4MSVGPU=",
         "owner": "LiGoldragon",
         "repo": "terminal-cell",
-        "rev": "f87d1da3a2a4feb9453a2c1ba3c8463f26713412",
+        "rev": "9a679658fb24a490111f9d9ab57dcd1112c2d15b",
         "type": "github"
       },
       "original": {
