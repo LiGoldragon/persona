@@ -341,9 +341,9 @@ auth files.
 
 `persona-engine-sandbox-terminal-cell-fixture-smoke`,
 `persona-engine-sandbox-terminal-cell-pi-smoke`,
-`persona-engine-sandbox-terminal-cell-pi-tools-smoke` exercise the separate
-and `persona-engine-sandbox-terminal-cell-pi-message-router-smoke` exercise
-the separate terminal-cell lane. They start a real `terminal-cell-daemon` at
+`persona-engine-sandbox-terminal-cell-pi-tools-smoke`, and
+`persona-engine-sandbox-terminal-cell-pi-message-router-smoke` exercise the
+separate terminal-cell lane. They start a real `terminal-cell-daemon` at
 `$sandbox_dir/run/cell.sock`, drive it with Nix-packaged terminal-cell clients,
 write host attach artifacts, and capture the transcript. The fixture variant
 uses a deterministic shell child; the Pi variant starts the real Pi TUI with a
