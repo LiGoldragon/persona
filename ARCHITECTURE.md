@@ -1085,8 +1085,13 @@ Migration rules:
   lives only in the manager catalog.
 - Engine layout planning names every prototype-supervised component socket and state
   file before a component is spawned.
-- Internal component sockets are private to the Persona authority boundary;
-  the `message.sock` is group-writable for owner ingress (bound by `persona-message-daemon`, the supervised prototype message-ingress component). `router.sock` (mode 0600) is bound by `persona-router` for internal traffic. The "proxy" name retires; the daemon itself stays.
+- Manager-created component sockets are authority-boundary inputs. Current
+  local enforcement is path ownership, socket mode, and sandbox discipline;
+  stronger per-component proof belongs in the auth substrate. The
+  `message.sock` is group-writable for owner ingress (bound by
+  `persona-message-daemon`, the supervised prototype message-ingress
+  component). `router.sock` (mode 0600) is bound by `persona-router` for
+  internal traffic. The "proxy" name retires; the daemon itself stays.
 - Spawn envelopes carry the component's own state/socket paths and every peer
   socket path plus the manager's owner identity; components do not derive peers
   by scanning directories and do not infer engine ownership from their own uid.

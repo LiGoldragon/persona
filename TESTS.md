@@ -314,7 +314,7 @@ The stateful assertions additionally prove:
 
 | Witness | What it proves |
 |---|---|
-| `message-daemon.nota` contains one `InternalComponentInstanceOrigin Harness <name>` per harness | The manager gives `persona-message` private component ingress sockets for initiator, responder, and reviewer. |
+| `message-daemon.nota` contains one `InternalComponentInstanceOrigin Harness <name>` per harness | The manager gives `persona-message` component ingress sockets for initiator, responder, and reviewer; current local enforcement is path ownership, socket mode, and sandbox discipline. |
 | each terminal runner sends through its own `message-ingress/<name>.sock` | Harness-side follow-up sends do not re-enter through the owner message socket. |
 | final owner inbox contains sender `reviewer` and body `reviewer completed task` | Router sender identity comes from the reviewer harness component instance, not from owner ingress fallback. |
 | instance-specific `*-daemon.nota` files exist for every harness and terminal | Multi-instance topologies do not overwrite typed daemon configuration files by component kind. |
