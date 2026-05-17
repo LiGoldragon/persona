@@ -3,7 +3,9 @@ set -euo pipefail
 
 : "${PERSONA_DAEMON_BIN:?PERSONA_DAEMON_BIN must point at persona-daemon}"
 : "${PERSONA_MESSAGE_BIN:?PERSONA_MESSAGE_BIN must point at message}"
+: "${PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN:?PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN must point at message-validate-output}"
 : "${PERSONA_TERMINAL_SIGNAL_BIN:?PERSONA_TERMINAL_SIGNAL_BIN must point at persona-terminal-signal}"
+: "${PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN:?PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN must point at persona-terminal-validate-capture}"
 : "${PERSONA_THREE_HARNESS_LAUNCHERS:?PERSONA_THREE_HARNESS_LAUNCHERS must point at the launcher package}"
 
 root="${PERSONA_STACK_ROOT:-$(mktemp -d -t persona-daemon-three-harness-chain.XXXXXX)}"
@@ -77,13 +79,6 @@ wait_for_component_capture() {
   return 1
 }
 
-capture_contains_text() {
-  capture_file="$1"
-  text="$2"
-  hex="$(printf '%s' "$text" | od -An -tx1 -v | tr -d ' \n')"
-  grep -Fq "$hex" "$capture_file"
-}
-
 capture_terminal() {
   agent="$1"
   output="$2"
@@ -92,7 +87,6 @@ capture_terminal() {
     --terminal "$agent" \
     capture \
     > "$output"
-  grep -Fq "TerminalCaptured	$agent	1" "$output"
 }
 
 wait_for_terminal_text() {
@@ -101,7 +95,12 @@ wait_for_terminal_text() {
   output="$root/artifacts/$agent.capture.tsv"
   for _attempt in $(seq 1 100); do
     capture_terminal "$agent" "$output"
-    if capture_contains_text "$output" "$text"; then
+    if "$PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN" \
+      --file "$output" \
+      --terminal "$agent" \
+      --contains-text "$text" \
+      2>/dev/null
+    then
       return 0
     fi
     sleep 0.1
@@ -118,7 +117,13 @@ wait_for_owner_inbox() {
         '(Inbox owner)' \
         > "$root/artifacts/owner-inbox.nota" \
         2> "$root/artifacts/owner-inbox.stderr"
-    if grep -Fq 'reviewer "reviewer completed task"' "$root/artifacts/owner-inbox.nota"; then
+    if "$PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN" \
+      --file "$root/artifacts/owner-inbox.nota" \
+      expect-inbox-entry \
+      --sender reviewer \
+      --body "reviewer completed task" \
+      2>/dev/null
+    then
       return 0
     fi
     sleep 0.1
@@ -160,7 +165,9 @@ PERSONA_MESSAGE_SOCKET="$root/run/default/message.sock" \
     '(Send initiator start-three-harness-task)' \
     > "$root/artifacts/owner-send.nota" \
     2> "$root/artifacts/owner-send.stderr"
-grep -Fq "(SubmissionAccepted " "$root/artifacts/owner-send.nota"
+"$PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN" \
+  --file "$root/artifacts/owner-send.nota" \
+  expect-submission-accepted
 
 wait_for_owner_inbox
 wait_for_terminal_text initiator "initiator-received:start-three-harness-task"

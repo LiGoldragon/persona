@@ -312,7 +312,9 @@
             text = ''
               export PERSONA_DAEMON_BIN=${self.packages.${system}.default}/bin/persona-daemon
               export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.default}/bin/message
+              export PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN=${inputs.persona-message.packages.${system}.default}/bin/message-validate-output
               export PERSONA_TERMINAL_SIGNAL_BIN=${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-signal
+              export PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN=${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-validate-capture
               export PERSONA_THREE_HARNESS_LAUNCHERS=${threeHarnessComponentLaunchers}
               exec ${pkgs.bash}/bin/bash ${./scripts/persona-daemon-three-harness-chain-smoke} "$@"
             '';
@@ -359,7 +361,9 @@
               export PERSONA_ENGINE_SANDBOX_ATTACH=${personaEngineSandboxAttach}/bin/persona-engine-sandbox-attach
               export PERSONA_DAEMON_BIN=${self.packages.${system}.default}/bin/persona-daemon
               export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.default}/bin/message
+              export PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN=${inputs.persona-message.packages.${system}.default}/bin/message-validate-output
               export PERSONA_TERMINAL_SIGNAL_BIN=${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-signal
+              export PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN=${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-validate-capture
               export PERSONA_ROUTER_EXECUTABLE=${prototypeComponentLaunchers}/bin/persona-router-prototype-launcher
               export PERSONA_MESSAGE_DAEMON_EXECUTABLE=${prototypeComponentLaunchers}/bin/persona-message-prototype-launcher
               export PERSONA_THREE_HARNESS_LAUNCHERS=${threeHarnessComponentLaunchers}

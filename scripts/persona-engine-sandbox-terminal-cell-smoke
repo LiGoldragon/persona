@@ -8,6 +8,8 @@ set -euo pipefail
 : "${TERMINAL_CELL_CAPTURE:?TERMINAL_CELL_CAPTURE must point at terminal-cell-capture}"
 : "${TERMINAL_CELL_VIEW:?TERMINAL_CELL_VIEW must point at terminal-cell-view}"
 : "${PERSONA_ENGINE_SANDBOX_ATTACH:?PERSONA_ENGINE_SANDBOX_ATTACH must point at persona-engine-sandbox-attach}"
+: "${PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN:?PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN must point at message-validate-output}"
+: "${PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN:?PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN must point at persona-terminal-validate-capture}"
 
 sandbox_dir=""
 harness="pi"
@@ -380,14 +382,6 @@ capture_managed_terminal() {
     --terminal "$agent" \
     capture \
     >"$output"
-  grep -Fq "TerminalCaptured	$agent	1" "$output"
-}
-
-managed_terminal_capture_contains_text() {
-  capture_file="$1"
-  text="$2"
-  hex="$(printf '%s' "$text" | od -An -tx1 -v | tr -d ' \n')"
-  grep -Fq "$hex" "$capture_file"
 }
 
 wait_for_managed_terminal_text() {
@@ -396,7 +390,12 @@ wait_for_managed_terminal_text() {
   output="$artifact_dir/pi-managed-harness-$agent.capture.tsv"
   for _attempt in $(seq 1 100); do
     capture_managed_terminal "$agent"
-    if managed_terminal_capture_contains_text "$output" "$text"; then
+    if "$PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN" \
+      --file "$output" \
+      --terminal "$agent" \
+      --contains-text "$text" \
+      2>/dev/null
+    then
       return 0
     fi
     sleep 0.1
@@ -412,7 +411,13 @@ wait_for_managed_owner_inbox() {
       "$PERSONA_MESSAGE_BIN" \
         '(Inbox owner)' \
         >"$managed_harness_owner_inbox_file"
-    if grep -Fq 'reviewer "reviewer completed task"' "$managed_harness_owner_inbox_file"; then
+    if "$PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN" \
+      --file "$managed_harness_owner_inbox_file" \
+      expect-inbox-entry \
+      --sender reviewer \
+      --body "reviewer completed task" \
+      2>/dev/null
+    then
       return 0
     fi
     sleep 0.1
@@ -494,7 +499,10 @@ if [ "$harness" = "pi-message-router" ]; then
   grep -Fq '(Send responder "pi routed proof")' "$message_command_file"
   PERSONA_MESSAGE_SOCKET="$engine_run_root/default/message.sock" \
     "$PERSONA_MESSAGE_BIN" '(Inbox responder)' >"$message_router_inbox_file"
-  grep -Fq "pi routed proof" "$message_router_inbox_file"
+  "$PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN" \
+    --file "$message_router_inbox_file" \
+    expect-inbox-entry \
+    --body "pi routed proof"
 fi
 
 if [ "$harness" = "pi-managed-harness" ]; then
