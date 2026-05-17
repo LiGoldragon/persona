@@ -238,7 +238,7 @@ write_message_spawn_envelope() {
 write_message_daemon_configuration() {
   local owner_user_id
   owner_user_id="$(id -u)"
-  printf '(MessageDaemonConfiguration "%s" 432 "%s" 384 "%s" (UnixUser %s))\n' \
+  printf '(MessageDaemonConfiguration "%s" 432 "%s" 384 "%s" [] (UnixUser %s))\n' \
     "$message_socket" \
     "$root/message.supervision.sock" \
     "$router_socket" \

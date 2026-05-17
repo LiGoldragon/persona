@@ -487,6 +487,7 @@ impl DirectProcessLauncher {
             router_socket_path: signal_persona::WirePath::new(
                 router_socket_path.to_string_lossy().into_owned(),
             ),
+            component_ingresses: Self::component_message_ingresses(envelope),
             owner_identity: envelope.owner_identity().clone(),
         };
         let path = envelope
@@ -515,6 +516,38 @@ impl DirectProcessLauncher {
             },
         )?;
         Ok(path)
+    }
+
+    fn component_message_ingresses(
+        envelope: &ComponentSpawnEnvelope,
+    ) -> Vec<signal_persona_message::ComponentMessageIngress> {
+        envelope
+            .peers()
+            .iter()
+            .filter(|peer| peer.component() == EngineComponent::Harness)
+            .map(|peer| signal_persona_message::ComponentMessageIngress {
+                origin: signal_persona_auth::InternalComponentInstanceOrigin::new(
+                    signal_persona_auth::ComponentName::Harness,
+                    signal_persona_auth::ComponentInstanceName::new(peer.instance_name().as_str()),
+                ),
+                socket_path: signal_persona::WirePath::new(
+                    Self::component_message_ingress_socket_path(envelope, peer.instance_name())
+                        .to_string_lossy()
+                        .into_owned(),
+                ),
+                socket_mode: signal_persona::SocketMode::new(0o600),
+            })
+            .collect()
+    }
+
+    pub fn component_message_ingress_socket_path(
+        envelope: &ComponentSpawnEnvelope,
+        component_instance: &ComponentInstanceName,
+    ) -> PathBuf {
+        envelope
+            .domain_socket_path()
+            .with_file_name("message-ingress")
+            .join(format!("{}.sock", component_instance.as_str()))
     }
 
     fn write_router_daemon_configuration_file(

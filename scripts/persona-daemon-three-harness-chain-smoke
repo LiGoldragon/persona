@@ -118,7 +118,7 @@ wait_for_owner_inbox() {
         '(Inbox owner)' \
         > "$root/artifacts/owner-inbox.nota" \
         2> "$root/artifacts/owner-inbox.stderr"
-    if grep -Fq "reviewer completed task" "$root/artifacts/owner-inbox.nota"; then
+    if grep -Fq 'reviewer "reviewer completed task"' "$root/artifacts/owner-inbox.nota"; then
       return 0
     fi
     sleep 0.1
@@ -139,6 +139,11 @@ grep -Fq "(RegisterActor (Actor reviewer 0 (EndpointTransport HarnessSocket" "$r
 grep -Fq "(GrantDirectMessage initiator responder)" "$root/run/default/router-bootstrap.nota"
 grep -Fq "(GrantDirectMessage responder reviewer)" "$root/run/default/router-bootstrap.nota"
 grep -Fq "(GrantDirectMessage reviewer owner)" "$root/run/default/router-bootstrap.nota"
+
+for agent in initiator responder reviewer; do
+  grep -Fq "(InternalComponentInstanceOrigin Harness $agent)" "$root/run/default/message-daemon.nota"
+  grep -Fq "message-ingress/$agent.sock" "$root/run/default/message-daemon.nota"
+done
 
 for agent in initiator responder reviewer; do
   wait_for_terminal_text "$agent" "$agent-runner-ready"

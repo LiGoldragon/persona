@@ -205,7 +205,7 @@
 
               terminal_name="''${PERSONA_COMPONENT_INSTANCE:?}"
               terminal_name="''${terminal_name%-terminal}"
-              message_socket="''${PERSONA_PEER_0_SOCKET_PATH:?}"
+              message_socket="$(dirname "''${PERSONA_PEER_0_SOCKET_PATH:?}")/message-ingress/$terminal_name.sock"
               cell_control_socket="$PERSONA_DOMAIN_SOCKET_PATH.cell"
               cell_data_socket="$PERSONA_DOMAIN_SOCKET_PATH.data"
               runner="$state_dir/$terminal_name-runner.sh"
@@ -778,7 +778,7 @@
             #    configuration, binds message.sock, and forwards to tap.sock as
             #    if it were the router.
             builder_uid="$(id -u)"
-            printf '(MessageDaemonConfiguration "%s" 432 "%s" 384 "%s" (UnixUser %s))\n' \
+            printf '(MessageDaemonConfiguration "%s" 432 "%s" 384 "%s" [] (UnixUser %s))\n' \
               "$message_socket" "$workdir/message.supervision.sock" "$tap_socket" "$builder_uid" \
               > "$message_configuration"
             ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon \

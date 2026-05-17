@@ -24,6 +24,7 @@ use persona::manager::{EngineManager, HandleEngineRequest};
 use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadEngineEvents};
 use signal_persona::{EngineReply, EngineRequest, EngineStatusQuery};
 use signal_persona_auth::EngineId;
+use signal_persona_message::MessageDaemonConfiguration;
 use signal_persona_router::RouterDaemonConfiguration;
 
 struct DirectProcessFixture {
@@ -369,6 +370,66 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
     DirectProcessFixture::stop(&launcher, EngineComponent::Router)
         .await
         .expect("router component stops");
+    launcher.stop_gracefully().await.expect("launcher stops");
+    let _shutdown_completion = launcher.wait_for_shutdown().await;
+}
+
+#[tokio::test]
+async fn constraint_three_harness_chain_message_launch_writes_component_ingress_sockets() {
+    let fixture = DirectProcessFixture::new("three-harness-message-ingress");
+    let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
+    let paths = PersonaDaemonPaths::new(fixture.state_root(), fixture.run_root());
+    let layout = paths.engine_layout_with_topology(
+        EngineId::new("engine-three-harness-message-ingress"),
+        EngineTopology::ThreeHarnessChain,
+    );
+    layout
+        .prepare_directories()
+        .expect("engine directories prepared");
+    let resolved = fixture
+        .resolved_commands_for_topology(EngineTopology::ThreeHarnessChain)
+        .await;
+    let envelope = layout
+        .spawn_envelope_for_instance(&ComponentInstanceName::new("message"), &resolved)
+        .expect("message spawn envelope exists");
+    let envelope_path = envelope.envelope_path().to_path_buf();
+
+    DirectProcessFixture::launch(&launcher, envelope)
+        .await
+        .expect("message component launches");
+
+    let configuration_path = envelope_path.with_file_name("message-daemon.nota");
+    let configuration_text =
+        std::fs::read_to_string(&configuration_path).expect("message configuration was written");
+    let mut decoder = Decoder::new(&configuration_text);
+    let configuration =
+        MessageDaemonConfiguration::decode(&mut decoder).expect("message configuration decodes");
+
+    let ingresses = configuration.component_ingresses;
+    assert_eq!(ingresses.len(), 3);
+    for name in ["initiator", "responder", "reviewer"] {
+        let ingress = ingresses
+            .iter()
+            .find(|entry| entry.origin.instance().as_str() == name)
+            .unwrap_or_else(|| panic!("missing component ingress for {name}"));
+        assert_eq!(
+            ingress.origin.component(),
+            signal_persona_auth::ComponentName::Harness
+        );
+        assert!(
+            ingress
+                .socket_path
+                .as_str()
+                .ends_with(&format!("message-ingress/{name}.sock")),
+            "unexpected ingress socket path for {name}: {}",
+            ingress.socket_path.as_str()
+        );
+        assert_eq!(ingress.socket_mode.into_u32(), 0o600);
+    }
+
+    DirectProcessFixture::stop(&launcher, EngineComponent::Message)
+        .await
+        .expect("message component stops");
     launcher.stop_gracefully().await.expect("launcher stops");
     let _shutdown_completion = launcher.wait_for_shutdown().await;
 }
