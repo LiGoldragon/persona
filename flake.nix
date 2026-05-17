@@ -70,6 +70,9 @@
           commonArgs = {
             inherit src cargoVendorDir;
             strictDeps = true;
+            PERSONA_ARCHITECTURE_DOCUMENT_PATH = "${./ARCHITECTURE.md}";
+            PERSONA_FLAKE_DOCUMENT_PATH = "${./flake.nix}";
+            PERSONA_TESTS_DOCUMENT_PATH = "${./TESTS.md}";
           };
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
           terminalCellSrc = craneLib.cleanCargoSource inputs.terminal-cell;
@@ -139,9 +142,7 @@
             name = "persona-router-prototype-launcher";
             actual = "${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon";
             command = ''
-              exec ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon daemon \
-                --socket "$PERSONA_DOMAIN_SOCKET_PATH" \
-                --store "$PERSONA_STATE_PATH"
+              exec ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon "$@"
             '';
           };
           prototypeSystemLauncher = mkPrototypeLauncher {
@@ -149,39 +150,35 @@
             actual = "${inputs.persona-system.packages.${system}.default}/bin/persona-system-daemon";
             command = ''
               exec ${inputs.persona-system.packages.${system}.default}/bin/persona-system-daemon \
-                "$PERSONA_DOMAIN_SOCKET_PATH"
+                "$@"
             '';
           };
           prototypeHarnessLauncher = mkPrototypeLauncher {
             name = "persona-harness-prototype-launcher";
             actual = "${inputs.persona-harness.packages.${system}.default}/bin/persona-harness-daemon";
             command = ''
-              exec ${inputs.persona-harness.packages.${system}.default}/bin/persona-harness-daemon \
-                "$PERSONA_DOMAIN_SOCKET_PATH" \
-                "$PERSONA_COMPONENT"
+              exec ${inputs.persona-harness.packages.${system}.default}/bin/persona-harness-daemon "$@"
             '';
           };
           prototypeTerminalLauncher = mkPrototypeLauncher {
             name = "persona-terminal-prototype-launcher";
             actual = "${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-supervisor";
             command = ''
-              exec ${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-supervisor \
-                --socket "$PERSONA_DOMAIN_SOCKET_PATH" \
-                --store "$PERSONA_STATE_PATH"
+              exec ${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-supervisor "$@"
             '';
           };
           prototypeMessageLauncher = mkPrototypeLauncher {
             name = "persona-message-prototype-launcher";
             actual = "${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon";
             command = ''
-              exec ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon
+              exec ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon "$@"
             '';
           };
           prototypeIntrospectLauncher = mkPrototypeLauncher {
             name = "persona-introspect-prototype-launcher";
             actual = "${inputs.persona-introspect.packages.${system}.default}/bin/persona-introspect-daemon";
             command = ''
-              exec ${inputs.persona-introspect.packages.${system}.default}/bin/persona-introspect-daemon
+              exec ${inputs.persona-introspect.packages.${system}.default}/bin/persona-introspect-daemon "$@"
             '';
           };
           prototypeComponentLaunchers = pkgs.symlinkJoin {
