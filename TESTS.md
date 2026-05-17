@@ -198,6 +198,7 @@ nix run .#persona-engine-sandbox-terminal-cell-fixture-smoke
 nix run .#persona-engine-sandbox-terminal-cell-pi-smoke
 nix run .#persona-engine-sandbox-terminal-cell-pi-tools-smoke
 nix run .#persona-engine-sandbox-terminal-cell-pi-message-router-smoke
+nix run .#persona-engine-sandbox-terminal-cell-pi-managed-harness-smoke
 nix run .#persona-engine-sandbox -- --harness codex --bootstrap-auth --dry-run
 nix run .#persona-engine-sandbox-attach -- --sandbox-dir /tmp/persona-engine-sandbox.example --dry-run
 ```
@@ -342,7 +343,8 @@ auth files.
 `persona-engine-sandbox-terminal-cell-fixture-smoke`,
 `persona-engine-sandbox-terminal-cell-pi-smoke`,
 `persona-engine-sandbox-terminal-cell-pi-tools-smoke`, and
-`persona-engine-sandbox-terminal-cell-pi-message-router-smoke` exercise the
+`persona-engine-sandbox-terminal-cell-pi-message-router-smoke`, and
+`persona-engine-sandbox-terminal-cell-pi-managed-harness-smoke` exercise the
 separate terminal-cell lane. They start a real `terminal-cell-daemon` at
 `$sandbox_dir/run/cell.sock`, drive it with Nix-packaged terminal-cell clients,
 write host attach artifacts, and capture the transcript. The fixture variant
@@ -352,7 +354,10 @@ enabled and places a fake `message` command on PATH; Pi must invoke that
 command from inside the harness before the smoke can pass. The Pi-message-router
 variant leaves Pi's bash tool enabled, starts the real `persona-daemon` with the
 message/router topology, puts the real `message` CLI on PATH, and proves the
-router can read the message from `Inbox responder`. The Pi variants snapshot
+router can read the message from `Inbox responder`. The Pi-managed-harness
+variant starts the manager-owned three-harness topology, has Pi send the first
+message through the real `message` CLI, then proves the deterministic
+initiator/responder/reviewer chain returns to owner. The Pi variants snapshot
 only `settings.json` and `models.json` into the sandbox and write an empty
 `auth.json`.
 

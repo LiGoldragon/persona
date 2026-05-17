@@ -13,7 +13,7 @@ test_lane="dev-stack"
 
 usage() {
   cat <<'EOF'
-usage: persona-engine-sandbox --harness pi|pi-tools|pi-message-router|claude|codex|codex-api|fixture [--test dev-stack|dev-stack-chain|terminal-cell] [--sandbox-dir DIR] [--credential-root DIR] [--bootstrap-auth] [--dry-run] [--inside-unit]
+usage: persona-engine-sandbox --harness pi|pi-tools|pi-message-router|pi-managed-harness|claude|codex|codex-api|fixture [--test dev-stack|dev-stack-chain|terminal-cell] [--sandbox-dir DIR] [--credential-root DIR] [--bootstrap-auth] [--dry-run] [--inside-unit]
 
 Creates the sandbox directory layout for a disposable Persona engine test and,
 unless --dry-run is supplied, enters it through systemd-run --user.
@@ -73,7 +73,7 @@ if [ -z "$harness" ]; then
 fi
 
 case "$harness" in
-  pi|pi-tools|pi-message-router|claude|codex|codex-api|fixture) ;;
+  pi|pi-tools|pi-message-router|pi-managed-harness|claude|codex|codex-api|fixture) ;;
   *)
     printf 'unsupported harness: %s\n' "$harness" >&2
     usage >&2
@@ -89,6 +89,13 @@ case "$test_lane" in
     exit 2
     ;;
 esac
+
+is_pi_family_harness() {
+  case "$harness" in
+    pi|pi-tools|pi-message-router|pi-managed-harness) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 if [ -z "$sandbox_dir" ]; then
   sandbox_dir="$(mktemp -d -t persona-engine-sandbox.XXXXXX)"
@@ -131,7 +138,7 @@ prepare_layout() {
 
 credential_policy() {
   case "$harness" in
-    pi|pi-tools|pi-message-router)
+    pi|pi-tools|pi-message-router|pi-managed-harness)
       printf '%s\n' '(CredentialPolicy Pi SnapshotCredential "Pi uses isolated PI_CODING_AGENT_DIR and PI_CODING_AGENT_SESSION_DIR; no paid provider credential is copied.")'
       ;;
     claude)
@@ -159,7 +166,7 @@ credential_policy() {
 
 dedicated_credential_dir() {
   case "$harness" in
-    pi|pi-tools|pi-message-router) printf '%s\n' "$credential_root/pi" ;;
+    pi|pi-tools|pi-message-router|pi-managed-harness) printf '%s\n' "$credential_root/pi" ;;
     claude) printf '%s\n' "$credential_root/claude-config" ;;
     codex) printf '%s\n' "$credential_root/codex-home" ;;
     codex-api) printf '%s\n' "$credential_root/codex-api" ;;
@@ -223,7 +230,7 @@ EOF
 }
 
 prepare_pi_model_snapshot() {
-  if [ "$harness" != "pi" ] && [ "$harness" != "pi-tools" ] && [ "$harness" != "pi-message-router" ]; then
+  if ! is_pi_family_harness; then
     return 0
   fi
 
@@ -262,7 +269,7 @@ write_bootstrap_artifacts() {
     printf '  (CredentialRoot "%s")\n' "$credential_root"
     printf '  (DedicatedCredentialDir "%s")\n' "$dedicated_dir"
     case "$harness" in
-      pi|pi-tools|pi-message-router)
+      pi|pi-tools|pi-message-router|pi-managed-harness)
         printf '  (Command "mkdir -p %s/config %s/session")\n' "$dedicated_dir" "$dedicated_dir"
         printf '  (AuthKind NoPaidProviderCredential)\n'
         ;;
@@ -299,7 +306,7 @@ write_bootstrap_artifacts() {
   } >"$bootstrap_file"
 
   case "$harness" in
-    pi|pi-tools|pi-message-router)
+    pi|pi-tools|pi-message-router|pi-managed-harness)
       local pi_package_dir="$(
         resolve_pi_package_dir
       )"
@@ -365,7 +372,7 @@ prepare_bootstrap_dirs() {
   mkdir -p "$dedicated_dir"
 
   case "$harness" in
-    pi|pi-tools|pi-message-router)
+    pi|pi-tools|pi-message-router|pi-managed-harness)
       mkdir -p "$dedicated_dir/config" "$dedicated_dir/session"
       ;;
     codex|codex-api)
@@ -377,7 +384,7 @@ prepare_bootstrap_dirs() {
 
 harness_record() {
   case "$harness" in
-    pi|pi-tools|pi-message-router) printf '%s\n' '(Harness Pi)' ;;
+    pi|pi-tools|pi-message-router|pi-managed-harness) printf '%s\n' '(Harness Pi)' ;;
     claude) printf '%s\n' '(Harness Claude)' ;;
     codex) printf '%s\n' '(Harness Codex)' ;;
     codex-api) printf '%s\n' '(Harness CodexApi)' ;;
@@ -407,7 +414,7 @@ write_manifest() {
 
 write_harness_environment() {
   case "$harness" in
-    pi|pi-tools|pi-message-router)
+    pi|pi-tools|pi-message-router|pi-managed-harness)
       local pi_package_dir
       pi_package_dir="$(resolve_pi_package_dir)"
       local pi_bin
@@ -487,7 +494,7 @@ systemd_command() {
     command+=(--property=BindPaths="$credential_root")
   fi
 
-  if [ "$harness" = "pi" ] || [ "$harness" = "pi-tools" ] || [ "$harness" = "pi-message-router" ]; then
+  if is_pi_family_harness; then
     command+=(--setenv=PERSONA_PI_BIN="$(resolve_pi_binary)")
     command+=(--setenv=PI_PACKAGE_DIR="$(resolve_pi_package_dir)")
     command+=(--setenv=PERSONA_PI_PROVIDER=prometheus)
@@ -714,7 +721,7 @@ run_auth_bootstrap() {
   dedicated_dir="$(dedicated_credential_dir)"
 
   case "$harness" in
-    pi|pi-tools|pi-message-router)
+    pi|pi-tools|pi-message-router|pi-managed-harness)
       printf 'persona-engine-sandbox auth-bootstrap=ready\n'
       printf 'harness=%s\n' "$harness"
       printf 'environment=%s\n' "$bootstrap_env_file"

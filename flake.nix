@@ -359,8 +359,10 @@
               export PERSONA_ENGINE_SANDBOX_ATTACH=${personaEngineSandboxAttach}/bin/persona-engine-sandbox-attach
               export PERSONA_DAEMON_BIN=${self.packages.${system}.default}/bin/persona-daemon
               export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.default}/bin/message
+              export PERSONA_TERMINAL_SIGNAL_BIN=${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-signal
               export PERSONA_ROUTER_EXECUTABLE=${prototypeComponentLaunchers}/bin/persona-router-prototype-launcher
               export PERSONA_MESSAGE_DAEMON_EXECUTABLE=${prototypeComponentLaunchers}/bin/persona-message-prototype-launcher
+              export PERSONA_THREE_HARNESS_LAUNCHERS=${threeHarnessComponentLaunchers}
               exec ${pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox-terminal-cell-smoke} "$@"
             '';
           };
@@ -429,6 +431,19 @@
               exec ${personaEngineSandbox}/bin/persona-engine-sandbox --test terminal-cell --harness pi-message-router "$@"
             '';
           };
+          personaEngineSandboxTerminalCellPiManagedHarnessSmoke = pkgs.writeShellApplication {
+            name = "persona-engine-sandbox-terminal-cell-pi-managed-harness-smoke";
+            runtimeInputs = [
+              pkgs.coreutils
+            ];
+            text = ''
+              if [ "$#" -eq 0 ]; then
+                sandbox_dir="$(mktemp -d -t persona-pi-managed.XXXXXX)"
+                set -- --sandbox-dir "$sandbox_dir"
+              fi
+              exec ${personaEngineSandbox}/bin/persona-engine-sandbox --test terminal-cell --harness pi-managed-harness "$@"
+            '';
+          };
           personaEngineSandboxTerminalCellFixtureSmoke = pkgs.writeShellApplication {
             name = "persona-engine-sandbox-terminal-cell-fixture-smoke";
             runtimeInputs = [
@@ -459,6 +474,7 @@
             personaEngineSandboxTerminalCellPiSmoke
             personaEngineSandboxTerminalCellPiToolsSmoke
             personaEngineSandboxTerminalCellPiMessageRouterSmoke
+            personaEngineSandboxTerminalCellPiManagedHarnessSmoke
             personaEngineSandboxTerminalCellFixtureSmoke
             prototypeComponentLaunchers
             threeHarnessComponentLaunchers
@@ -507,6 +523,8 @@
             context.personaEngineSandboxTerminalCellPiToolsSmoke;
           persona-engine-sandbox-terminal-cell-pi-message-router-smoke =
             context.personaEngineSandboxTerminalCellPiMessageRouterSmoke;
+          persona-engine-sandbox-terminal-cell-pi-managed-harness-smoke =
+            context.personaEngineSandboxTerminalCellPiManagedHarnessSmoke;
           persona-engine-sandbox-terminal-cell-fixture-smoke =
             context.personaEngineSandboxTerminalCellFixtureSmoke;
           persona-prototype-component-launchers = context.prototypeComponentLaunchers;
@@ -1249,6 +1267,9 @@
                   self.packages.${system}.persona-engine-sandbox-terminal-cell-pi-message-router-smoke
                 }/bin/persona-engine-sandbox-terminal-cell-pi-message-router-smoke
                 test -x ${
+                  self.packages.${system}.persona-engine-sandbox-terminal-cell-pi-managed-harness-smoke
+                }/bin/persona-engine-sandbox-terminal-cell-pi-managed-harness-smoke
+                test -x ${
                   self.packages.${system}.persona-engine-sandbox-terminal-cell-fixture-smoke
                 }/bin/persona-engine-sandbox-terminal-cell-fixture-smoke
                 test -x ${self.packages.${system}.terminal-cell}/bin/terminal-cell-daemon
@@ -1978,6 +1999,12 @@
           program = "${
             self.packages.${system}.persona-engine-sandbox-terminal-cell-pi-message-router-smoke
           }/bin/persona-engine-sandbox-terminal-cell-pi-message-router-smoke";
+        };
+        persona-engine-sandbox-terminal-cell-pi-managed-harness-smoke = {
+          type = "app";
+          program = "${
+            self.packages.${system}.persona-engine-sandbox-terminal-cell-pi-managed-harness-smoke
+          }/bin/persona-engine-sandbox-terminal-cell-pi-managed-harness-smoke";
         };
         persona-engine-sandbox-terminal-cell-fixture-smoke = {
           type = "app";
