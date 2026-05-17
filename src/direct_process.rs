@@ -490,9 +490,7 @@ impl DirectProcessLauncher {
             component_ingresses: Self::component_message_ingresses(envelope),
             owner_identity: envelope.owner_identity().clone(),
         };
-        let path = envelope
-            .envelope_path()
-            .with_file_name("message-daemon.nota");
+        let path = Self::daemon_configuration_path(envelope);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|source| DirectProcessFailure::Io {
                 operation: "create message daemon configuration directory",
@@ -578,9 +576,7 @@ impl DirectProcessLauncher {
                 .map(|path| signal_persona::WirePath::new(path.to_string_lossy().into_owned())),
             owner_identity: envelope.owner_identity().clone(),
         };
-        let path = envelope
-            .envelope_path()
-            .with_file_name("router-daemon.nota");
+        let path = Self::daemon_configuration_path(envelope);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|source| DirectProcessFailure::Io {
                 operation: "create router daemon configuration directory",
@@ -653,9 +649,7 @@ impl DirectProcessLauncher {
             ),
             owner_identity: envelope.owner_identity().clone(),
         };
-        let path = envelope
-            .envelope_path()
-            .with_file_name("introspect-daemon.nota");
+        let path = Self::daemon_configuration_path(envelope);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|source| DirectProcessFailure::Io {
                 operation: "create introspect daemon configuration directory",
@@ -705,7 +699,7 @@ impl DirectProcessLauncher {
             ),
             owner_identity: envelope.owner_identity().clone(),
         };
-        Self::write_configuration_nota_file(envelope, &configuration, "terminal-daemon.nota")
+        Self::write_configuration_nota_file(envelope, &configuration)
     }
 
     fn write_harness_daemon_configuration_file(
@@ -738,7 +732,7 @@ impl DirectProcessLauncher {
             terminal_socket_path: Self::paired_terminal_socket_path(envelope),
             owner_identity: envelope.owner_identity().clone(),
         };
-        Self::write_configuration_nota_file(envelope, &configuration, "harness-daemon.nota")
+        Self::write_configuration_nota_file(envelope, &configuration)
     }
 
     fn paired_terminal_socket_path(
@@ -788,15 +782,14 @@ impl DirectProcessLauncher {
             backend: signal_persona_system::SystemBackend::Niri,
             owner_identity: envelope.owner_identity().clone(),
         };
-        Self::write_configuration_nota_file(envelope, &configuration, "system-daemon.nota")
+        Self::write_configuration_nota_file(envelope, &configuration)
     }
 
     fn write_configuration_nota_file<C: NotaEncode>(
         envelope: &ComponentSpawnEnvelope,
         configuration: &C,
-        file_name: &str,
     ) -> Result<PathBuf, DirectProcessFailure> {
-        let path = envelope.envelope_path().with_file_name(file_name);
+        let path = Self::daemon_configuration_path(envelope);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|source| DirectProcessFailure::Io {
                 operation: "create daemon configuration directory",
@@ -820,6 +813,13 @@ impl DirectProcessLauncher {
             },
         )?;
         Ok(path)
+    }
+
+    fn daemon_configuration_path(envelope: &ComponentSpawnEnvelope) -> PathBuf {
+        envelope.envelope_path().with_file_name(format!(
+            "{}-daemon.nota",
+            envelope.component_instance().as_str()
+        ))
     }
 
     fn command_from_envelope(

@@ -14,11 +14,10 @@ use persona::engine::{
 };
 use persona::engine_event::EngineEventBody;
 use persona::launch::{
-    CommandArgument, ComponentCommand, ComponentCommandCatalog, ComponentCommandEntry,
-    ComponentCommandEntryInput, ComponentCommandInput, ComponentCommandResolver,
-    EngineLaunchConfiguration, EnvironmentVariable, EnvironmentVariableInput,
-    EnvironmentVariableName, EnvironmentVariableValue, ExecutablePath, ResolveComponentCommands,
-    ResolvedComponentCommands,
+    ComponentCommand, ComponentCommandCatalog, ComponentCommandEntry, ComponentCommandEntryInput,
+    ComponentCommandInput, ComponentCommandResolver, EngineLaunchConfiguration,
+    EnvironmentVariable, EnvironmentVariableInput, EnvironmentVariableName,
+    EnvironmentVariableValue, ExecutablePath, ResolveComponentCommands, ResolvedComponentCommands,
 };
 use persona::manager::{EngineManager, HandleEngineRequest};
 use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadEngineEvents};
@@ -29,7 +28,6 @@ use signal_persona_router::RouterDaemonConfiguration;
 
 struct DirectProcessFixture {
     root: PathBuf,
-    shell: String,
 }
 
 impl DirectProcessFixture {
@@ -44,10 +42,7 @@ impl DirectProcessFixture {
         ));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("fixture root created");
-        let shell = std::env::var("PERSONA_TEST_SHELL")
-            .or_else(|_| std::env::var("SHELL"))
-            .unwrap_or_else(|_| "/bin/sh".to_string());
-        Self { root, shell }
+        Self { root }
     }
 
     fn state_root(&self) -> PathBuf {
@@ -66,28 +61,40 @@ impl DirectProcessFixture {
         self.root.join("spawn-envelope.env")
     }
 
+    fn script_path(&self, name: &str) -> PathBuf {
+        self.root.join(format!("{name}.sh"))
+    }
+
+    fn write_script(&self, name: &str, body: &str) -> String {
+        let path = self.script_path(name);
+        std::fs::write(&path, body).expect("test script writes");
+        let mut permissions = std::fs::metadata(&path)
+            .expect("test script metadata")
+            .permissions();
+        std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o700);
+        std::fs::set_permissions(&path, permissions).expect("test script permissions set");
+        path.to_string_lossy().into_owned()
+    }
+
     fn short_running_command(&self) -> ComponentCommand {
+        let script = self.write_script("short-running", "#!/bin/sh\nsleep 0.25\n");
         // Exits cleanly after ~250ms so the natural-exit observer fires
         // while the launcher is still alive to record the event.
         ComponentCommand::from_input(ComponentCommandInput {
-            executable_path: ExecutablePath::new(self.shell.clone()),
-            arguments: vec![
-                CommandArgument::new("-c"),
-                CommandArgument::new("sleep 0.25; exit 0"),
-            ],
+            executable_path: ExecutablePath::new(script),
+            arguments: Vec::new(),
             environment: Vec::new(),
         })
     }
 
     fn long_running_command(&self) -> ComponentCommand {
+        let script = self.write_script(
+            "long-running",
+            "#!/bin/sh\ntrap 'exit 0' TERM\n(trap 'exit 0' TERM; while true; do sleep 1; done) &\nchild=\"$!\"\necho \"$child\" > \"$PERSONA_TEST_CHILD_PID_FILE\"\nwait \"$child\" 2>/dev/null || true\n",
+        );
         ComponentCommand::from_input(ComponentCommandInput {
-            executable_path: ExecutablePath::new(self.shell.clone()),
-            arguments: vec![
-                CommandArgument::new("-c"),
-                CommandArgument::new(
-                    "trap 'exit 0' TERM; (trap 'exit 0' TERM; while true; do sleep 1; done) & echo \"$!\" > \"$PERSONA_TEST_CHILD_PID_FILE\"; wait",
-                ),
-            ],
+            executable_path: ExecutablePath::new(script),
+            arguments: Vec::new(),
             environment: vec![EnvironmentVariable::from_input(EnvironmentVariableInput {
                 name: EnvironmentVariableName::new("PERSONA_TEST_CHILD_PID_FILE"),
                 value: EnvironmentVariableValue::new(
@@ -98,28 +105,13 @@ impl DirectProcessFixture {
     }
 
     fn envelope_capture_command(&self) -> ComponentCommand {
+        let script = self.write_script(
+            "envelope-capture",
+            "#!/bin/sh\n{\n  printf 'engine=%s\\n' \"$PERSONA_ENGINE_ID\";\n  printf 'component=%s\\n' \"$PERSONA_COMPONENT\";\n  printf 'state=%s\\n' \"$PERSONA_STATE_PATH\";\n  printf 'domain_socket=%s\\n' \"$PERSONA_DOMAIN_SOCKET_PATH\";\n  printf 'supervision_socket=%s\\n' \"$PERSONA_SUPERVISION_SOCKET_PATH\";\n  printf 'spawn_envelope=%s\\n' \"$PERSONA_SPAWN_ENVELOPE\";\n  printf 'manager_socket=%s\\n' \"$PERSONA_MANAGER_SOCKET\";\n  printf 'domain_mode=%s\\n' \"$PERSONA_DOMAIN_SOCKET_MODE\";\n  printf 'supervision_mode=%s\\n' \"$PERSONA_SUPERVISION_SOCKET_MODE\";\n  printf 'peer_count=%s\\n' \"$PERSONA_PEER_SOCKET_COUNT\";\n  printf 'peer_0_component=%s\\n' \"$PERSONA_PEER_0_COMPONENT\";\n  printf 'peer_0_socket=%s\\n' \"$PERSONA_PEER_0_SOCKET_PATH\";\n} > \"$PERSONA_TEST_ENVELOPE_FILE\";\nexec sleep 3600\n",
+        );
         ComponentCommand::from_input(ComponentCommandInput {
-            executable_path: ExecutablePath::new(self.shell.clone()),
-            arguments: vec![
-                CommandArgument::new("-c"),
-                CommandArgument::new(
-                    "{
-  printf 'engine=%s\n' \"$PERSONA_ENGINE_ID\";
-  printf 'component=%s\n' \"$PERSONA_COMPONENT\";
-  printf 'state=%s\n' \"$PERSONA_STATE_PATH\";
-  printf 'domain_socket=%s\n' \"$PERSONA_DOMAIN_SOCKET_PATH\";
-  printf 'supervision_socket=%s\n' \"$PERSONA_SUPERVISION_SOCKET_PATH\";
-  printf 'spawn_envelope=%s\n' \"$PERSONA_SPAWN_ENVELOPE\";
-  printf 'manager_socket=%s\n' \"$PERSONA_MANAGER_SOCKET\";
-  printf 'domain_mode=%s\n' \"$PERSONA_DOMAIN_SOCKET_MODE\";
-  printf 'supervision_mode=%s\n' \"$PERSONA_SUPERVISION_SOCKET_MODE\";
-  printf 'peer_count=%s\n' \"$PERSONA_PEER_SOCKET_COUNT\";
-  printf 'peer_0_component=%s\n' \"$PERSONA_PEER_0_COMPONENT\";
-  printf 'peer_0_socket=%s\n' \"$PERSONA_PEER_0_SOCKET_PATH\";
-} > \"$PERSONA_TEST_ENVELOPE_FILE\";
-exec sleep 3600",
-                ),
-            ],
+            executable_path: ExecutablePath::new(script),
+            arguments: Vec::new(),
             environment: vec![EnvironmentVariable::from_input(EnvironmentVariableInput {
                 name: EnvironmentVariableName::new("PERSONA_TEST_ENVELOPE_FILE"),
                 value: EnvironmentVariableValue::new(
@@ -251,7 +243,17 @@ exec sleep 3600",
         launcher: &ActorRef<DirectProcessLauncher>,
         component: EngineComponent,
     ) -> Result<StopComponentReceipt, DirectProcessFailure> {
-        match launcher.ask(StopComponentProcess::new(component)).await {
+        Self::stop_instance(launcher, ComponentInstanceName::from_component(component)).await
+    }
+
+    async fn stop_instance(
+        launcher: &ActorRef<DirectProcessLauncher>,
+        component_instance: ComponentInstanceName,
+    ) -> Result<StopComponentReceipt, DirectProcessFailure> {
+        match launcher
+            .ask(StopComponentProcess::for_instance(component_instance))
+            .await
+        {
             Ok(receipt) => Ok(receipt),
             Err(SendError::HandlerError(failure)) => Err(failure),
             Err(error) => panic!("launcher actor transport failed: {error:?}"),
@@ -430,6 +432,78 @@ async fn constraint_three_harness_chain_message_launch_writes_component_ingress_
     DirectProcessFixture::stop(&launcher, EngineComponent::Message)
         .await
         .expect("message component stops");
+    launcher.stop_gracefully().await.expect("launcher stops");
+    let _shutdown_completion = launcher.wait_for_shutdown().await;
+}
+
+#[tokio::test]
+async fn constraint_three_harness_chain_writes_instance_specific_daemon_configurations() {
+    let fixture = DirectProcessFixture::new("three-harness-instance-configurations");
+    let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
+    let paths = PersonaDaemonPaths::new(fixture.state_root(), fixture.run_root());
+    let layout = paths.engine_layout_with_topology(
+        EngineId::new("engine-three-harness-instance-configurations"),
+        EngineTopology::ThreeHarnessChain,
+    );
+    layout
+        .prepare_directories()
+        .expect("engine directories prepared");
+    let resolved = fixture
+        .resolved_commands_for_topology(EngineTopology::ThreeHarnessChain)
+        .await;
+    let instance_names = [
+        "message",
+        "router",
+        "initiator-terminal",
+        "initiator",
+        "responder-terminal",
+        "responder",
+        "reviewer-terminal",
+        "reviewer",
+    ];
+
+    for instance_name in instance_names {
+        let envelope = layout
+            .spawn_envelope_for_instance(&ComponentInstanceName::new(instance_name), &resolved)
+            .unwrap_or_else(|| panic!("spawn envelope exists for {instance_name}"));
+        DirectProcessFixture::launch(&launcher, envelope)
+            .await
+            .unwrap_or_else(|error| panic!("{instance_name} component launches: {error:?}"));
+    }
+
+    for instance_name in instance_names {
+        let path = fixture
+            .run_root()
+            .join("engine-three-harness-instance-configurations")
+            .join(format!("{instance_name}-daemon.nota"));
+        assert!(
+            path.exists(),
+            "missing instance-specific configuration: {}",
+            path.display()
+        );
+    }
+    assert!(
+        !fixture
+            .run_root()
+            .join("engine-three-harness-instance-configurations")
+            .join("terminal-daemon.nota")
+            .exists(),
+        "multi-terminal topology must not collapse terminal configurations into one shared file"
+    );
+    assert!(
+        !fixture
+            .run_root()
+            .join("engine-three-harness-instance-configurations")
+            .join("harness-daemon.nota")
+            .exists(),
+        "multi-harness topology must not collapse harness configurations into one shared file"
+    );
+
+    for instance_name in instance_names.into_iter().rev() {
+        DirectProcessFixture::stop_instance(&launcher, ComponentInstanceName::new(instance_name))
+            .await
+            .unwrap_or_else(|error| panic!("{instance_name} component stops: {error:?}"));
+    }
     launcher.stop_gracefully().await.expect("launcher stops");
     let _shutdown_completion = launcher.wait_for_shutdown().await;
 }
