@@ -1571,6 +1571,16 @@
               cargoTestExtraArgs = "--test direct_process constraint_three_harness_chain_router_launch_writes_bootstrap_for_named_harnesses -- --exact";
             }
           );
+          persona-three-harness-chain-writes-instance-specific-daemon-configurations =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+                  cargoTestExtraArgs = "--test direct_process constraint_three_harness_chain_writes_instance_specific_daemon_configurations -- --exact";
+                }
+              );
           persona-engine-supervisor-launches-prototype-supervised-components-through-process-launcher =
             context.craneLib.cargoTest
               (

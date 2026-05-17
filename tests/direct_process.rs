@@ -23,8 +23,10 @@ use persona::manager::{EngineManager, HandleEngineRequest};
 use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadEngineEvents};
 use signal_persona::{EngineReply, EngineRequest, EngineStatusQuery};
 use signal_persona_auth::EngineId;
+use signal_persona_harness::{HarnessDaemonConfiguration, HarnessKind};
 use signal_persona_message::MessageDaemonConfiguration;
 use signal_persona_router::RouterDaemonConfiguration;
+use signal_persona_terminal::TerminalDaemonConfiguration;
 
 struct DirectProcessFixture {
     root: PathBuf,
@@ -483,17 +485,151 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
             .unwrap_or_else(|error| panic!("{instance_name} component launches: {error:?}"));
     }
 
+    let engine_run_root = fixture
+        .run_root()
+        .join("engine-three-harness-instance-configurations");
+    let engine_state_root = fixture
+        .state_root()
+        .join("engine-three-harness-instance-configurations");
+
     for instance_name in instance_names {
-        let path = fixture
-            .run_root()
-            .join("engine-three-harness-instance-configurations")
-            .join(format!("{instance_name}-daemon.nota"));
+        let path = engine_run_root.join(format!("{instance_name}-daemon.nota"));
         assert!(
             path.exists(),
             "missing instance-specific configuration: {}",
             path.display()
         );
     }
+
+    let message_configuration_text =
+        std::fs::read_to_string(engine_run_root.join("message-daemon.nota"))
+            .expect("message configuration reads");
+    let mut message_decoder = Decoder::new(&message_configuration_text);
+    let message_configuration = MessageDaemonConfiguration::decode(&mut message_decoder)
+        .expect("message configuration decodes");
+    assert_eq!(message_configuration.component_ingresses.len(), 3);
+
+    for agent_name in ["initiator", "responder", "reviewer"] {
+        let ingress = message_configuration
+            .component_ingresses
+            .iter()
+            .find(|entry| entry.origin.instance().as_str() == agent_name)
+            .unwrap_or_else(|| panic!("message ingress exists for {agent_name}"));
+        assert_eq!(
+            ingress.origin.component(),
+            signal_persona_auth::ComponentName::Harness
+        );
+        assert!(
+            ingress
+                .socket_path
+                .as_str()
+                .ends_with(&format!("message-ingress/{agent_name}.sock")),
+            "message ingress path belongs to {agent_name}: {}",
+            ingress.socket_path.as_str()
+        );
+        assert_eq!(ingress.socket_mode.into_u32(), 0o600);
+    }
+
+    for agent_name in ["initiator", "responder", "reviewer"] {
+        let terminal_instance_name = format!("{agent_name}-terminal");
+        let terminal_configuration_text = std::fs::read_to_string(
+            engine_run_root.join(format!("{terminal_instance_name}-daemon.nota")),
+        )
+        .unwrap_or_else(|error| {
+            panic!("terminal configuration reads for {terminal_instance_name}: {error}")
+        });
+        let mut terminal_decoder = Decoder::new(&terminal_configuration_text);
+        let terminal_configuration = TerminalDaemonConfiguration::decode(&mut terminal_decoder)
+            .unwrap_or_else(|error| {
+                panic!("terminal configuration decodes for {terminal_instance_name}: {error:?}")
+            });
+        assert!(
+            terminal_configuration
+                .terminal_socket_path
+                .as_str()
+                .ends_with(&format!("{terminal_instance_name}.sock")),
+            "terminal socket path belongs to {terminal_instance_name}: {}",
+            terminal_configuration.terminal_socket_path.as_str()
+        );
+        assert_eq!(
+            terminal_configuration.terminal_socket_mode.into_u32(),
+            0o600
+        );
+        assert!(
+            terminal_configuration
+                .supervision_socket_path
+                .as_str()
+                .ends_with(&format!("{terminal_instance_name}.supervision.sock")),
+            "terminal supervision socket belongs to {terminal_instance_name}: {}",
+            terminal_configuration.supervision_socket_path.as_str()
+        );
+        assert_eq!(
+            terminal_configuration.supervision_socket_mode.into_u32(),
+            0o600
+        );
+        assert!(
+            terminal_configuration
+                .store_path
+                .as_str()
+                .ends_with(&format!("{terminal_instance_name}.redb")),
+            "terminal store path belongs to {terminal_instance_name}: {}",
+            terminal_configuration.store_path.as_str()
+        );
+        assert!(
+            terminal_configuration
+                .store_path
+                .as_str()
+                .starts_with(engine_state_root.to_string_lossy().as_ref()),
+            "terminal store path stays in engine state root: {}",
+            terminal_configuration.store_path.as_str()
+        );
+
+        let harness_configuration_text =
+            std::fs::read_to_string(engine_run_root.join(format!("{agent_name}-daemon.nota")))
+                .unwrap_or_else(|error| {
+                    panic!("harness configuration reads for {agent_name}: {error}")
+                });
+        let mut harness_decoder = Decoder::new(&harness_configuration_text);
+        let harness_configuration = HarnessDaemonConfiguration::decode(&mut harness_decoder)
+            .unwrap_or_else(|error| {
+                panic!("harness configuration decodes for {agent_name}: {error:?}")
+            });
+        assert_eq!(harness_configuration.harness_name.as_str(), agent_name);
+        assert_eq!(harness_configuration.harness_kind, HarnessKind::Fixture);
+        assert!(
+            harness_configuration
+                .harness_socket_path
+                .as_str()
+                .ends_with(&format!("{agent_name}.sock")),
+            "harness socket path belongs to {agent_name}: {}",
+            harness_configuration.harness_socket_path.as_str()
+        );
+        assert_eq!(harness_configuration.harness_socket_mode.into_u32(), 0o600);
+        assert!(
+            harness_configuration
+                .supervision_socket_path
+                .as_str()
+                .ends_with(&format!("{agent_name}.supervision.sock")),
+            "harness supervision socket belongs to {agent_name}: {}",
+            harness_configuration.supervision_socket_path.as_str()
+        );
+        assert_eq!(
+            harness_configuration.supervision_socket_mode.into_u32(),
+            0o600
+        );
+        let terminal_socket_path = harness_configuration
+            .terminal_socket_path
+            .as_ref()
+            .unwrap_or_else(|| panic!("harness {agent_name} has paired terminal socket"));
+        assert!(
+            terminal_socket_path
+                .as_str()
+                .ends_with(&format!("{terminal_instance_name}.sock")),
+            "harness {agent_name} pairs with {terminal_instance_name}: {}",
+            terminal_socket_path.as_str()
+        );
+    }
+
     assert!(
         !fixture
             .run_root()
