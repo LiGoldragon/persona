@@ -201,8 +201,8 @@ orchestrate component a tested engine slot to target.
 | `persona-message` | Message ingress component: `message` NOTA CLI plus supervised `persona-message-daemon`; the daemon forwards typed message frames to the internal router socket. |
 | `persona-system` | System/window focus observation adapters. |
 | `persona-harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
-| `persona-terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. |
-| `terminal-cell` | Low-level daemon-owned PTY/transcript primitive consumed by `persona-terminal`. |
+| `persona-terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. It exposes one component communication socket plus one supervision socket. |
+| `terminal-cell` | Low-level PTY/transcript library consumed by `persona-terminal`; standalone daemon form is a development/test harness. |
 | `sema` | Typed database kernel library over redb/rkyv. |
 | `signal-core` | Signal wire kernel: frames, channel macro, shared wire primitives. |
 | `signal-persona` | Management contract for the `persona` engine manager. |
@@ -389,7 +389,28 @@ sequenceDiagram
     router->>src: delivery or rejection
 ```
 
-### 1.6.4 · Cross-engine routes collapse into channels
+### 1.6.4 · Owner sockets and downstream mutation
+
+Some component relations have an owner-scoped ingress surface in addition to
+ordinary communication. The socket that accepts the frame determines the
+authority lane. An owner socket may accept a `Mutate` order; a non-owner
+socket for the same relation does not know that `Mutate` variant and replies
+with a typed error. This makes "who is allowed to command" a property of the
+listening actor and contract surface, not a string inside the payload.
+
+`persona-orchestrate` uses this shape. A mind-authored or owner-socket
+accepted `Mutate` order can sequence downstream `Mutate` orders, such as
+router channel grants, but the downstream component still accepts them only on
+its owner-scoped relation. Ordinary communication sockets remain for
+assertions, matches, subscriptions, and typed denials.
+
+The prototype does not need to enforce final Unix user/group permission
+isolation. The first witness is structural: separate sockets, typed
+accept/reject behavior, spawn-envelope paths, and no in-band proof field as
+authority. The production deployment later tightens those same sockets with
+filesystem ownership and modes.
+
+### 1.6.5 · Cross-engine routes collapse into channels
 
 An `EngineRoute` is a `Channel` whose `source` is
 `External(OtherPersona { engine_id })`. The multi-engine work uses the
@@ -400,7 +421,7 @@ path scoping is baked in (every per-engine resource is keyed by
 engine id; see §1.5), but cross-engine ops are deferred until a
 second engine is demonstrated alive.
 
-### 1.6.5 · Multi-engine as upgrade substrate
+### 1.6.6 · Multi-engine as upgrade substrate
 
 Engine-level upgrade replaces component-level hot-swap. `persona-daemon`
 spawns engine v2 alongside engine v1; mind grants temporary migration
@@ -889,31 +910,29 @@ inspection agent**, a persona-mind-resident role with direct typed
 range-query access to terminal transcript storage. Range-shaped, not
 stream-shaped.
 
-### 5.3 · terminal-cell speaks signal-persona-terminal (control plane only)
+### 5.3 · persona-terminal owns communication; terminal-cell owns the cell primitive
 
-`terminal-cell` is a Persona component, not a general abduco-shaped
-tool. Its **control plane** speaks `signal-persona-terminal` Signal
-frames (length-prefixed rkyv) over a privileged-only socket — gate ops,
-prompt registration, lifecycle subscriptions, injection requests. Its
-**data plane** (attached viewer keyboard ↔ child PTY) stays raw byte
-stream with minimal framing for attach/detach/resize — **never**
-routed through actor mailboxes, signal encoding, or transcript
-subscription. The non-negotiable invariant: keystrokes from the
-attached viewer reach the child PTY without traversing an actor
-mailbox.
+`persona-terminal` is the Persona component. It exposes the component
+communication socket that speaks `signal-persona-terminal` frames
+(length-prefixed rkyv) and the component supervision socket. The production
+daemon embeds `terminal-cell` as its low-level PTY/transcript library.
+
+`terminal-cell` still has a local control/data split inside the terminal
+primitive. The local control endpoint carries gate ops, prompt registration,
+lifecycle subscriptions, and injection requests; the data endpoint carries
+attached-viewer keyboard bytes ↔ child PTY with minimal framing for
+attach/detach/resize. The non-negotiable invariant: keystrokes from the
+attached viewer reach the child PTY without traversing an actor mailbox.
 
 | Plane | Wire shape | Why |
 |---|---|---|
 | Control | Signal frames | Commands and observations; latency-tolerant |
 | Data | Raw byte stream | Human keystroke latency must not pass through application-level relay |
 
-The socket split is decided: each terminal cell exposes `control.sock` and
-`data.sock`. `control.sock` carries privileged `signal-persona-terminal`
-control frames. `data.sock` carries raw attached-viewer bytes with only minimal
-attach/detach/resize/exit framing. There is no production single-socket
-mode-shift path between the control and data roles.
-`terminal-cell` stays its own repo (the seam is clean; the
-micro-components discipline favors it).
+The cell-level socket split remains useful for local development and tests:
+each standalone terminal cell exposes `control.sock` and `data.sock`.
+Production Persona does not make `terminal-cell-daemon` the engine boundary;
+the component boundary is `persona-terminal`.
 
 ## 6 · Lock Files and BEADS
 
