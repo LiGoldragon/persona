@@ -357,6 +357,10 @@
               export TERMINAL_CELL_CAPTURE=${terminalCellBinaries}/bin/terminal-cell-capture
               export TERMINAL_CELL_VIEW=${terminalCellBinaries}/bin/terminal-cell-view
               export PERSONA_ENGINE_SANDBOX_ATTACH=${personaEngineSandboxAttach}/bin/persona-engine-sandbox-attach
+              export PERSONA_DAEMON_BIN=${self.packages.${system}.default}/bin/persona-daemon
+              export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.default}/bin/message
+              export PERSONA_ROUTER_EXECUTABLE=${prototypeComponentLaunchers}/bin/persona-router-prototype-launcher
+              export PERSONA_MESSAGE_DAEMON_EXECUTABLE=${prototypeComponentLaunchers}/bin/persona-message-prototype-launcher
               exec ${pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox-terminal-cell-smoke} "$@"
             '';
           };
@@ -412,6 +416,19 @@
               exec ${personaEngineSandbox}/bin/persona-engine-sandbox --test terminal-cell --harness pi-tools "$@"
             '';
           };
+          personaEngineSandboxTerminalCellPiMessageRouterSmoke = pkgs.writeShellApplication {
+            name = "persona-engine-sandbox-terminal-cell-pi-message-router-smoke";
+            runtimeInputs = [
+              pkgs.coreutils
+            ];
+            text = ''
+              if [ "$#" -eq 0 ]; then
+                sandbox_dir="$(mktemp -d -t persona-pi-router.XXXXXX)"
+                set -- --sandbox-dir "$sandbox_dir"
+              fi
+              exec ${personaEngineSandbox}/bin/persona-engine-sandbox --test terminal-cell --harness pi-message-router "$@"
+            '';
+          };
           personaEngineSandboxTerminalCellFixtureSmoke = pkgs.writeShellApplication {
             name = "persona-engine-sandbox-terminal-cell-fixture-smoke";
             runtimeInputs = [
@@ -441,6 +458,7 @@
             personaEngineSandboxTerminalCellSmoke
             personaEngineSandboxTerminalCellPiSmoke
             personaEngineSandboxTerminalCellPiToolsSmoke
+            personaEngineSandboxTerminalCellPiMessageRouterSmoke
             personaEngineSandboxTerminalCellFixtureSmoke
             prototypeComponentLaunchers
             threeHarnessComponentLaunchers
@@ -487,6 +505,8 @@
           persona-engine-sandbox-terminal-cell-pi-smoke = context.personaEngineSandboxTerminalCellPiSmoke;
           persona-engine-sandbox-terminal-cell-pi-tools-smoke =
             context.personaEngineSandboxTerminalCellPiToolsSmoke;
+          persona-engine-sandbox-terminal-cell-pi-message-router-smoke =
+            context.personaEngineSandboxTerminalCellPiMessageRouterSmoke;
           persona-engine-sandbox-terminal-cell-fixture-smoke =
             context.personaEngineSandboxTerminalCellFixtureSmoke;
           persona-prototype-component-launchers = context.prototypeComponentLaunchers;
@@ -1226,6 +1246,9 @@
                   self.packages.${system}.persona-engine-sandbox-terminal-cell-pi-tools-smoke
                 }/bin/persona-engine-sandbox-terminal-cell-pi-tools-smoke
                 test -x ${
+                  self.packages.${system}.persona-engine-sandbox-terminal-cell-pi-message-router-smoke
+                }/bin/persona-engine-sandbox-terminal-cell-pi-message-router-smoke
+                test -x ${
                   self.packages.${system}.persona-engine-sandbox-terminal-cell-fixture-smoke
                 }/bin/persona-engine-sandbox-terminal-cell-fixture-smoke
                 test -x ${self.packages.${system}.terminal-cell}/bin/terminal-cell-daemon
@@ -1949,6 +1972,12 @@
           program = "${
             self.packages.${system}.persona-engine-sandbox-terminal-cell-pi-tools-smoke
           }/bin/persona-engine-sandbox-terminal-cell-pi-tools-smoke";
+        };
+        persona-engine-sandbox-terminal-cell-pi-message-router-smoke = {
+          type = "app";
+          program = "${
+            self.packages.${system}.persona-engine-sandbox-terminal-cell-pi-message-router-smoke
+          }/bin/persona-engine-sandbox-terminal-cell-pi-message-router-smoke";
         };
         persona-engine-sandbox-terminal-cell-fixture-smoke = {
           type = "app";

@@ -14,7 +14,7 @@ harness="pi"
 
 usage() {
   cat <<'EOF'
-usage: persona-engine-sandbox-terminal-cell-smoke --sandbox-dir DIR [--harness pi|pi-tools|fixture]
+usage: persona-engine-sandbox-terminal-cell-smoke --sandbox-dir DIR [--harness pi|pi-tools|pi-message-router|fixture]
 
 Starts terminal-cell-daemon at DIR/run/cell.sock, runs one child harness inside
 the PTY, drives it through terminal-cell clients, and leaves inspectable
@@ -52,7 +52,7 @@ if [ -z "$sandbox_dir" ]; then
 fi
 
 case "$harness" in
-  pi|pi-tools|fixture) ;;
+  pi|pi-tools|pi-message-router|fixture) ;;
   claude|codex|codex-api)
     printf 'terminal-cell smoke does not yet support prompt-bearing %s; use pi first\n' "$harness" >&2
     exit 2
@@ -80,6 +80,13 @@ harness_environment_file="$artifact_dir/harness-environment.nota"
 view_once_file="$artifact_dir/terminal-cell-view-once.txt"
 attach_stdout="$artifact_dir/host-attach.stdout"
 message_command_file="$artifact_dir/pi-message-command.txt"
+message_router_inbox_file="$artifact_dir/pi-message-router-inbox.nota"
+manager_socket="$run_dir/persona.sock"
+engine_state_root="$sandbox_dir/state/engine"
+engine_run_root="$run_dir/e"
+engine_daemon_stdout="$artifact_dir/persona-daemon.stdout"
+engine_daemon_stderr="$artifact_dir/persona-daemon.stderr"
+engine_daemon_pid=""
 
 mkdir -p "$state_dir" "$run_dir" "$work_dir" "$artifact_dir"
 rm -f "$cell_socket" "$daemon_ready"
@@ -95,6 +102,19 @@ cleanup() {
   if [ -n "$daemon_pid" ]; then
     kill -- "-$daemon_pid" 2>/dev/null || kill "$daemon_pid" 2>/dev/null || true
     wait "$daemon_pid" 2>/dev/null || true
+  fi
+  if [ -n "$engine_daemon_pid" ]; then
+    kill "$engine_daemon_pid" 2>/dev/null || true
+    if [ -d "$engine_state_root/default" ]; then
+      for capture in "$engine_state_root/default"/*.env; do
+        [ -e "$capture" ] || continue
+        process="$(sed -n 's/^process=//p' "$capture" | head -n 1)"
+        if [ -n "$process" ]; then
+          kill -- "-$process" 2>/dev/null || kill "$process" 2>/dev/null || true
+        fi
+      done
+    fi
+    wait "$engine_daemon_pid" 2>/dev/null || true
   fi
   rm -f "$daemon_ready"
   return "$status"
@@ -117,7 +137,7 @@ write_harness_environment() {
     printf '  (TerminalCellWait "%s")\n' "$TERMINAL_CELL_WAIT"
     printf '  (TerminalCellCapture "%s")\n' "$TERMINAL_CELL_CAPTURE"
     printf '  (TerminalCellView "%s")\n' "$TERMINAL_CELL_VIEW"
-    if [ "$harness" = "pi" ] || [ "$harness" = "pi-tools" ]; then
+    if [ "$harness" = "pi" ] || [ "$harness" = "pi-tools" ] || [ "$harness" = "pi-message-router" ]; then
       printf '  (PiBin "%s")\n' "${PERSONA_PI_BIN:-pi}"
       printf '  (PiPackageDir "%s")\n' "${PI_PACKAGE_DIR:-}"
       printf '  (PiConfigDir "%s")\n' "${PI_CODING_AGENT_DIR:-}"
@@ -193,6 +213,68 @@ EOF
   export PERSONA_MESSAGE_SOCKET="$run_dir/pi-tools-message.sock"
 }
 
+wait_for_socket() {
+  socket_path="$1"
+  label="$2"
+
+  for _attempt in $(seq 1 100); do
+    if [ -S "$socket_path" ]; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  printf 'socket did not appear for %s: %s\n' "$label" "$socket_path" >&2
+  return 1
+}
+
+start_message_router_engine() {
+  : "${PERSONA_DAEMON_BIN:?PERSONA_DAEMON_BIN must point at persona-daemon}"
+  : "${PERSONA_MESSAGE_BIN:?PERSONA_MESSAGE_BIN must point at message CLI}"
+  : "${PERSONA_ROUTER_EXECUTABLE:?PERSONA_ROUTER_EXECUTABLE must point at persona-router launcher}"
+  : "${PERSONA_MESSAGE_DAEMON_EXECUTABLE:?PERSONA_MESSAGE_DAEMON_EXECUTABLE must point at persona-message launcher}"
+
+  mkdir -p "$engine_state_root" "$engine_run_root"
+  PERSONA_MANAGER_STORE="$engine_state_root/manager.redb" \
+  PERSONA_STATE_ROOT="$engine_state_root" \
+  PERSONA_RUN_ROOT="$engine_run_root" \
+  PERSONA_ENGINE_TOPOLOGY=message-router \
+  PERSONA_ROUTER_EXECUTABLE="$PERSONA_ROUTER_EXECUTABLE" \
+  PERSONA_MESSAGE_DAEMON_EXECUTABLE="$PERSONA_MESSAGE_DAEMON_EXECUTABLE" \
+    "$PERSONA_DAEMON_BIN" "$manager_socket" \
+    >"$engine_daemon_stdout" \
+    2>"$engine_daemon_stderr" &
+  engine_daemon_pid="$!"
+
+  for _attempt in $(seq 1 100); do
+    if grep -Fq "persona-daemon socket=$manager_socket" "$engine_daemon_stdout" 2>/dev/null; then
+      break
+    fi
+    if ! kill -0 "$engine_daemon_pid" 2>/dev/null; then
+      cat "$engine_daemon_stdout" >&2 || true
+      cat "$engine_daemon_stderr" >&2 || true
+      exit 1
+    fi
+    sleep 0.1
+  done
+  grep -Fq "persona-daemon socket=$manager_socket" "$engine_daemon_stdout"
+  wait_for_socket "$engine_run_root/default/message.sock" "persona-message"
+  wait_for_socket "$engine_run_root/default/router.sock" "persona-router"
+}
+
+write_real_message_tool() {
+  tool_dir="$work_dir/bin"
+  mkdir -p "$tool_dir"
+  cat >"$tool_dir/message" <<EOF
+#!/bin/sh
+printf '%s\n' "\$*" > "$message_command_file"
+exec "$PERSONA_MESSAGE_BIN" "\$@"
+EOF
+  chmod +x "$tool_dir/message"
+  export PATH="$tool_dir:$PATH"
+  export PERSONA_MESSAGE_SOCKET="$engine_run_root/default/message.sock"
+}
+
 pi_tools_command() {
   resolve_pi_command_settings
   write_message_tool
@@ -217,10 +299,36 @@ pi_tools_command() {
   marker_text="MESSAGE_TOOL_PROOF_OK"
 }
 
+pi_message_router_command() {
+  resolve_pi_command_settings
+  start_message_router_engine
+  write_real_message_tool
+  child_command=(
+    "$pi_bin"
+    --offline
+    --provider
+    "$pi_provider"
+    --model
+    "$pi_model"
+    --thinking
+    "$pi_thinking"
+    --tools
+    bash
+    --no-extensions
+    --no-skills
+    --no-context-files
+    --no-session
+  )
+  ready_text="Pi can explain"
+  prompt_text='Use the bash tool to run exactly: message '\''(Send responder "pi routed proof")'\''. After the command finishes, answer MESSAGE_ROUTER_DONE.'
+  marker_text="SubmissionAccepted"
+}
+
 case "$harness" in
   fixture) fixture_command ;;
   pi) pi_command ;;
   pi-tools) pi_tools_command ;;
+  pi-message-router) pi_message_router_command ;;
 esac
 
 write_harness_environment
@@ -258,6 +366,14 @@ if [ "$harness" = "pi-tools" ]; then
   grep -Fq "(Send operator pi-tool-proof)" "$message_command_file"
 fi
 
+if [ "$harness" = "pi-message-router" ]; then
+  test -f "$message_command_file"
+  grep -Fq '(Send responder "pi routed proof")' "$message_command_file"
+  PERSONA_MESSAGE_SOCKET="$engine_run_root/default/message.sock" \
+    "$PERSONA_MESSAGE_BIN" '(Inbox responder)' >"$message_router_inbox_file"
+  grep -Fq "pi routed proof" "$message_router_inbox_file"
+fi
+
 keep_seconds="${PERSONA_TERMINAL_CELL_KEEP_SECONDS:-0}"
 if [ "$keep_seconds" != "0" ]; then
   sleep "$keep_seconds"
@@ -269,6 +385,9 @@ fi
   printf '  (Harness "%s")\n' "$harness"
   printf '  (Status Passed)\n'
   printf '  (Transcript "%s")\n' "$transcript_file"
+  if [ "$harness" = "pi-message-router" ]; then
+    printf '  (MessageRouterInbox "%s")\n' "$message_router_inbox_file"
+  fi
   printf ')\n'
 } >"$run_file"
 
