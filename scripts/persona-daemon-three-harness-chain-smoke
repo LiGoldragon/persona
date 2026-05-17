@@ -133,6 +133,12 @@ for instance in message router initiator-terminal initiator responder-terminal r
   wait_for_component_capture "$instance"
 done
 
+for instance in message router initiator-terminal initiator responder-terminal responder reviewer-terminal reviewer; do
+  test -f "$root/run/default/$instance-daemon.nota"
+done
+test ! -e "$root/run/default/terminal-daemon.nota"
+test ! -e "$root/run/default/harness-daemon.nota"
+
 grep -Fq "(RegisterActor (Actor initiator 0 (EndpointTransport HarnessSocket" "$root/run/default/router-bootstrap.nota"
 grep -Fq "(RegisterActor (Actor responder 0 (EndpointTransport HarnessSocket" "$root/run/default/router-bootstrap.nota"
 grep -Fq "(RegisterActor (Actor reviewer 0 (EndpointTransport HarnessSocket" "$root/run/default/router-bootstrap.nota"
