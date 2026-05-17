@@ -14,7 +14,7 @@ harness="pi"
 
 usage() {
   cat <<'EOF'
-usage: persona-engine-sandbox-terminal-cell-smoke --sandbox-dir DIR [--harness pi|fixture]
+usage: persona-engine-sandbox-terminal-cell-smoke --sandbox-dir DIR [--harness pi|pi-tools|fixture]
 
 Starts terminal-cell-daemon at DIR/run/cell.sock, runs one child harness inside
 the PTY, drives it through terminal-cell clients, and leaves inspectable
@@ -52,7 +52,7 @@ if [ -z "$sandbox_dir" ]; then
 fi
 
 case "$harness" in
-  pi|fixture) ;;
+  pi|pi-tools|fixture) ;;
   claude|codex|codex-api)
     printf 'terminal-cell smoke does not yet support prompt-bearing %s; use pi first\n' "$harness" >&2
     exit 2
@@ -79,6 +79,7 @@ prompt_file="$artifact_dir/terminal-cell-prompt.nota"
 harness_environment_file="$artifact_dir/harness-environment.nota"
 view_once_file="$artifact_dir/terminal-cell-view-once.txt"
 attach_stdout="$artifact_dir/host-attach.stdout"
+message_command_file="$artifact_dir/pi-message-command.txt"
 
 mkdir -p "$state_dir" "$run_dir" "$work_dir" "$artifact_dir"
 rm -f "$cell_socket" "$daemon_ready"
@@ -116,7 +117,7 @@ write_harness_environment() {
     printf '  (TerminalCellWait "%s")\n' "$TERMINAL_CELL_WAIT"
     printf '  (TerminalCellCapture "%s")\n' "$TERMINAL_CELL_CAPTURE"
     printf '  (TerminalCellView "%s")\n' "$TERMINAL_CELL_VIEW"
-    if [ "$harness" = "pi" ]; then
+    if [ "$harness" = "pi" ] || [ "$harness" = "pi-tools" ]; then
       printf '  (PiBin "%s")\n' "${PERSONA_PI_BIN:-pi}"
       printf '  (PiPackageDir "%s")\n' "${PI_PACKAGE_DIR:-}"
       printf '  (PiConfigDir "%s")\n' "${PI_CODING_AGENT_DIR:-}"
@@ -140,8 +141,8 @@ fixture_command() {
   marker_text="fixture-response:terminal-cell-smoke"
 }
 
-pi_command() {
-  local pi_bin="${PERSONA_PI_BIN:-pi}"
+resolve_pi_command_settings() {
+  pi_bin="${PERSONA_PI_BIN:-pi}"
   if command -v "$pi_bin" >/dev/null 2>&1; then
     pi_bin="$(command -v "$pi_bin")"
   elif [ -x "$pi_bin" ]; then
@@ -151,9 +152,13 @@ pi_command() {
     exit 1
   fi
 
-  local pi_provider="${PERSONA_PI_PROVIDER:-prometheus}"
-  local pi_model="${PERSONA_PI_MODEL:-prometheus/qwen3.6-27b}"
-  local pi_thinking="${PERSONA_PI_THINKING:-medium}"
+  pi_provider="${PERSONA_PI_PROVIDER:-prometheus}"
+  pi_model="${PERSONA_PI_MODEL:-prometheus/qwen3.6-27b}"
+  pi_thinking="${PERSONA_PI_THINKING:-medium}"
+}
+
+pi_command() {
+  resolve_pi_command_settings
   child_command=(
     "$pi_bin"
     --offline
@@ -174,9 +179,48 @@ pi_command() {
   marker_text="TERMINAL_CELL_PI_SMOKE_OK"
 }
 
+write_message_tool() {
+  tool_dir="$work_dir/bin"
+  mkdir -p "$tool_dir"
+  cat >"$tool_dir/message" <<EOF
+#!/bin/sh
+printf '%s\n' "\$*" > "$message_command_file"
+printf '%s\n' '(Accepted (Message pi-tool-proof))'
+printf '%s\n' 'MESSAGE_TOOL_PROOF_OK'
+EOF
+  chmod +x "$tool_dir/message"
+  export PATH="$tool_dir:$PATH"
+  export PERSONA_MESSAGE_SOCKET="$run_dir/pi-tools-message.sock"
+}
+
+pi_tools_command() {
+  resolve_pi_command_settings
+  write_message_tool
+  child_command=(
+    "$pi_bin"
+    --offline
+    --provider
+    "$pi_provider"
+    --model
+    "$pi_model"
+    --thinking
+    "$pi_thinking"
+    --tools
+    bash
+    --no-extensions
+    --no-skills
+    --no-context-files
+    --no-session
+  )
+  ready_text="Pi can explain"
+  prompt_text="Use the bash tool to run exactly: message '(Send operator pi-tool-proof)'. After the command finishes, answer MESSAGE_TOOL_DONE."
+  marker_text="MESSAGE_TOOL_PROOF_OK"
+}
+
 case "$harness" in
   fixture) fixture_command ;;
   pi) pi_command ;;
+  pi-tools) pi_tools_command ;;
 esac
 
 write_harness_environment
@@ -208,6 +252,11 @@ TERMINAL_CELL_VIEW="$TERMINAL_CELL_VIEW" \
 "$TERMINAL_CELL_SEND" --socket "$cell_socket" --line "$prompt_text"
 timeout 420s "$TERMINAL_CELL_WAIT" --socket "$cell_socket" --text "$marker_text"
 "$TERMINAL_CELL_CAPTURE" --socket "$cell_socket" >"$transcript_file"
+
+if [ "$harness" = "pi-tools" ]; then
+  test -f "$message_command_file"
+  grep -Fq "(Send operator pi-tool-proof)" "$message_command_file"
+fi
 
 keep_seconds="${PERSONA_TERMINAL_CELL_KEEP_SECONDS:-0}"
 if [ "$keep_seconds" != "0" ]; then

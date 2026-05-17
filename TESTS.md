@@ -196,6 +196,7 @@ nix run .#persona-engine-sandbox-dev-stack-smoke
 nix run .#persona-engine-sandbox-dev-stack-chain-smoke
 nix run .#persona-engine-sandbox-terminal-cell-fixture-smoke
 nix run .#persona-engine-sandbox-terminal-cell-pi-smoke
+nix run .#persona-engine-sandbox-terminal-cell-pi-tools-smoke
 nix run .#persona-engine-sandbox -- --harness codex --bootstrap-auth --dry-run
 nix run .#persona-engine-sandbox-attach -- --sandbox-dir /tmp/persona-engine-sandbox.example --dry-run
 ```
@@ -337,14 +338,18 @@ not valid inside the pure Nix build sandbox. Real prompt-bearing Claude/Codex
 runs require dedicated sandbox credentials and are not driven from live host
 auth files.
 
-`persona-engine-sandbox-terminal-cell-fixture-smoke` and
-`persona-engine-sandbox-terminal-cell-pi-smoke` exercise the separate
+`persona-engine-sandbox-terminal-cell-fixture-smoke`,
+`persona-engine-sandbox-terminal-cell-pi-smoke`, and
+`persona-engine-sandbox-terminal-cell-pi-tools-smoke` exercise the separate
 terminal-cell lane. They start a real `terminal-cell-daemon` at
 `$sandbox_dir/run/cell.sock`, drive it with Nix-packaged terminal-cell clients,
 write host attach artifacts, and capture the transcript. The fixture variant
 uses a deterministic shell child; the Pi variant starts the real Pi TUI with a
-local Prometheus-backed model. The Pi variant snapshots only `settings.json`
-and `models.json` into the sandbox and writes an empty `auth.json`.
+local Prometheus-backed model. The Pi-tools variant leaves Pi's bash tool
+enabled and places a fake `message` command on PATH; Pi must invoke that
+command from inside the harness before the smoke can pass. The Pi variants
+snapshot only `settings.json` and `models.json` into the sandbox and write an
+empty `auth.json`.
 
 Auth bootstrap mode is the live handoff for those dedicated credentials:
 

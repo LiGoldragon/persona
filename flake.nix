@@ -399,6 +399,19 @@
               exec ${personaEngineSandbox}/bin/persona-engine-sandbox --test terminal-cell --harness pi "$@"
             '';
           };
+          personaEngineSandboxTerminalCellPiToolsSmoke = pkgs.writeShellApplication {
+            name = "persona-engine-sandbox-terminal-cell-pi-tools-smoke";
+            runtimeInputs = [
+              pkgs.coreutils
+            ];
+            text = ''
+              if [ "$#" -eq 0 ]; then
+                sandbox_dir="$(mktemp -d -t persona-engine-sandbox-terminal-cell-pi-tools.XXXXXX)"
+                set -- --sandbox-dir "$sandbox_dir"
+              fi
+              exec ${personaEngineSandbox}/bin/persona-engine-sandbox --test terminal-cell --harness pi-tools "$@"
+            '';
+          };
           personaEngineSandboxTerminalCellFixtureSmoke = pkgs.writeShellApplication {
             name = "persona-engine-sandbox-terminal-cell-fixture-smoke";
             runtimeInputs = [
@@ -427,6 +440,7 @@
             personaEngineSandboxDevStackChainSmoke
             personaEngineSandboxTerminalCellSmoke
             personaEngineSandboxTerminalCellPiSmoke
+            personaEngineSandboxTerminalCellPiToolsSmoke
             personaEngineSandboxTerminalCellFixtureSmoke
             prototypeComponentLaunchers
             threeHarnessComponentLaunchers
@@ -471,6 +485,8 @@
             context.personaEngineSandboxDevStackChainSmoke;
           persona-engine-sandbox-terminal-cell-smoke = context.personaEngineSandboxTerminalCellSmoke;
           persona-engine-sandbox-terminal-cell-pi-smoke = context.personaEngineSandboxTerminalCellPiSmoke;
+          persona-engine-sandbox-terminal-cell-pi-tools-smoke =
+            context.personaEngineSandboxTerminalCellPiToolsSmoke;
           persona-engine-sandbox-terminal-cell-fixture-smoke =
             context.personaEngineSandboxTerminalCellFixtureSmoke;
           persona-prototype-component-launchers = context.prototypeComponentLaunchers;
@@ -1207,6 +1223,9 @@
                   self.packages.${system}.persona-engine-sandbox-terminal-cell-pi-smoke
                 }/bin/persona-engine-sandbox-terminal-cell-pi-smoke
                 test -x ${
+                  self.packages.${system}.persona-engine-sandbox-terminal-cell-pi-tools-smoke
+                }/bin/persona-engine-sandbox-terminal-cell-pi-tools-smoke
+                test -x ${
                   self.packages.${system}.persona-engine-sandbox-terminal-cell-fixture-smoke
                 }/bin/persona-engine-sandbox-terminal-cell-fixture-smoke
                 test -x ${self.packages.${system}.terminal-cell}/bin/terminal-cell-daemon
@@ -1924,6 +1943,12 @@
           program = "${
             self.packages.${system}.persona-engine-sandbox-terminal-cell-pi-smoke
           }/bin/persona-engine-sandbox-terminal-cell-pi-smoke";
+        };
+        persona-engine-sandbox-terminal-cell-pi-tools-smoke = {
+          type = "app";
+          program = "${
+            self.packages.${system}.persona-engine-sandbox-terminal-cell-pi-tools-smoke
+          }/bin/persona-engine-sandbox-terminal-cell-pi-tools-smoke";
         };
         persona-engine-sandbox-terminal-cell-fixture-smoke = {
           type = "app";
