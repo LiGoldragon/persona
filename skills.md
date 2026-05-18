@@ -27,9 +27,11 @@ Component implementation belongs in the component repo that owns the behavior:
 - `sema` is the typed database library used inside state-bearing components;
   each component owns its own redb handle and transaction-ordering actor for
   its own domain.
-- `persona-mind` owns the central state: role coordination,
-  activity, memory/work items, dependencies, decisions, aliases,
-  and ready-work views.
+- `persona-mind` owns central mind state: memory/work items, typed thoughts,
+  relations, dependencies, decisions, aliases, subscriptions, choreography
+  policy, and ready-work views.
+- `persona-orchestrate` owns ordinary role claims, handoffs, role activity, and
+  the orchestration machinery that carries out mind-authorized work.
 
 When adding a component to the system, wire it through `flake.nix` from a
 GitHub input and expose its package/check under this repo's outputs. Do not use

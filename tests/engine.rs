@@ -126,10 +126,7 @@ impl TemporaryEngineRoot {
                 .copied()
                 .map(Self::command_entry)
                 .collect(),
-            EngineTopology::MindOrchestrate
-                .components()
-                .iter()
-                .copied(),
+            EngineTopology::MindOrchestrate.components().iter().copied(),
         )
     }
 
@@ -504,7 +501,11 @@ async fn constraint_mind_orchestrate_topology_spawn_envelope_has_one_peer_socket
     );
     assert_eq!(envelope.peers().len(), 1);
     assert_eq!(envelope.peers()[0].component(), EngineComponent::Mind);
-    assert!(envelope.peers()[0].domain_socket_path().ends_with("mind.sock"));
+    assert!(
+        envelope.peers()[0]
+            .domain_socket_path()
+            .ends_with("mind.sock")
+    );
 
     let signal_envelope = envelope.signal_spawn_envelope();
     assert_eq!(

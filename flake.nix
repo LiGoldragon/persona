@@ -19,9 +19,17 @@
     persona-introspect.inputs.crane.follows = "crane";
     persona-message.url = "github:LiGoldragon/persona-message";
     persona-mind.url = "github:LiGoldragon/persona-mind";
+    persona-orchestrate.url = "github:LiGoldragon/persona-orchestrate";
+    persona-orchestrate.inputs.nixpkgs.follows = "nixpkgs";
+    persona-orchestrate.inputs.fenix.follows = "fenix";
+    persona-orchestrate.inputs.crane.follows = "crane";
     persona-router.url = "github:LiGoldragon/persona-router";
     signal-persona.url = "github:LiGoldragon/signal-persona";
     signal-persona-mind.url = "github:LiGoldragon/signal-persona-mind";
+    signal-persona-orchestrate.url = "github:LiGoldragon/signal-persona-orchestrate";
+    signal-persona-orchestrate.inputs.nixpkgs.follows = "nixpkgs";
+    signal-persona-orchestrate.inputs.fenix.follows = "fenix";
+    signal-persona-orchestrate.inputs.crane.follows = "crane";
     signal-persona-system.url = "github:LiGoldragon/signal-persona-system";
     signal-persona-system.inputs.nixpkgs.follows = "nixpkgs";
     signal-persona-system.inputs.fenix.follows = "fenix";
@@ -147,6 +155,13 @@
                 --store "$PERSONA_STATE_PATH"
             '';
           };
+          prototypeOrchestrateLauncher = mkPrototypeLauncher {
+            name = "persona-orchestrate-prototype-launcher";
+            actual = "${inputs.persona-orchestrate.packages.${system}.default}/bin/persona-orchestrate-daemon";
+            command = ''
+              exec ${inputs.persona-orchestrate.packages.${system}.default}/bin/persona-orchestrate-daemon "$@"
+            '';
+          };
           prototypeRouterLauncher = mkPrototypeLauncher {
             name = "persona-router-prototype-launcher";
             actual = "${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon";
@@ -194,6 +209,7 @@
             name = "persona-prototype-component-launchers";
             paths = [
               prototypeMindLauncher
+              prototypeOrchestrateLauncher
               prototypeRouterLauncher
               prototypeSystemLauncher
               prototypeHarnessLauncher
@@ -320,9 +336,15 @@
             text = ''
               export PERSONA_DAEMON_BIN=${self.packages.${system}.default}/bin/persona-daemon
               export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.default}/bin/message
-              export PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN=${inputs.persona-message.packages.${system}.default}/bin/message-validate-output
-              export PERSONA_TERMINAL_SIGNAL_BIN=${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-signal
-              export PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN=${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-validate-capture
+              export PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN=${
+                inputs.persona-message.packages.${system}.default
+              }/bin/message-validate-output
+              export PERSONA_TERMINAL_SIGNAL_BIN=${
+                inputs.persona-terminal.packages.${system}.default
+              }/bin/persona-terminal-signal
+              export PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN=${
+                inputs.persona-terminal.packages.${system}.default
+              }/bin/persona-terminal-validate-capture
               export PERSONA_THREE_HARNESS_LAUNCHERS=${threeHarnessComponentLaunchers}
               exec ${pkgs.bash}/bin/bash ${./scripts/persona-daemon-three-harness-chain-smoke} "$@"
             '';
@@ -369,9 +391,15 @@
               export PERSONA_ENGINE_SANDBOX_ATTACH=${personaEngineSandboxAttach}/bin/persona-engine-sandbox-attach
               export PERSONA_DAEMON_BIN=${self.packages.${system}.default}/bin/persona-daemon
               export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.default}/bin/message
-              export PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN=${inputs.persona-message.packages.${system}.default}/bin/message-validate-output
-              export PERSONA_TERMINAL_SIGNAL_BIN=${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-signal
-              export PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN=${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-validate-capture
+              export PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN=${
+                inputs.persona-message.packages.${system}.default
+              }/bin/message-validate-output
+              export PERSONA_TERMINAL_SIGNAL_BIN=${
+                inputs.persona-terminal.packages.${system}.default
+              }/bin/persona-terminal-signal
+              export PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN=${
+                inputs.persona-terminal.packages.${system}.default
+              }/bin/persona-terminal-validate-capture
               export PERSONA_ROUTER_EXECUTABLE=${prototypeComponentLaunchers}/bin/persona-router-prototype-launcher
               export PERSONA_MESSAGE_DAEMON_EXECUTABLE=${prototypeComponentLaunchers}/bin/persona-message-prototype-launcher
               export PERSONA_THREE_HARNESS_LAUNCHERS=${threeHarnessComponentLaunchers}
@@ -514,13 +542,14 @@
           persona-introspect = inputs.persona-introspect.packages.${system}.default;
           persona-message = inputs.persona-message.packages.${system}.default;
           persona-mind = inputs.persona-mind.packages.${system}.default;
+          persona-orchestrate = inputs.persona-orchestrate.packages.${system}.default;
           persona-router = inputs.persona-router.packages.${system}.default;
           signal-persona = inputs.signal-persona.packages.${system}.default;
           signal-persona-mind = inputs.signal-persona-mind.packages.${system}.default;
+          signal-persona-orchestrate = inputs.signal-persona-orchestrate.packages.${system}.default;
           signal-persona-system = inputs.signal-persona-system.packages.${system}.default;
           signal-persona-terminal = inputs.signal-persona-terminal.packages.${system}.default;
-          owner-signal-persona-terminal =
-            inputs.owner-signal-persona-terminal.packages.${system}.default;
+          owner-signal-persona-terminal = inputs.owner-signal-persona-terminal.packages.${system}.default;
           persona-system = inputs.persona-system.packages.${system}.default;
           persona-terminal = inputs.persona-terminal.packages.${system}.default;
           terminal-cell = context.terminalCellBinaries;
@@ -530,8 +559,7 @@
           persona-engine-sandbox = context.personaEngineSandbox;
           persona-engine-sandbox-attach = context.personaEngineSandboxAttach;
           persona-engine-sandbox-dev-stack-smoke = context.personaEngineSandboxDevStackSmoke;
-          persona-engine-sandbox-dev-stack-chain-smoke =
-            context.personaEngineSandboxDevStackChainSmoke;
+          persona-engine-sandbox-dev-stack-chain-smoke = context.personaEngineSandboxDevStackChainSmoke;
           persona-engine-sandbox-terminal-cell-smoke = context.personaEngineSandboxTerminalCellSmoke;
           persona-engine-sandbox-terminal-cell-pi-smoke = context.personaEngineSandboxTerminalCellPiSmoke;
           persona-engine-sandbox-terminal-cell-pi-tools-smoke =
@@ -564,6 +592,7 @@
           persona-harness = inputs.persona-harness.checks.${system}.default;
           persona-message = inputs.persona-message.checks.${system}.default;
           persona-mind = inputs.persona-mind.checks.${system}.default;
+          persona-orchestrate = inputs.persona-orchestrate.checks.${system}.test;
           persona-router = inputs.persona-router.checks.${system}.default;
           signal-persona-build = inputs.signal-persona.checks.${system}.build;
           signal-persona-test = inputs.signal-persona.checks.${system}.test;
@@ -573,6 +602,7 @@
           signal-persona-fmt = inputs.signal-persona.checks.${system}.fmt;
           signal-persona-clippy = inputs.signal-persona.checks.${system}.clippy;
           signal-persona-mind = inputs.signal-persona-mind.checks.${system}.test;
+          signal-persona-orchestrate = inputs.signal-persona-orchestrate.checks.${system}.test;
           signal-persona-system-build = inputs.signal-persona-system.checks.${system}.build;
           signal-persona-system-test = inputs.signal-persona-system.checks.${system}.test;
           signal-persona-system-round-trip = inputs.signal-persona-system.checks.${system}.test-round-trip;
@@ -581,8 +611,7 @@
           signal-persona-system-fmt = inputs.signal-persona-system.checks.${system}.fmt;
           signal-persona-system-clippy = inputs.signal-persona-system.checks.${system}.clippy;
           signal-persona-terminal = inputs.signal-persona-terminal.checks.${system}.test;
-          owner-signal-persona-terminal =
-            inputs.owner-signal-persona-terminal.checks.${system}.test;
+          owner-signal-persona-terminal = inputs.owner-signal-persona-terminal.checks.${system}.test;
           persona-system = inputs.persona-system.checks.${system}.default;
           persona-terminal = inputs.persona-terminal.checks.${system}.default;
 
@@ -606,20 +635,22 @@
               --expect-body 'message-only round-trip'
             touch $out
           '';
-          wire-stamped-submission-round-trip = context.pkgs.runCommand "wire-stamped-submission-round-trip" { } ''
-            ${personaShims}/bin/wire-emit-message \
-              --variant stamped \
-              --recipient designer \
-              --body 'stamped round-trip' \
-              --origin 'internal:message' \
-              --stamped-at 1234 \
-              | ${personaShims}/bin/wire-decode-message \
-              --expect-recipient designer \
-              --expect-body 'stamped round-trip' \
-              --expect-variant stamped \
-              --expect-origin 'internal:message'
-            touch $out
-          '';
+          wire-stamped-submission-round-trip =
+            context.pkgs.runCommand "wire-stamped-submission-round-trip" { }
+              ''
+                ${personaShims}/bin/wire-emit-message \
+                  --variant stamped \
+                  --recipient designer \
+                  --body 'stamped round-trip' \
+                  --origin 'internal:message' \
+                  --stamped-at 1234 \
+                  | ${personaShims}/bin/wire-decode-message \
+                  --expect-recipient designer \
+                  --expect-body 'stamped round-trip' \
+                  --expect-variant stamped \
+                  --expect-origin 'internal:message'
+                touch $out
+              '';
           wire-inbox-query-round-trip = context.pkgs.runCommand "wire-inbox-query-round-trip" { } ''
             ${personaShims}/bin/wire-emit-message \
               --variant inbox-query \
@@ -631,144 +662,166 @@
               --expect-variant inbox-query
             touch $out
           '';
-          wire-submission-accepted-reply-round-trip = context.pkgs.runCommand "wire-submission-accepted-reply-round-trip" { } ''
-            ${personaShims}/bin/wire-emit-message-reply \
-              --variant submission-accepted \
-              --slot 42 \
-              | ${personaShims}/bin/wire-decode-message-reply \
-              --expect submission-accepted \
-              --expect-slot 42
-            touch $out
-          '';
-          wire-inbox-listing-reply-round-trip = context.pkgs.runCommand "wire-inbox-listing-reply-round-trip" { } ''
-            ${personaShims}/bin/wire-emit-message-reply \
-              --variant inbox-listing \
-              --entry 'slot=1,sender=owner,body=first message' \
-              --entry 'slot=2,sender=owner,body=second message' \
-              --entry 'slot=3,sender=mind,body=third from mind' \
-              | ${personaShims}/bin/wire-decode-message-reply \
-              --expect inbox-listing \
-              --expect-entry-count 3 \
-              --expect-entry-body 'second message' \
-              --expect-entry-sender mind
-            touch $out
-          '';
-          wire-message-unimplemented-reply-round-trip = context.pkgs.runCommand "wire-message-unimplemented-reply-round-trip" { } ''
-            ${personaShims}/bin/wire-emit-message-reply \
-              --variant unimplemented \
-              --operation submission \
-              --reason not-in-prototype-scope \
-              | ${personaShims}/bin/wire-decode-message-reply \
-              --expect unimplemented \
-              --expect-operation submission
-            touch $out
-          '';
+          wire-submission-accepted-reply-round-trip =
+            context.pkgs.runCommand "wire-submission-accepted-reply-round-trip" { }
+              ''
+                ${personaShims}/bin/wire-emit-message-reply \
+                  --variant submission-accepted \
+                  --slot 42 \
+                  | ${personaShims}/bin/wire-decode-message-reply \
+                  --expect submission-accepted \
+                  --expect-slot 42
+                touch $out
+              '';
+          wire-inbox-listing-reply-round-trip =
+            context.pkgs.runCommand "wire-inbox-listing-reply-round-trip" { }
+              ''
+                ${personaShims}/bin/wire-emit-message-reply \
+                  --variant inbox-listing \
+                  --entry 'slot=1,sender=owner,body=first message' \
+                  --entry 'slot=2,sender=owner,body=second message' \
+                  --entry 'slot=3,sender=mind,body=third from mind' \
+                  | ${personaShims}/bin/wire-decode-message-reply \
+                  --expect inbox-listing \
+                  --expect-entry-count 3 \
+                  --expect-entry-body 'second message' \
+                  --expect-entry-sender mind
+                touch $out
+              '';
+          wire-message-unimplemented-reply-round-trip =
+            context.pkgs.runCommand "wire-message-unimplemented-reply-round-trip" { }
+              ''
+                ${personaShims}/bin/wire-emit-message-reply \
+                  --variant unimplemented \
+                  --operation submission \
+                  --reason not-in-prototype-scope \
+                  | ${personaShims}/bin/wire-decode-message-reply \
+                  --expect unimplemented \
+                  --expect-operation submission
+                touch $out
+              '';
 
           # T2 — origin-shape coverage. Each MessageOrigin variant
           # must encode and decode byte-perfect through the channel
           # frame. The security boundary (SO_PEERCRED stamping)
           # depends on these shapes being stable.
-          wire-stamped-origin-internal-mind-round-trip = context.pkgs.runCommand "wire-stamped-origin-internal-mind-round-trip" { } ''
-            ${personaShims}/bin/wire-emit-message \
-              --variant stamped --recipient designer --body witness \
-              --origin 'internal:mind' --stamped-at 1 \
-              | ${personaShims}/bin/wire-decode-message \
-              --expect-recipient designer --expect-body witness \
-              --expect-origin 'internal:mind'
-            touch $out
-          '';
-          wire-stamped-origin-internal-router-round-trip = context.pkgs.runCommand "wire-stamped-origin-internal-router-round-trip" { } ''
-            ${personaShims}/bin/wire-emit-message \
-              --variant stamped --recipient designer --body witness \
-              --origin 'internal:router' --stamped-at 1 \
-              | ${personaShims}/bin/wire-decode-message \
-              --expect-recipient designer --expect-body witness \
-              --expect-origin 'internal:router'
-            touch $out
-          '';
-          wire-stamped-origin-external-owner-round-trip = context.pkgs.runCommand "wire-stamped-origin-external-owner-round-trip" { } ''
-            ${personaShims}/bin/wire-emit-message \
-              --variant stamped --recipient designer --body witness \
-              --origin 'external:owner' --stamped-at 1 \
-              | ${personaShims}/bin/wire-decode-message \
-              --expect-recipient designer --expect-body witness \
-              --expect-origin 'external:owner'
-            touch $out
-          '';
-          wire-stamped-origin-external-non-owner-uid-round-trip = context.pkgs.runCommand "wire-stamped-origin-external-non-owner-uid-round-trip" { } ''
-            ${personaShims}/bin/wire-emit-message \
-              --variant stamped --recipient designer --body witness \
-              --origin 'external:non-owner-user:1000' --stamped-at 1 \
-              | ${personaShims}/bin/wire-decode-message \
-              --expect-recipient designer --expect-body witness \
-              --expect-origin 'external:non-owner-user:1000'
-            touch $out
-          '';
-          wire-stamped-origin-external-network-peer-round-trip = context.pkgs.runCommand "wire-stamped-origin-external-network-peer-round-trip" { } ''
-            ${personaShims}/bin/wire-emit-message \
-              --variant stamped --recipient designer --body witness \
-              --origin 'external:network:10.0.0.1' --stamped-at 1 \
-              | ${personaShims}/bin/wire-decode-message \
-              --expect-recipient designer --expect-body witness \
-              --expect-origin 'external:network:10.0.0.1'
-            touch $out
-          '';
+          wire-stamped-origin-internal-mind-round-trip =
+            context.pkgs.runCommand "wire-stamped-origin-internal-mind-round-trip" { }
+              ''
+                ${personaShims}/bin/wire-emit-message \
+                  --variant stamped --recipient designer --body witness \
+                  --origin 'internal:mind' --stamped-at 1 \
+                  | ${personaShims}/bin/wire-decode-message \
+                  --expect-recipient designer --expect-body witness \
+                  --expect-origin 'internal:mind'
+                touch $out
+              '';
+          wire-stamped-origin-internal-router-round-trip =
+            context.pkgs.runCommand "wire-stamped-origin-internal-router-round-trip" { }
+              ''
+                ${personaShims}/bin/wire-emit-message \
+                  --variant stamped --recipient designer --body witness \
+                  --origin 'internal:router' --stamped-at 1 \
+                  | ${personaShims}/bin/wire-decode-message \
+                  --expect-recipient designer --expect-body witness \
+                  --expect-origin 'internal:router'
+                touch $out
+              '';
+          wire-stamped-origin-external-owner-round-trip =
+            context.pkgs.runCommand "wire-stamped-origin-external-owner-round-trip" { }
+              ''
+                ${personaShims}/bin/wire-emit-message \
+                  --variant stamped --recipient designer --body witness \
+                  --origin 'external:owner' --stamped-at 1 \
+                  | ${personaShims}/bin/wire-decode-message \
+                  --expect-recipient designer --expect-body witness \
+                  --expect-origin 'external:owner'
+                touch $out
+              '';
+          wire-stamped-origin-external-non-owner-uid-round-trip =
+            context.pkgs.runCommand "wire-stamped-origin-external-non-owner-uid-round-trip" { }
+              ''
+                ${personaShims}/bin/wire-emit-message \
+                  --variant stamped --recipient designer --body witness \
+                  --origin 'external:non-owner-user:1000' --stamped-at 1 \
+                  | ${personaShims}/bin/wire-decode-message \
+                  --expect-recipient designer --expect-body witness \
+                  --expect-origin 'external:non-owner-user:1000'
+                touch $out
+              '';
+          wire-stamped-origin-external-network-peer-round-trip =
+            context.pkgs.runCommand "wire-stamped-origin-external-network-peer-round-trip" { }
+              ''
+                ${personaShims}/bin/wire-emit-message \
+                  --variant stamped --recipient designer --body witness \
+                  --origin 'external:network:10.0.0.1' --stamped-at 1 \
+                  | ${personaShims}/bin/wire-decode-message \
+                  --expect-recipient designer --expect-body witness \
+                  --expect-origin 'external:network:10.0.0.1'
+                touch $out
+              '';
 
           # T3 — negative tests / signals caught. The decoder must
           # reject malformed bytes, truncated frames, and wrong
           # frame kinds with a typed error rather than silently
           # passing or panicking with no diagnostic.
-          wire-malformed-bytes-decode-rejects = context.pkgs.runCommand "wire-malformed-bytes-decode-rejects" { } ''
-            set +e
-            printf '\x42\x42\x42\x42garbage-not-a-frame' | \
-              ${personaShims}/bin/wire-decode-message \
-              --expect-recipient designer --expect-body anything 2> stderr.txt
-            decode_exit=$?
-            set -e
-            if [ "$decode_exit" -eq 0 ]; then
-              printf 'wire-decode-message did not reject malformed bytes\n' >&2
-              exit 1
-            fi
-            test -s stderr.txt
-            mkdir -p $out
-            cp stderr.txt $out/stderr.txt
-            printf 'rejected as expected with exit %s\n' "$decode_exit" > $out/witness.txt
-          '';
-          wire-truncated-frame-decode-rejects = context.pkgs.runCommand "wire-truncated-frame-decode-rejects" { } ''
-            set +e
-            ${personaShims}/bin/wire-emit-message \
-              --recipient designer --body 'will be truncated' \
-              | head -c 8 \
-              | ${personaShims}/bin/wire-decode-message \
-              --expect-recipient designer --expect-body 'will be truncated' 2> stderr.txt
-            decode_exit=$?
-            set -e
-            if [ "$decode_exit" -eq 0 ]; then
-              printf 'wire-decode-message did not reject truncated frame\n' >&2
-              exit 1
-            fi
-            test -s stderr.txt
-            mkdir -p $out
-            cp stderr.txt $out/stderr.txt
-            printf 'rejected as expected with exit %s\n' "$decode_exit" > $out/witness.txt
-          '';
-          wire-wrong-frame-kind-decode-rejects = context.pkgs.runCommand "wire-wrong-frame-kind-decode-rejects" { } ''
-            set +e
-            ${personaShims}/bin/wire-emit-message-reply \
-              --variant submission-accepted --slot 1 \
-              | ${personaShims}/bin/wire-decode-message \
-              --expect-recipient designer --expect-body anything 2> stderr.txt
-            decode_exit=$?
-            set -e
-            if [ "$decode_exit" -eq 0 ]; then
-              printf 'wire-decode-message accepted a reply frame on the request decoder\n' >&2
-              exit 1
-            fi
-            test -s stderr.txt
-            mkdir -p $out
-            cp stderr.txt $out/stderr.txt
-            printf 'rejected as expected with exit %s\n' "$decode_exit" > $out/witness.txt
-          '';
+          wire-malformed-bytes-decode-rejects =
+            context.pkgs.runCommand "wire-malformed-bytes-decode-rejects" { }
+              ''
+                set +e
+                printf '\x42\x42\x42\x42garbage-not-a-frame' | \
+                  ${personaShims}/bin/wire-decode-message \
+                  --expect-recipient designer --expect-body anything 2> stderr.txt
+                decode_exit=$?
+                set -e
+                if [ "$decode_exit" -eq 0 ]; then
+                  printf 'wire-decode-message did not reject malformed bytes\n' >&2
+                  exit 1
+                fi
+                test -s stderr.txt
+                mkdir -p $out
+                cp stderr.txt $out/stderr.txt
+                printf 'rejected as expected with exit %s\n' "$decode_exit" > $out/witness.txt
+              '';
+          wire-truncated-frame-decode-rejects =
+            context.pkgs.runCommand "wire-truncated-frame-decode-rejects" { }
+              ''
+                set +e
+                ${personaShims}/bin/wire-emit-message \
+                  --recipient designer --body 'will be truncated' \
+                  | head -c 8 \
+                  | ${personaShims}/bin/wire-decode-message \
+                  --expect-recipient designer --expect-body 'will be truncated' 2> stderr.txt
+                decode_exit=$?
+                set -e
+                if [ "$decode_exit" -eq 0 ]; then
+                  printf 'wire-decode-message did not reject truncated frame\n' >&2
+                  exit 1
+                fi
+                test -s stderr.txt
+                mkdir -p $out
+                cp stderr.txt $out/stderr.txt
+                printf 'rejected as expected with exit %s\n' "$decode_exit" > $out/witness.txt
+              '';
+          wire-wrong-frame-kind-decode-rejects =
+            context.pkgs.runCommand "wire-wrong-frame-kind-decode-rejects" { }
+              ''
+                set +e
+                ${personaShims}/bin/wire-emit-message-reply \
+                  --variant submission-accepted --slot 1 \
+                  | ${personaShims}/bin/wire-decode-message \
+                  --expect-recipient designer --expect-body anything 2> stderr.txt
+                decode_exit=$?
+                set -e
+                if [ "$decode_exit" -eq 0 ]; then
+                  printf 'wire-decode-message accepted a reply frame on the request decoder\n' >&2
+                  exit 1
+                fi
+                test -s stderr.txt
+                mkdir -p $out
+                cp stderr.txt $out/stderr.txt
+                printf 'rejected as expected with exit %s\n' "$decode_exit" > $out/witness.txt
+              '';
 
           # T4 — chained midway witnesses. Each step is its own
           # derivation; intermediate artifacts (frame bytes, NOTA
@@ -814,106 +867,109 @@
           # the daemon's SO_PEERCRED stamping produced. This is the
           # midway witness: the daemon's wire output is no longer a
           # black-box claim, it's an inspectable byte sequence.
-          persona-message-daemon-stamps-origin-via-tap = context.pkgs.runCommand "persona-message-daemon-stamps-origin-via-tap" {
-            nativeBuildInputs = [ context.pkgs.coreutils ];
-          } ''
-            set -euo pipefail
-            workdir="$(mktemp -d)"
-            tap_socket="$workdir/tap.sock"
-            message_socket="$workdir/message.sock"
-            message_configuration="$workdir/message-daemon.nota"
-            captured_bytes="$workdir/captured.bytes"
-            tap_ready="$workdir/tap.ready"
-            daemon_stderr="$workdir/daemon.stderr"
-            cli_out="$workdir/cli.out"
-            cli_err="$workdir/cli.err"
+          persona-message-daemon-stamps-origin-via-tap =
+            context.pkgs.runCommand "persona-message-daemon-stamps-origin-via-tap"
+              {
+                nativeBuildInputs = [ context.pkgs.coreutils ];
+              }
+              ''
+                set -euo pipefail
+                workdir="$(mktemp -d)"
+                tap_socket="$workdir/tap.sock"
+                message_socket="$workdir/message.sock"
+                message_configuration="$workdir/message-daemon.nota"
+                captured_bytes="$workdir/captured.bytes"
+                tap_ready="$workdir/tap.ready"
+                daemon_stderr="$workdir/daemon.stderr"
+                cli_out="$workdir/cli.out"
+                cli_err="$workdir/cli.err"
 
-            # 1. Start the tap-router. It binds tap.sock, captures
-            #    the first frame it receives, replies with a canned
-            #    SubmissionAccepted slot=999, and exits.
-            ${personaShims}/bin/wire-tap-router \
-              --socket "$tap_socket" \
-              --capture "$captured_bytes" \
-              --reply 'submission-accepted-slot=999' \
-              --ready-file "$tap_ready" &
-            tap_pid=$!
+                # 1. Start the tap-router. It binds tap.sock, captures
+                #    the first frame it receives, replies with a canned
+                #    SubmissionAccepted slot=999, and exits.
+                ${personaShims}/bin/wire-tap-router \
+                  --socket "$tap_socket" \
+                  --capture "$captured_bytes" \
+                  --reply 'submission-accepted-slot=999' \
+                  --ready-file "$tap_ready" &
+                tap_pid=$!
 
-            # Wait for the tap to be bound (ready file written).
-            for _ in $(seq 1 100); do
-              [ -f "$tap_ready" ] && break
-              sleep 0.05
-            done
-            test -f "$tap_ready"
+                # Wait for the tap to be bound (ready file written).
+                for _ in $(seq 1 100); do
+                  [ -f "$tap_ready" ] && break
+                  sleep 0.05
+                done
+                test -f "$tap_ready"
 
-            # 2. Write the typed daemon configuration and start
-            #    persona-message-daemon. It reads owner identity from the
-            #    configuration, binds message.sock, and forwards to tap.sock as
-            #    if it were the router.
-            builder_uid="$(id -u)"
-            printf '(MessageDaemonConfiguration "%s" 432 "%s" 384 "%s" [] (UnixUser %s))\n' \
-              "$message_socket" "$workdir/message.supervision.sock" "$tap_socket" "$builder_uid" \
-              > "$message_configuration"
-            ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon \
-              "$message_configuration" 2> "$daemon_stderr" &
-            daemon_pid=$!
+                # 2. Write the typed daemon configuration and start
+                #    persona-message-daemon. It reads owner identity from the
+                #    configuration, binds message.sock, and forwards to tap.sock as
+                #    if it were the router.
+                builder_uid="$(id -u)"
+                printf '(MessageDaemonConfiguration "%s" 432 "%s" 384 "%s" [] (UnixUser %s))\n' \
+                  "$message_socket" "$workdir/message.supervision.sock" "$tap_socket" "$builder_uid" \
+                  > "$message_configuration"
+                ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon \
+                  "$message_configuration" 2> "$daemon_stderr" &
+                daemon_pid=$!
 
-            # Wait for the message socket to appear.
-            for _ in $(seq 1 100); do
-              [ -S "$message_socket" ] && break
-              if ! kill -0 "$daemon_pid" 2>/dev/null; then
-                cat "$daemon_stderr" >&2
-                exit 1
-              fi
-              sleep 0.05
-            done
-            if [ ! -S "$message_socket" ]; then
-              cat "$daemon_stderr" >&2
-              exit 1
-            fi
+                # Wait for the message socket to appear.
+                for _ in $(seq 1 100); do
+                  [ -S "$message_socket" ] && break
+                  if ! kill -0 "$daemon_pid" 2>/dev/null; then
+                    cat "$daemon_stderr" >&2
+                    exit 1
+                  fi
+                  sleep 0.05
+                done
+                if [ ! -S "$message_socket" ]; then
+                  cat "$daemon_stderr" >&2
+                  exit 1
+                fi
 
-            # 3. Send a real message through the CLI. The daemon
-            #    accepts, reads SO_PEERCRED, compares it to the envelope
-            #    owner identity, wraps into StampedMessageSubmission,
-            #    forwards to tap_socket. The tap captures and replies.
-            set +e
-            PERSONA_MESSAGE_SOCKET="$message_socket" \
-              ${inputs.persona-message.packages.${system}.default}/bin/message \
-              '(Send tap-recipient "tap-captured-body")' > "$cli_out" 2> "$cli_err"
-            cli_exit=$?
-            set -e
+                # 3. Send a real message through the CLI. The daemon
+                #    accepts, reads SO_PEERCRED, compares it to the envelope
+                #    owner identity, wraps into StampedMessageSubmission,
+                #    forwards to tap_socket. The tap captures and replies.
+                set +e
+                PERSONA_MESSAGE_SOCKET="$message_socket" \
+                  ${inputs.persona-message.packages.${system}.default}/bin/message \
+                  '(Send tap-recipient "tap-captured-body")' > "$cli_out" 2> "$cli_err"
+                cli_exit=$?
+                set -e
 
-            # 4. Wait for the tap to finish writing the capture and exit.
-            wait "$tap_pid" || true
-            # Shut the daemon down — its job is done.
-            kill "$daemon_pid" 2>/dev/null || true
-            wait "$daemon_pid" 2>/dev/null || true
+                # 4. Wait for the tap to finish writing the capture and exit.
+                wait "$tap_pid" || true
+                # Shut the daemon down — its job is done.
+                kill "$daemon_pid" 2>/dev/null || true
+                wait "$daemon_pid" 2>/dev/null || true
 
-            # 5. Assert the capture exists.
-            test -s "$captured_bytes"
+                # 5. Assert the capture exists.
+                test -s "$captured_bytes"
 
-            # 6. Decode the captured bytes through our shim and
-            #    assert the daemon stamped the origin correctly.
-            ${personaShims}/bin/wire-decode-message \
-              --expect-recipient tap-recipient \
-              --expect-body 'tap-captured-body' \
-              --expect-variant stamped \
-              --expect-origin 'external:owner' \
-              --capture-nota "$workdir/stamped.nota" \
-              < "$captured_bytes"
+                # 6. Decode the captured bytes through our shim and
+                #    assert the daemon stamped the origin correctly.
+                ${personaShims}/bin/wire-decode-message \
+                  --expect-recipient tap-recipient \
+                  --expect-body 'tap-captured-body' \
+                  --expect-variant stamped \
+                  --expect-origin 'external:owner' \
+                  --capture-nota "$workdir/stamped.nota" \
+                  < "$captured_bytes"
 
-            # 7. Land artifacts in /nix/store/ for forensic inspection.
-            mkdir -p $out
-            cp "$captured_bytes" $out/captured.bytes
-            cp "$workdir/stamped.nota" $out/stamped.nota
-            cp "$cli_out" $out/cli.out
-            cp "$cli_err" $out/cli.err
-            cp "$daemon_stderr" $out/daemon.stderr
-            printf 'midway witness: persona-message-daemon stamped origin in flight\n' > $out/witness.txt
-            printf '  cli exit:        %s\n' "$cli_exit" >> $out/witness.txt
-            printf '  captured bytes:  %s\n' "$(wc -c < $out/captured.bytes)" >> $out/witness.txt
-            printf '  decoded nota:    %s\n' "$(cat $out/stamped.nota)" >> $out/witness.txt
-            printf '  expected origin: External(Owner) (Nix builder uid)\n' >> $out/witness.txt
-          '';
+                # 7. Land artifacts in /nix/store/ for forensic inspection.
+                mkdir -p $out
+                cp "$captured_bytes" $out/captured.bytes
+                cp "$workdir/stamped.nota" $out/stamped.nota
+                cp "$cli_out" $out/cli.out
+                cp "$cli_err" $out/cli.err
+                cp "$daemon_stderr" $out/daemon.stderr
+                printf 'midway witness: persona-message-daemon stamped origin in flight\n' > $out/witness.txt
+                printf '  cli exit:        %s\n' "$cli_exit" >> $out/witness.txt
+                printf '  captured bytes:  %s\n' "$(wc -c < $out/captured.bytes)" >> $out/witness.txt
+                printf '  decoded nota:    %s\n' "$(cat $out/stamped.nota)" >> $out/witness.txt
+                printf '  expected origin: External(Owner) (Nix builder uid)\n' >> $out/witness.txt
+              '';
 
           wire-chain-summary = context.pkgs.runCommand "wire-chain-summary" { } ''
             mkdir -p $out
@@ -947,190 +1003,199 @@
           # bytes, decodes the reply through the shim, asserts the
           # typed shape. No PTY, no harness, no message-daemon
           # required — the router is the single component under test.
-          persona-router-daemon-accepts-stamped-submission = context.pkgs.runCommand "persona-router-daemon-accepts-stamped-submission" {
-            nativeBuildInputs = [ context.pkgs.coreutils ];
-          } ''
-            set -euo pipefail
-            workdir="$(mktemp -d)"
-            router_socket="$workdir/router.sock"
-            router_stderr="$workdir/router.stderr"
+          persona-router-daemon-accepts-stamped-submission =
+            context.pkgs.runCommand "persona-router-daemon-accepts-stamped-submission"
+              {
+                nativeBuildInputs = [ context.pkgs.coreutils ];
+              }
+              ''
+                set -euo pipefail
+                workdir="$(mktemp -d)"
+                router_socket="$workdir/router.sock"
+                router_stderr="$workdir/router.stderr"
 
-            ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon \
-              daemon --socket "$router_socket" 2> "$router_stderr" &
-            router_pid=$!
+                ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon \
+                  daemon --socket "$router_socket" 2> "$router_stderr" &
+                router_pid=$!
 
-            for _ in $(seq 1 100); do
-              [ -S "$router_socket" ] && break
-              sleep 0.05
-            done
-            test -S "$router_socket"
+                for _ in $(seq 1 100); do
+                  [ -S "$router_socket" ] && break
+                  sleep 0.05
+                done
+                test -S "$router_socket"
 
-            request_bytes="$workdir/request.bytes"
-            reply_bytes="$workdir/reply.bytes"
+                request_bytes="$workdir/request.bytes"
+                reply_bytes="$workdir/reply.bytes"
 
-            ${personaShims}/bin/wire-emit-message \
-              --variant stamped \
-              --recipient resp \
-              --body 'router-accepts-stamped' \
-              --origin external:owner \
-              --stamped-at 1 \
-              > "$request_bytes"
+                ${personaShims}/bin/wire-emit-message \
+                  --variant stamped \
+                  --recipient resp \
+                  --body 'router-accepts-stamped' \
+                  --origin external:owner \
+                  --stamped-at 1 \
+                  > "$request_bytes"
 
-            ${personaShims}/bin/wire-router-client \
-              --socket "$router_socket" \
-              < "$request_bytes" \
-              > "$reply_bytes"
+                ${personaShims}/bin/wire-router-client \
+                  --socket "$router_socket" \
+                  < "$request_bytes" \
+                  > "$reply_bytes"
 
-            kill "$router_pid" 2>/dev/null || true
-            wait "$router_pid" 2>/dev/null || true
+                kill "$router_pid" 2>/dev/null || true
+                wait "$router_pid" 2>/dev/null || true
 
-            ${personaShims}/bin/wire-decode-message-reply \
-              --expect submission-accepted \
-              --expect-slot 1 \
-              --capture-nota "$workdir/reply.nota" \
-              < "$reply_bytes"
+                ${personaShims}/bin/wire-decode-message-reply \
+                  --expect submission-accepted \
+                  --expect-slot 1 \
+                  --capture-nota "$workdir/reply.nota" \
+                  < "$reply_bytes"
 
-            mkdir -p $out
-            cp "$request_bytes" $out/request.bytes
-            cp "$reply_bytes" $out/reply.bytes
-            cp "$workdir/reply.nota" $out/reply.nota
-            cp "$router_stderr" $out/router.stderr
-            printf 'router accepted stamped submission at slot 1\n' > $out/witness.txt
-            printf '  request bytes:  %s\n' "$(wc -c < $out/request.bytes)" >> $out/witness.txt
-            printf '  reply bytes:    %s\n' "$(wc -c < $out/reply.bytes)" >> $out/witness.txt
-            printf '  reply nota:     %s\n' "$(cat $out/reply.nota)" >> $out/witness.txt
-          '';
-          persona-router-daemon-rejects-unstamped-submission = context.pkgs.runCommand "persona-router-daemon-rejects-unstamped-submission" {
-            nativeBuildInputs = [ context.pkgs.coreutils ];
-          } ''
-            set -euo pipefail
-            workdir="$(mktemp -d)"
-            router_socket="$workdir/router.sock"
-            router_stderr="$workdir/router.stderr"
+                mkdir -p $out
+                cp "$request_bytes" $out/request.bytes
+                cp "$reply_bytes" $out/reply.bytes
+                cp "$workdir/reply.nota" $out/reply.nota
+                cp "$router_stderr" $out/router.stderr
+                printf 'router accepted stamped submission at slot 1\n' > $out/witness.txt
+                printf '  request bytes:  %s\n' "$(wc -c < $out/request.bytes)" >> $out/witness.txt
+                printf '  reply bytes:    %s\n' "$(wc -c < $out/reply.bytes)" >> $out/witness.txt
+                printf '  reply nota:     %s\n' "$(cat $out/reply.nota)" >> $out/witness.txt
+              '';
+          persona-router-daemon-rejects-unstamped-submission =
+            context.pkgs.runCommand "persona-router-daemon-rejects-unstamped-submission"
+              {
+                nativeBuildInputs = [ context.pkgs.coreutils ];
+              }
+              ''
+                set -euo pipefail
+                workdir="$(mktemp -d)"
+                router_socket="$workdir/router.sock"
+                router_stderr="$workdir/router.stderr"
 
-            ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon \
-              daemon --socket "$router_socket" 2> "$router_stderr" &
-            router_pid=$!
+                ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon \
+                  daemon --socket "$router_socket" 2> "$router_stderr" &
+                router_pid=$!
 
-            for _ in $(seq 1 100); do
-              [ -S "$router_socket" ] && break
-              sleep 0.05
-            done
-            test -S "$router_socket"
+                for _ in $(seq 1 100); do
+                  [ -S "$router_socket" ] && break
+                  sleep 0.05
+                done
+                test -S "$router_socket"
 
-            reply_bytes="$workdir/reply.bytes"
+                reply_bytes="$workdir/reply.bytes"
 
-            # Send a raw MessageSubmission (NOT stamped) — the router
-            # contract says only StampedMessageSubmission may be
-            # accepted; raw submissions get MessageRequestUnimplemented.
-            # This is the signal-catching negative test: confirms the
-            # daemon does not silently accept unstamped traffic.
-            ${personaShims}/bin/wire-emit-message \
-              --recipient resp \
-              --body 'router-rejects-unstamped' \
-              | ${personaShims}/bin/wire-router-client \
-                --socket "$router_socket" \
-                > "$reply_bytes"
+                # Send a raw MessageSubmission (NOT stamped) — the router
+                # contract says only StampedMessageSubmission may be
+                # accepted; raw submissions get MessageRequestUnimplemented.
+                # This is the signal-catching negative test: confirms the
+                # daemon does not silently accept unstamped traffic.
+                ${personaShims}/bin/wire-emit-message \
+                  --recipient resp \
+                  --body 'router-rejects-unstamped' \
+                  | ${personaShims}/bin/wire-router-client \
+                    --socket "$router_socket" \
+                    > "$reply_bytes"
 
-            kill "$router_pid" 2>/dev/null || true
-            wait "$router_pid" 2>/dev/null || true
+                kill "$router_pid" 2>/dev/null || true
+                wait "$router_pid" 2>/dev/null || true
 
-            ${personaShims}/bin/wire-decode-message-reply \
-              --expect unimplemented \
-              --expect-operation submission \
-              --capture-nota "$workdir/reply.nota" \
-              < "$reply_bytes"
+                ${personaShims}/bin/wire-decode-message-reply \
+                  --expect unimplemented \
+                  --expect-operation submission \
+                  --capture-nota "$workdir/reply.nota" \
+                  < "$reply_bytes"
 
-            mkdir -p $out
-            cp "$reply_bytes" $out/reply.bytes
-            cp "$workdir/reply.nota" $out/reply.nota
-            cp "$router_stderr" $out/router.stderr
-            printf 'router rejected unstamped submission (signal caught)\n' > $out/witness.txt
-            printf '  reply nota:     %s\n' "$(cat $out/reply.nota)" >> $out/witness.txt
-          '';
-          persona-router-daemon-serves-inbox-after-submit = context.pkgs.runCommand "persona-router-daemon-serves-inbox-after-submit" {
-            nativeBuildInputs = [ context.pkgs.coreutils ];
-          } ''
-            set -euo pipefail
-            workdir="$(mktemp -d)"
-            router_socket="$workdir/router.sock"
-            router_stderr="$workdir/router.stderr"
+                mkdir -p $out
+                cp "$reply_bytes" $out/reply.bytes
+                cp "$workdir/reply.nota" $out/reply.nota
+                cp "$router_stderr" $out/router.stderr
+                printf 'router rejected unstamped submission (signal caught)\n' > $out/witness.txt
+                printf '  reply nota:     %s\n' "$(cat $out/reply.nota)" >> $out/witness.txt
+              '';
+          persona-router-daemon-serves-inbox-after-submit =
+            context.pkgs.runCommand "persona-router-daemon-serves-inbox-after-submit"
+              {
+                nativeBuildInputs = [ context.pkgs.coreutils ];
+              }
+              ''
+                set -euo pipefail
+                workdir="$(mktemp -d)"
+                router_socket="$workdir/router.sock"
+                router_stderr="$workdir/router.stderr"
 
-            ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon \
-              daemon --socket "$router_socket" 2> "$router_stderr" &
-            router_pid=$!
+                ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon \
+                  daemon --socket "$router_socket" 2> "$router_stderr" &
+                router_pid=$!
 
-            for _ in $(seq 1 100); do
-              [ -S "$router_socket" ] && break
-              sleep 0.05
-            done
-            test -S "$router_socket"
+                for _ in $(seq 1 100); do
+                  [ -S "$router_socket" ] && break
+                  sleep 0.05
+                done
+                test -S "$router_socket"
 
-            # Step 1: submit a stamped message. Recipient is not
-            # registered through bootstrap, so delivery silently
-            # fails and the message stays pending in the router's
-            # inbox — exactly the shape the InboxQuery is designed
-            # to read.
-            submit_request="$workdir/submit-request.bytes"
-            submit_reply="$workdir/submit-reply.bytes"
+                # Step 1: submit a stamped message. Recipient is not
+                # registered through bootstrap, so delivery silently
+                # fails and the message stays pending in the router's
+                # inbox — exactly the shape the InboxQuery is designed
+                # to read.
+                submit_request="$workdir/submit-request.bytes"
+                submit_reply="$workdir/submit-reply.bytes"
 
-            ${personaShims}/bin/wire-emit-message \
-              --variant stamped \
-              --recipient resp \
-              --body 'router-inbox-chain-body' \
-              --origin external:owner \
-              --stamped-at 7 \
-              > "$submit_request"
+                ${personaShims}/bin/wire-emit-message \
+                  --variant stamped \
+                  --recipient resp \
+                  --body 'router-inbox-chain-body' \
+                  --origin external:owner \
+                  --stamped-at 7 \
+                  > "$submit_request"
 
-            ${personaShims}/bin/wire-router-client \
-              --socket "$router_socket" \
-              < "$submit_request" \
-              > "$submit_reply"
+                ${personaShims}/bin/wire-router-client \
+                  --socket "$router_socket" \
+                  < "$submit_request" \
+                  > "$submit_reply"
 
-            ${personaShims}/bin/wire-decode-message-reply \
-              --expect submission-accepted \
-              --expect-slot 1 \
-              --capture-nota "$workdir/submit-reply.nota" \
-              < "$submit_reply"
+                ${personaShims}/bin/wire-decode-message-reply \
+                  --expect submission-accepted \
+                  --expect-slot 1 \
+                  --capture-nota "$workdir/submit-reply.nota" \
+                  < "$submit_reply"
 
-            # Step 2: query the inbox. The router must return the
-            # pending message at slot 1 with the original body.
-            query_request="$workdir/query-request.bytes"
-            query_reply="$workdir/query-reply.bytes"
+                # Step 2: query the inbox. The router must return the
+                # pending message at slot 1 with the original body.
+                query_request="$workdir/query-request.bytes"
+                query_reply="$workdir/query-reply.bytes"
 
-            ${personaShims}/bin/wire-emit-message \
-              --variant inbox-query \
-              --recipient resp \
-              --body ignored \
-              > "$query_request"
+                ${personaShims}/bin/wire-emit-message \
+                  --variant inbox-query \
+                  --recipient resp \
+                  --body ignored \
+                  > "$query_request"
 
-            ${personaShims}/bin/wire-router-client \
-              --socket "$router_socket" \
-              < "$query_request" \
-              > "$query_reply"
+                ${personaShims}/bin/wire-router-client \
+                  --socket "$router_socket" \
+                  < "$query_request" \
+                  > "$query_reply"
 
-            kill "$router_pid" 2>/dev/null || true
-            wait "$router_pid" 2>/dev/null || true
+                kill "$router_pid" 2>/dev/null || true
+                wait "$router_pid" 2>/dev/null || true
 
-            ${personaShims}/bin/wire-decode-message-reply \
-              --expect inbox-listing \
-              --expect-entry-count 1 \
-              --expect-entry-body 'router-inbox-chain-body' \
-              --capture-nota "$workdir/query-reply.nota" \
-              < "$query_reply"
+                ${personaShims}/bin/wire-decode-message-reply \
+                  --expect inbox-listing \
+                  --expect-entry-count 1 \
+                  --expect-entry-body 'router-inbox-chain-body' \
+                  --capture-nota "$workdir/query-reply.nota" \
+                  < "$query_reply"
 
-            mkdir -p $out
-            cp "$submit_request" $out/submit-request.bytes
-            cp "$submit_reply"   $out/submit-reply.bytes
-            cp "$workdir/submit-reply.nota" $out/submit-reply.nota
-            cp "$query_request" $out/query-request.bytes
-            cp "$query_reply"   $out/query-reply.bytes
-            cp "$workdir/query-reply.nota"  $out/query-reply.nota
-            cp "$router_stderr" $out/router.stderr
-            printf 'router served inbox after stamped submit\n' > $out/witness.txt
-            printf '  submit reply:  %s\n' "$(cat $out/submit-reply.nota)" >> $out/witness.txt
-            printf '  query  reply:  %s\n' "$(cat $out/query-reply.nota)" >> $out/witness.txt
-          '';
+                mkdir -p $out
+                cp "$submit_request" $out/submit-request.bytes
+                cp "$submit_reply"   $out/submit-reply.bytes
+                cp "$workdir/submit-reply.nota" $out/submit-reply.nota
+                cp "$query_request" $out/query-request.bytes
+                cp "$query_reply"   $out/query-reply.bytes
+                cp "$workdir/query-reply.nota"  $out/query-reply.nota
+                cp "$router_stderr" $out/router.stderr
+                printf 'router served inbox after stamped submit\n' > $out/witness.txt
+                printf '  submit reply:  %s\n' "$(cat $out/submit-reply.nota)" >> $out/witness.txt
+                printf '  query  reply:  %s\n' "$(cat $out/query-reply.nota)" >> $out/witness.txt
+              '';
           persona-dev-stack-script-builds = context.pkgs.runCommand "persona-dev-stack-script-builds" { } ''
             test -x ${self.packages.${system}.persona-dev-stack}/bin/persona-dev-stack
             test -x ${self.packages.${system}.persona-dev-stack-smoke}/bin/persona-dev-stack-smoke
@@ -1376,15 +1441,13 @@
               cargoTestExtraArgs = "--test engine constraint_engine_layout_can_select_message_router_topology -- --exact";
             }
           );
-          persona-engine-layout-allocates-three-harness-chain-instances =
-            context.craneLib.cargoTest
-              (
-                context.commonArgs
-                // {
-                  inherit (context) cargoArtifacts;
-                  cargoTestExtraArgs = "--test engine constraint_three_harness_chain_topology_allocates_distinct_instances -- --exact";
-                }
-              );
+          persona-engine-layout-allocates-three-harness-chain-instances = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test engine constraint_three_harness_chain_topology_allocates_distinct_instances -- --exact";
+            }
+          );
           persona-spawn-envelope-carries-component-paths-and-peer-sockets = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -1392,15 +1455,13 @@
               cargoTestExtraArgs = "--test engine constraint_spawn_envelope_carries_component_paths_and_peer_sockets -- --exact";
             }
           );
-          persona-message-router-topology-spawn-envelope-has-one-peer-socket =
-            context.craneLib.cargoTest
-              (
-                context.commonArgs
-                // {
-                  inherit (context) cargoArtifacts;
-                  cargoTestExtraArgs = "--test engine constraint_message_router_topology_spawn_envelope_has_one_peer_socket -- --exact";
-                }
-              );
+          persona-message-router-topology-spawn-envelope-has-one-peer-socket = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test engine constraint_message_router_topology_spawn_envelope_has_one_peer_socket -- --exact";
+            }
+          );
           persona-three-harness-chain-spawn-envelope-pairs-harness-with-named-terminal =
             context.craneLib.cargoTest
               (
@@ -1454,15 +1515,13 @@
                   cargoTestExtraArgs = "--test manager_store constraint_engine_manager_persists_component_mutation_through_manager_store -- --exact";
                 }
               );
-          persona-engine-manager-restores-persisted-snapshot-before-status =
-            context.craneLib.cargoTest
-              (
-                context.commonArgs
-                // {
-                  inherit (context) cargoArtifacts;
-                  cargoTestExtraArgs = "--test manager_store constraint_engine_manager_restores_persisted_snapshot_before_answering_status -- --exact";
-                }
-              );
+          persona-engine-manager-restores-persisted-snapshot-before-status = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test manager_store constraint_engine_manager_restores_persisted_snapshot_before_answering_status -- --exact";
+            }
+          );
           persona-engine-event-log-records-typed-manager-events = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -1477,33 +1536,27 @@
               cargoTestExtraArgs = "--test manager_store constraint_engine_event_log_nota_projection_is_view -- --exact";
             }
           );
-          persona-manager-store-reduces-lifecycle-events-into-snapshots =
-            context.craneLib.cargoTest
-              (
-                context.commonArgs
-                // {
-                  inherit (context) cargoArtifacts;
-                  cargoTestExtraArgs = "--test manager_store constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables -- --exact";
-                }
-              );
-          persona-engine-manager-hydrates-component-health-from-snapshot =
-            context.craneLib.cargoTest
-              (
-                context.commonArgs
-                // {
-                  inherit (context) cargoArtifacts;
-                  cargoTestExtraArgs = "--test manager_store constraint_engine_manager_hydrates_component_health_from_snapshot -- --exact";
-                }
-              );
-          persona-manager-store-rebuilds-snapshots-from-event-log =
-            context.craneLib.cargoTest
-              (
-                context.commonArgs
-                // {
-                  inherit (context) cargoArtifacts;
-                  cargoTestExtraArgs = "--test manager_store constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapshot_truncation -- --exact";
-                }
-              );
+          persona-manager-store-reduces-lifecycle-events-into-snapshots = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test manager_store constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables -- --exact";
+            }
+          );
+          persona-engine-manager-hydrates-component-health-from-snapshot = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test manager_store constraint_engine_manager_hydrates_component_health_from_snapshot -- --exact";
+            }
+          );
+          persona-manager-store-rebuilds-snapshots-from-event-log = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test manager_store constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapshot_truncation -- --exact";
+            }
+          );
           persona-manager-store-close-protocol-releases-redb-lock-before-shutdown =
             context.craneLib.cargoTest
               (
@@ -1513,15 +1566,13 @@
                   cargoTestExtraArgs = "--test manager_store constraint_manager_store_close_protocol_releases_redb_lock_before_shutdown -- --exact";
                 }
               );
-          persona-manager-startup-appends-orphaned-events-for-unfinished-spawn =
-            context.craneLib.cargoTest
-              (
-                context.commonArgs
-                // {
-                  inherit (context) cargoArtifacts;
-                  cargoTestExtraArgs = "--test manager_store constraint_manager_startup_appends_component_orphaned_for_unfinished_spawn -- --exact";
-                }
-              );
+          persona-manager-startup-appends-orphaned-events-for-unfinished-spawn = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test manager_store constraint_manager_startup_appends_component_orphaned_for_unfinished_spawn -- --exact";
+            }
+          );
           persona-manager-store-event-append-and-snapshot-reduce-share-one-transaction =
             context.craneLib.cargoTest
               (
@@ -1531,24 +1582,20 @@
                   cargoTestExtraArgs = "--test manager_store constraint_event_append_and_snapshot_reduce_share_one_write_transaction -- --exact";
                 }
               );
-          persona-component-ready-requires-socket-metadata-from-spawn-envelope =
-            context.craneLib.cargoTest
-              (
-                context.commonArgs
-                // {
-                  inherit (context) cargoArtifacts;
-                  cargoTestExtraArgs = "--test readiness constraint_component_ready_requires_socket_metadata_from_spawn_envelope -- --exact";
-                }
-              );
-          persona-component-ready-rejects-wrong-socket-mode =
-            context.craneLib.cargoTest
-              (
-                context.commonArgs
-                // {
-                  inherit (context) cargoArtifacts;
-                  cargoTestExtraArgs = "--test readiness constraint_component_ready_rejects_wrong_socket_mode -- --exact";
-                }
-              );
+          persona-component-ready-requires-socket-metadata-from-spawn-envelope = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test readiness constraint_component_ready_requires_socket_metadata_from_spawn_envelope -- --exact";
+            }
+          );
+          persona-component-ready-rejects-wrong-socket-mode = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test readiness constraint_component_ready_rejects_wrong_socket_mode -- --exact";
+            }
+          );
           persona-component-launcher-does-not-block-manager-mailbox = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -1619,16 +1666,14 @@
                   cargoTestExtraArgs = "--test supervisor constraint_engine_supervisor_launches_message_router_topology_without_full_stack -- --exact";
                 }
               );
-          persona-engine-supervisor-launches-three-harness-chain-instances =
-            context.craneLib.cargoTest
-              (
-                context.commonArgs
-                // {
-                  inherit (context) cargoArtifacts;
-                  PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
-                  cargoTestExtraArgs = "--test supervisor constraint_engine_supervisor_launches_three_harness_chain_instances -- --exact";
-                }
-              );
+          persona-engine-supervisor-launches-three-harness-chain-instances = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+              cargoTestExtraArgs = "--test supervisor constraint_engine_supervisor_launches_three_harness_chain_instances -- --exact";
+            }
+          );
           persona-daemon-persists-cli-mutation-to-manager-store = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -1951,11 +1996,14 @@
                 touch "$out/passed"
               '';
           persona-daemon-three-harness-chain-smoke-script-builds =
-            context.pkgs.runCommand "persona-daemon-three-harness-chain-smoke-script-builds" { } ''
-              test -x ${self.packages.${system}.persona-daemon-three-harness-chain-smoke}/bin/persona-daemon-three-harness-chain-smoke
-              mkdir -p "$out"
-              touch "$out/passed"
-            '';
+            context.pkgs.runCommand "persona-daemon-three-harness-chain-smoke-script-builds" { }
+              ''
+                test -x ${
+                  self.packages.${system}.persona-daemon-three-harness-chain-smoke
+                }/bin/persona-daemon-three-harness-chain-smoke
+                mkdir -p "$out"
+                touch "$out/passed"
+              '';
         }
       );
 

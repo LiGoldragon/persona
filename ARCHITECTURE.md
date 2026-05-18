@@ -31,11 +31,10 @@ sends one length-prefixed `signal-persona` frame to `persona-daemon`, waits for 
 typed reply frame, renders one NOTA reply record, and exits. `persona-daemon` owns
 the live Kameo `EngineManager` actor for the daemon lifetime.
 
-The center of agent state is `persona-mind`: the daemon-backed state component
-for role coordination, activity, work memory, decisions, aliases, and
-ready/blocked views. The command-line surface for that state is the `mind`
-binary: one NOTA request record in, one NOTA reply record out, with the CLI
-acting as a thin client to the daemon.
+The center of mind state is `persona-mind`: the daemon-backed state component
+for work memory, typed thoughts, relations, decisions, aliases, subscriptions,
+choreography policy, and ready/blocked views. Ordinary role claims, handoffs,
+and role activity live in `persona-orchestrate`.
 
 The architecture is contract-first. A wire boundary is defined in a dedicated
 `signal-persona-*` repository before producer and consumer implementations
@@ -174,29 +173,27 @@ consumer.
 
 ## 0.8 · Persona-orchestrate slot
 
-`persona-orchestrate` is the planned orchestration-machinery component:
-agent spawning, supervision, scheduling, escalation, and executor
-lifecycle. `persona-mind` remains the authority root and state owner for
-role/work records; orchestrate is the machinery that carries out mind's
+`persona-orchestrate` is the orchestration-machinery component: ordinary role
+claims, handoffs, activity, agent spawning, supervision, scheduling,
+escalation, and executor lifecycle. `persona-mind` remains the authority root
+for central mind state; orchestrate is the machinery that carries out mind's
 down-tree `Mutate` orders.
 
-The engine manager now reserves the component principal, component kind,
-socket names, state path, spawn envelope mapping, and a small
-`mind-orchestrate` topology. The default prototype topology does not launch
-orchestrate until the `signal-persona-orchestrate` contract and
-`persona-orchestrate` runtime repo land. That keeps today's sandbox honest
-while giving SOA's `tools/orchestrate` Rust port and the upcoming
-orchestrate component a tested engine slot to target.
+The engine manager wires the component principal, component kind, socket names,
+state path, spawn envelope mapping, Nix input, package/check outputs, prototype
+launcher, and the small `mind-orchestrate` topology. The default prototype
+topology still does not launch orchestrate; the `mind-orchestrate` topology does
+when `PERSONA_ORCHESTRATE_EXECUTABLE` points at the launcher or daemon.
 
 ## 1 · Component Map
 
 | Repository | Role |
 |---|---|
 | `persona` | Engine manager, `persona-daemon` home, apex Nix/deployment/test composition, and meta architecture. |
-| `persona-mind` | Central state component and command-line mind runtime. |
-| `signal-persona-mind` | Typed contract for role coordination, activity, and work graph operations. |
-| `persona-orchestrate` | Planned orchestration machinery component: spawn/supervise/schedule/escalate agents under mind authority. |
-| `signal-persona-orchestrate` | Planned contract for orchestrate machinery orders, confirmations, and lifecycle streams. |
+| `persona-mind` | Central mind-state component and command-line mind runtime: work graph, typed thoughts/relations, subscriptions, and choreography policy. |
+| `signal-persona-mind` | Typed contract for central mind state, work graph operations, typed thoughts/relations, subscriptions, and channel choreography. |
+| `persona-orchestrate` | Orchestration machinery component: ordinary role claims, handoffs, activity, and future spawn/supervise/schedule/escalate execution under mind authority. |
+| `signal-persona-orchestrate` | Typed contract for ordinary role/activity orchestration records. |
 | `persona-router` | Message routing, delivery state, gate state, and pending-delivery decisions. |
 | `persona-message` | Message ingress component: `message` NOTA CLI plus supervised `persona-message-daemon`; the daemon forwards typed message frames to the internal router socket. |
 | `persona-system` | System/window focus observation adapters. |
@@ -466,8 +463,9 @@ launch resolves every component command before spawn and fails closed if a
 required binary is missing or ambiguous.
 
 The current prototype bridge is
-`packages.<system>.persona-prototype-component-launchers`: seven Nix-built
-launcher scripts, one per prototype-supervised component. Each launcher adapts
+`packages.<system>.persona-prototype-component-launchers`: Nix-built launcher
+scripts for the seven default prototype-supervised components plus
+`persona-orchestrate` for the `mind-orchestrate` topology. Each launcher adapts
 the manager's common spawn-envelope environment
 (`PERSONA_ENGINE_ID`, `PERSONA_COMPONENT`, `PERSONA_STATE_PATH`,
 `PERSONA_DOMAIN_SOCKET_PATH`, `PERSONA_SUPERVISION_SOCKET_PATH`,
@@ -781,9 +779,9 @@ Output:
 ```
 
 `tools/orchestrate` may remain as external cutover glue while agents
-transition. It should lower ergonomic commands into the same
-`signal-persona-mind` request records, send them through the `mind` client
-path, and stop treating lock files as authoritative state.
+transition. It should lower ergonomic commands into
+`signal-persona-orchestrate` request records, send them through the
+orchestrate client path, and stop treating lock files as authoritative state.
 
 ## 3 · Wire Vocabulary
 
@@ -858,11 +856,12 @@ The central split:
 
 | Component | Owns | Does not own |
 |---|---|---|
-| `persona-mind` | role state, activity, work graph, decisions, aliases, ready/blocked views. | message delivery, terminal sessions, system focus facts. |
+| `persona-mind` | work graph, typed thoughts/relations, subscriptions, decisions, aliases, choreography policy, ready/blocked views. | ordinary role/activity ledger, message delivery, terminal sessions, system focus facts. |
+| `persona-orchestrate` | ordinary role claims, handoffs, activity, and execution orchestration. | central work graph, message delivery, terminal sessions, system focus facts. |
 | `persona-router` | message routing, delivery queue, delivery gate state, message durability. | role claims, work graph, harness process lifecycle. |
 | `persona-system` | OS/window focus observations. | router decisions, mind state, harness delivery, terminal prompt/input gates. |
 | `persona-harness` | harness identity, lifecycle, injection/observation adapter boundary. | router policy, central work graph. |
-| `persona-terminal` | durable PTY/session ownership, visible viewer adapters, and raw terminal byte transport. | Persona delivery policy or role state. |
+| `persona-terminal` | durable PTY/session ownership, visible viewer adapters, and raw terminal byte transport. | Persona delivery policy or role/activity state. |
 
 `persona-mind` is not a router. `persona-router` is not the central project
 memory. The two communicate through explicit contracts when they need each
@@ -949,17 +948,19 @@ workspace. They are not the destination architecture.
 
 Do not implement lock-file projections in Persona. The current lock files are
 part of the temporary operator workflow and will be retired when agents switch
-to the command-line mind. `persona-mind` stores typed role state; it does not
-write lock files as a compatibility feature.
+to `persona-orchestrate` for role/activity and `persona-mind` for central work
+state. Neither component writes lock files as a compatibility feature.
 
 Destination:
 
 ```mermaid
 graph LR
-    claim[RoleClaim] --> mind[persona mind]
-    mind --> db[mind redb]
-    db --> role_view[RoleSnapshot]
-    db --> work_view[Ready work view]
+    claim[RoleClaim] --> orchestrate[persona orchestrate]
+    orchestrate --> orchestrate_db[orchestrate redb]
+    orchestrate_db --> role_view[RoleSnapshot]
+    work[Opening / Thought] --> mind[persona mind]
+    mind --> mind_db[mind redb]
+    mind_db --> work_view[Ready work view]
 ```
 
 Migration rules:
@@ -1283,8 +1284,8 @@ The apex repo owns tests that prove cross-component shape:
 | Invariant | Witness |
 |---|---|
 | `mind` uses the mind contract | CLI decodes into `signal-persona-mind::MindRequest`. |
-| `tools/orchestrate` is external cutover glue | wrapper output reaches the same `mind` path; it is not a Persona component. |
-| mind owns role state | lock files are absent and role claims still work. |
+| orchestrate owns ordinary role/activity state | lock files are absent and role claims route to `signal-persona-orchestrate`. |
+| mind owns central work state | work graph requests route to `signal-persona-mind`. |
 | router commits before delivery | delivery trace follows durable router commit. |
 | router does not own terminal transport | router dependency graph excludes `persona-terminal` and `terminal-cell`. |
 | component databases are separate | router/mind/harness open distinct redb files. |
