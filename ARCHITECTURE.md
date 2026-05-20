@@ -201,7 +201,8 @@ when `PERSONA_ORCHESTRATE_EXECUTABLE` points at the launcher or daemon.
 | `persona-terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. It exposes an ordinary terminal communication surface, an owner-only terminal lifecycle surface, plus one supervision socket. |
 | `terminal-cell` | Low-level PTY/transcript library consumed by `persona-terminal`; standalone daemon form is a development/test harness. |
 | `sema` | Typed database kernel library over redb/rkyv. |
-| `signal-core` | Signal wire kernel: frames, channel macro, shared wire primitives. |
+| `signal-frame` | Signal wire kernel: frames, exchange identifiers, handshake, channel macro. (Renamed from `signal-core`.) |
+| `signal-sema` | Universal payloadless Sema classification labels (`Assert` / `Mutate` / `Retract` / `Match` / `Subscribe` / `Validate`) used for observation only; `PatternField<T>`, `Slot<T>`, `Revision` primitives. |
 | `signal-persona` | Management contract for the `persona` engine manager. |
 | `signal-persona-message` | Message ingress contract. |
 | `signal-persona-system` | System observation contract. |
@@ -1399,10 +1400,14 @@ through the same Signal verb spine as everything else:
    `Assert` on the catalog row that announces the type is now
    live.
 
-The flow uses only the six `SignalVerb` roots; there is no new
-"declare a type" verb. The type-system mutation happens in the Rust
-source layer, out-of-band from the Signal wire. The wire sees only
-the proposal-record traffic and the post-deploy catalog announcement.
+The flow uses only the existing contract-local verbs in each
+component's `signal-*` contract — there is no new "declare a type"
+verb. The type-system mutation happens in the Rust source layer,
+out-of-band from the Signal wire. The wire sees only the
+proposal-record traffic and the post-deploy catalog announcement.
+(Daemon-side, the Component Commands project to Sema classes for
+observation; the universal Sema classification labels — `Assert`,
+`Mutate`, etc. — live in `signal-sema` and are payloadless.)
 
 ### 10.2 · Multi-version runtime + translator nodes (long-term)
 
