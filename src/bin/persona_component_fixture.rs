@@ -5,12 +5,14 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
-use signal_core::{ExchangeIdentifier, NonEmpty, Reply, SignalVerb, SubReply};
+use signal_frame::{ExchangeIdentifier, NonEmpty, Reply, SubReply};
+use signal_persona::engine_management::{
+    Frame as EngineManagementFrame, FrameBody, Operation as EngineManagementRequest,
+    Query as EngineManagementQuery, Reply as EngineManagementReply,
+};
 use signal_persona::{
-    ComponentHealth, ComponentHealthQuery, ComponentHealthReport, ComponentHello,
-    ComponentIdentity, ComponentKind, ComponentName, ComponentReadinessQuery, ComponentReady,
-    GracefulStopAcknowledgement, SupervisionFrame, SupervisionFrameBody as FrameBody,
-    SupervisionProtocolVersion, SupervisionReply, SupervisionRequest,
+    ComponentHealth, ComponentHealthReport, ComponentIdentity, ComponentKind, ComponentName,
+    ComponentReady, EngineManagementProtocolVersion, StopAcknowledgement,
 };
 
 struct FixtureProcess {
@@ -213,33 +215,33 @@ impl SupervisionServer {
         while let Ok(request) = self.codec.read_request(stream) {
             let reply = self.reply_to(request.request);
             self.codec
-                .write_reply(stream, request.exchange, request.verb, reply)
+                .write_reply(stream, request.exchange, reply)
                 .expect("write supervision reply");
         }
     }
 
-    fn reply_to(&self, request: SupervisionRequest) -> SupervisionReply {
+    fn reply_to(&self, request: EngineManagementRequest) -> EngineManagementReply {
         match request {
-            SupervisionRequest::ComponentHello(ComponentHello { .. }) => {
-                SupervisionReply::ComponentIdentity(ComponentIdentity {
+            EngineManagementRequest::Announce(_) => {
+                EngineManagementReply::Identified(ComponentIdentity {
                     name: self.component.signal_name.clone(),
                     kind: self.component.kind,
-                    supervision_protocol_version: SupervisionProtocolVersion::new(1),
+                    engine_management_protocol_version: EngineManagementProtocolVersion::new(1),
                     last_fatal_startup_error: None,
                 })
             }
-            SupervisionRequest::ComponentReadinessQuery(ComponentReadinessQuery { .. }) => {
-                SupervisionReply::ComponentReady(ComponentReady {
+            EngineManagementRequest::Query(EngineManagementQuery::ReadinessStatus(_)) => {
+                EngineManagementReply::Ready(ComponentReady {
                     component_started_at: None,
                 })
             }
-            SupervisionRequest::ComponentHealthQuery(ComponentHealthQuery { .. }) => {
-                SupervisionReply::ComponentHealthReport(ComponentHealthReport {
+            EngineManagementRequest::Query(EngineManagementQuery::HealthStatus(_)) => {
+                EngineManagementReply::HealthReport(ComponentHealthReport {
                     health: ComponentHealth::Running,
                 })
             }
-            SupervisionRequest::GracefulStopRequest(_) => {
-                SupervisionReply::GracefulStopAcknowledgement(GracefulStopAcknowledgement {
+            EngineManagementRequest::Stop(_) => {
+                EngineManagementReply::StopAcknowledged(StopAcknowledgement {
                     drain_completed_at: None,
                 })
             }
@@ -262,14 +264,11 @@ impl BlockingSupervisionCodec {
     fn read_request(
         &self,
         stream: &mut std::os::unix::net::UnixStream,
-    ) -> std::io::Result<ReceivedSupervisionRequest> {
+    ) -> std::io::Result<ReceivedEngineManagementRequest> {
         let frame = self.read_frame(stream)?;
         match frame.into_body() {
             FrameBody::Request { exchange, request } => {
-                let checked = request
-                    .into_checked()
-                    .map_err(|(error, _request)| io_error(error))?;
-                let mut operations = checked.operations.into_vec();
+                let mut operations = request.payloads.into_vec();
                 if operations.len() != 1 {
                     return Err(io_error(format!(
                         "supervision fixture expects one request operation, got {}",
@@ -277,10 +276,9 @@ impl BlockingSupervisionCodec {
                     )));
                 }
                 let operation = operations.remove(0);
-                Ok(ReceivedSupervisionRequest {
+                Ok(ReceivedEngineManagementRequest {
                     exchange,
-                    verb: operation.verb,
-                    request: operation.payload,
+                    request: operation,
                 })
             }
             other => Err(io_error(format!("unexpected supervision frame: {other:?}"))),
@@ -291,15 +289,11 @@ impl BlockingSupervisionCodec {
         &self,
         stream: &mut std::os::unix::net::UnixStream,
         exchange: ExchangeIdentifier,
-        verb: SignalVerb,
-        reply: SupervisionReply,
+        reply: EngineManagementReply,
     ) -> std::io::Result<()> {
-        let frame = SupervisionFrame::new(FrameBody::Reply {
+        let frame = EngineManagementFrame::new(FrameBody::Reply {
             exchange,
-            reply: Reply::completed(NonEmpty::single(SubReply::Ok {
-                verb,
-                payload: reply,
-            })),
+            reply: Reply::committed(NonEmpty::single(SubReply::Ok(reply))),
         });
         self.write_frame(stream, &frame)
     }
@@ -307,7 +301,7 @@ impl BlockingSupervisionCodec {
     fn read_frame(
         &self,
         stream: &mut std::os::unix::net::UnixStream,
-    ) -> std::io::Result<SupervisionFrame> {
+    ) -> std::io::Result<EngineManagementFrame> {
         use std::io::Read;
 
         let mut prefix = [0_u8; 4];
@@ -321,13 +315,16 @@ impl BlockingSupervisionCodec {
         bytes.extend_from_slice(&prefix);
         bytes.resize(4 + length, 0);
         stream.read_exact(&mut bytes[4..])?;
-        Ok(SupervisionFrame::decode_length_prefixed(&bytes).expect("decode supervision frame"))
+        Ok(
+            EngineManagementFrame::decode_length_prefixed(&bytes)
+                .expect("decode supervision frame"),
+        )
     }
 
     fn write_frame(
         &self,
         stream: &mut std::os::unix::net::UnixStream,
-        frame: &SupervisionFrame,
+        frame: &EngineManagementFrame,
     ) -> std::io::Result<()> {
         use std::io::Write;
 
@@ -339,10 +336,9 @@ impl BlockingSupervisionCodec {
     }
 }
 
-struct ReceivedSupervisionRequest {
+struct ReceivedEngineManagementRequest {
     exchange: ExchangeIdentifier,
-    verb: SignalVerb,
-    request: SupervisionRequest,
+    request: EngineManagementRequest,
 }
 
 fn io_error(error: impl std::fmt::Display) -> std::io::Error {

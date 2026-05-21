@@ -1,8 +1,8 @@
+use signal_persona::engine::Reply;
 use signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, ComponentStartup,
-    ComponentStatus, ComponentStatusMissing, ComponentStatusQuery, EngineGeneration, EnginePhase,
-    EngineReply, EngineStatus, SupervisorActionAcceptance, SupervisorActionRejection,
-    SupervisorActionRejectionReason,
+    ActionAcceptance, ActionRejection, ActionRejectionReason, ComponentDesiredState,
+    ComponentHealth, ComponentName, ComponentShutdown, ComponentStartup, ComponentStatus,
+    EngineGeneration, EnginePhase, EngineStatus,
 };
 
 use crate::engine::EngineComponent;
@@ -39,66 +39,63 @@ impl EngineState {
         &self.status
     }
 
-    pub fn engine_status(&self) -> EngineReply {
-        EngineReply::EngineStatus(self.status.clone())
+    pub fn engine_status(&self) -> Reply {
+        Reply::EngineStatus(self.status.clone())
     }
 
-    pub fn component_status(&self, query: ComponentStatusQuery) -> EngineReply {
-        let component = query.component;
+    pub fn component_status(&self, component: ComponentName) -> Reply {
         self.status
             .components
             .iter()
             .find(|status| status.name == component)
             .cloned()
-            .map(EngineReply::ComponentStatus)
-            .unwrap_or(EngineReply::ComponentStatusMissing(
-                ComponentStatusMissing { component },
-            ))
+            .map(Reply::ComponentStatus)
+            .unwrap_or(Reply::ComponentMissing(component))
     }
 
-    pub fn start_component(&mut self, startup: ComponentStartup) -> EngineReply {
+    pub fn start_component(&mut self, startup: ComponentStartup) -> Reply {
         let component = startup.component;
         let Some(status) = self.component_mut(&component) else {
-            return EngineReply::SupervisorActionRejected(SupervisorActionRejection {
+            return Reply::ActionRejected(ActionRejection {
                 component,
-                reason: SupervisorActionRejectionReason::ComponentNotManaged,
+                reason: ActionRejectionReason::ComponentNotManaged,
             });
         };
         if status.desired_state == ComponentDesiredState::Running {
-            return EngineReply::SupervisorActionRejected(SupervisorActionRejection {
+            return Reply::ActionRejected(ActionRejection {
                 component,
-                reason: SupervisorActionRejectionReason::ComponentAlreadyInDesiredState,
+                reason: ActionRejectionReason::ComponentAlreadyInDesiredState,
             });
         }
         status.desired_state = ComponentDesiredState::Running;
         status.health = ComponentHealth::Starting;
         self.advance_generation();
         self.refresh_phase();
-        EngineReply::SupervisorActionAccepted(SupervisorActionAcceptance {
+        Reply::ActionAccepted(ActionAcceptance {
             component,
             desired_state: ComponentDesiredState::Running,
         })
     }
 
-    pub fn stop_component(&mut self, shutdown: ComponentShutdown) -> EngineReply {
+    pub fn stop_component(&mut self, shutdown: ComponentShutdown) -> Reply {
         let component = shutdown.component;
         let Some(status) = self.component_mut(&component) else {
-            return EngineReply::SupervisorActionRejected(SupervisorActionRejection {
+            return Reply::ActionRejected(ActionRejection {
                 component,
-                reason: SupervisorActionRejectionReason::ComponentNotManaged,
+                reason: ActionRejectionReason::ComponentNotManaged,
             });
         };
         if status.desired_state == ComponentDesiredState::Stopped {
-            return EngineReply::SupervisorActionRejected(SupervisorActionRejection {
+            return Reply::ActionRejected(ActionRejection {
                 component,
-                reason: SupervisorActionRejectionReason::ComponentAlreadyInDesiredState,
+                reason: ActionRejectionReason::ComponentAlreadyInDesiredState,
             });
         }
         status.desired_state = ComponentDesiredState::Stopped;
         status.health = ComponentHealth::Stopped;
         self.advance_generation();
         self.refresh_phase();
-        EngineReply::SupervisorActionAccepted(SupervisorActionAcceptance {
+        Reply::ActionAccepted(ActionAcceptance {
             component,
             desired_state: ComponentDesiredState::Stopped,
         })

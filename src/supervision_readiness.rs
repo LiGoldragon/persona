@@ -4,15 +4,17 @@ use std::time::Duration;
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use signal_core::{
+use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
-    SignalVerb, SubReply,
+    SubReply,
+};
+use signal_persona::engine_management::{
+    Frame as EngineManagementFrame, FrameBody, Operation as EngineManagementRequest,
+    Query as EngineManagementQuery, Reply as EngineManagementReply,
 };
 use signal_persona::{
-    ComponentHealth, ComponentHealthQuery, ComponentHealthReport, ComponentHello,
-    ComponentIdentity, ComponentKind, ComponentName, ComponentNotReady, ComponentReadinessQuery,
-    ComponentReady, SupervisionFrame, SupervisionFrameBody as FrameBody,
-    SupervisionProtocolVersion, SupervisionReply, SupervisionRequest,
+    ComponentHealth, ComponentHealthReport, ComponentIdentity, ComponentKind, ComponentName,
+    ComponentNotReady, ComponentReady, EngineManagementProtocolVersion, Presence,
 };
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -98,14 +100,14 @@ impl ComponentSupervisionReadiness {
         stream: &mut UnixStream,
         expectation: &ComponentSupervisionExpectation,
     ) -> Result<ComponentIdentity, ComponentSupervisionReadinessFailure> {
-        let request = SupervisionRequest::ComponentHello(ComponentHello {
+        let request = EngineManagementRequest::Announce(Presence {
             expected_component: expectation.name.clone(),
             expected_kind: expectation.kind,
-            supervision_protocol_version: expectation.version,
+            engine_management_protocol_version: expectation.version,
         });
         self.codec.write_request(stream, request).await?;
         match self.codec.read_reply(stream).await? {
-            SupervisionReply::ComponentIdentity(identity) => Ok(identity),
+            EngineManagementReply::Identified(identity) => Ok(identity),
             other => Err(ComponentSupervisionReadinessFailure::UnexpectedReply {
                 component: expectation.component,
                 operation: "component hello",
@@ -119,13 +121,13 @@ impl ComponentSupervisionReadiness {
         stream: &mut UnixStream,
         expectation: &ComponentSupervisionExpectation,
     ) -> Result<ComponentReady, ComponentSupervisionReadinessFailure> {
-        let request = SupervisionRequest::ComponentReadinessQuery(ComponentReadinessQuery {
-            component: expectation.name.clone(),
-        });
+        let request = EngineManagementRequest::Query(EngineManagementQuery::ReadinessStatus(
+            expectation.name.clone(),
+        ));
         self.codec.write_request(stream, request).await?;
         match self.codec.read_reply(stream).await? {
-            SupervisionReply::ComponentReady(ready) => Ok(ready),
-            SupervisionReply::ComponentNotReady(not_ready) => {
+            EngineManagementReply::Ready(ready) => Ok(ready),
+            EngineManagementReply::NotReady(not_ready) => {
                 Err(ComponentSupervisionReadinessFailure::NotReady {
                     component: expectation.component,
                     not_ready,
@@ -144,12 +146,12 @@ impl ComponentSupervisionReadiness {
         stream: &mut UnixStream,
         expectation: &ComponentSupervisionExpectation,
     ) -> Result<ComponentHealthReport, ComponentSupervisionReadinessFailure> {
-        let request = SupervisionRequest::ComponentHealthQuery(ComponentHealthQuery {
-            component: expectation.name.clone(),
-        });
+        let request = EngineManagementRequest::Query(EngineManagementQuery::HealthStatus(
+            expectation.name.clone(),
+        ));
         self.codec.write_request(stream, request).await?;
         match self.codec.read_reply(stream).await? {
-            SupervisionReply::ComponentHealthReport(health) => Ok(health),
+            EngineManagementReply::HealthReport(health) => Ok(health),
             other => Err(ComponentSupervisionReadinessFailure::UnexpectedReply {
                 component: expectation.component,
                 operation: "component health",
@@ -215,7 +217,7 @@ pub struct ComponentSupervisionExpectation {
     path: PathBuf,
     name: ComponentName,
     kind: ComponentKind,
-    version: SupervisionProtocolVersion,
+    version: EngineManagementProtocolVersion,
 }
 
 impl ComponentSupervisionExpectation {
@@ -224,7 +226,7 @@ impl ComponentSupervisionExpectation {
         path: impl Into<PathBuf>,
         name: ComponentName,
         kind: ComponentKind,
-        version: SupervisionProtocolVersion,
+        version: EngineManagementProtocolVersion,
     ) -> Self {
         Self {
             component,
@@ -241,7 +243,7 @@ impl ComponentSupervisionExpectation {
             envelope.supervision_socket_path().to_path_buf(),
             envelope.component().component_name(),
             envelope.component().component_kind(),
-            SupervisionProtocolVersion::new(1),
+            EngineManagementProtocolVersion::new(1),
         )
     }
 
@@ -261,7 +263,7 @@ impl ComponentSupervisionExpectation {
         self.kind
     }
 
-    pub fn version(&self) -> SupervisionProtocolVersion {
+    pub fn version(&self) -> EngineManagementProtocolVersion {
         self.version
     }
 
@@ -271,7 +273,7 @@ impl ComponentSupervisionExpectation {
     ) -> Result<(), ComponentSupervisionReadinessFailure> {
         if identity.name != self.name
             || identity.kind != self.kind
-            || identity.supervision_protocol_version != self.version
+            || identity.engine_management_protocol_version != self.version
         {
             return Err(ComponentSupervisionReadinessFailure::IdentityMismatch {
                 component: self.component,
@@ -280,7 +282,7 @@ impl ComponentSupervisionExpectation {
                 expected_kind: self.kind,
                 actual_kind: identity.kind,
                 expected_version: self.version,
-                actual_version: identity.supervision_protocol_version,
+                actual_version: identity.engine_management_protocol_version,
             });
         }
         Ok(())
@@ -328,9 +330,9 @@ impl SupervisionFrameCodec {
     pub async fn write_request(
         &self,
         stream: &mut UnixStream,
-        request: SupervisionRequest,
+        request: EngineManagementRequest,
     ) -> Result<(), ComponentSupervisionReadinessFailure> {
-        let frame = SupervisionFrame::new(FrameBody::Request {
+        let frame = EngineManagementFrame::new(FrameBody::Request {
             exchange: self.initial_exchange(),
             request: Request::from_payload(request),
         });
@@ -340,14 +342,11 @@ impl SupervisionFrameCodec {
     pub async fn write_reply(
         &self,
         stream: &mut UnixStream,
-        reply: SupervisionReply,
+        reply: EngineManagementReply,
     ) -> Result<(), ComponentSupervisionReadinessFailure> {
-        let frame = SupervisionFrame::new(FrameBody::Reply {
+        let frame = EngineManagementFrame::new(FrameBody::Reply {
             exchange: self.initial_exchange(),
-            reply: Reply::completed(NonEmpty::single(SubReply::Ok {
-                verb: SignalVerb::Match,
-                payload: reply,
-            })),
+            reply: Reply::committed(NonEmpty::single(SubReply::Ok(reply))),
         });
         self.write_frame(stream, &frame).await
     }
@@ -355,7 +354,7 @@ impl SupervisionFrameCodec {
     pub async fn read_reply(
         &self,
         stream: &mut UnixStream,
-    ) -> Result<SupervisionReply, ComponentSupervisionReadinessFailure> {
+    ) -> Result<EngineManagementReply, ComponentSupervisionReadinessFailure> {
         match self.read_frame(stream).await?.into_body() {
             FrameBody::Reply { reply, .. } => match reply {
                 Reply::Accepted { per_operation, .. } => {
@@ -369,7 +368,7 @@ impl SupervisionFrameCodec {
                         });
                     }
                     match operations.remove(0) {
-                        SubReply::Ok { payload, .. } => Ok(payload),
+                        SubReply::Ok(payload) => Ok(payload),
                         other => Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
                             got: format!("{other:?}"),
                         }),
@@ -390,15 +389,10 @@ impl SupervisionFrameCodec {
     pub async fn read_request(
         &self,
         stream: &mut UnixStream,
-    ) -> Result<SupervisionRequest, ComponentSupervisionReadinessFailure> {
+    ) -> Result<EngineManagementRequest, ComponentSupervisionReadinessFailure> {
         match self.read_frame(stream).await?.into_body() {
             FrameBody::Request { request, .. } => {
-                let checked = request.into_checked().map_err(|(error, _request)| {
-                    ComponentSupervisionReadinessFailure::UnexpectedFrame {
-                        got: error.to_string(),
-                    }
-                })?;
-                let mut operations = checked.operations.into_vec();
+                let mut operations = request.payloads.into_vec();
                 if operations.len() != 1 {
                     return Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
                         got: format!(
@@ -407,7 +401,7 @@ impl SupervisionFrameCodec {
                         ),
                     });
                 }
-                Ok(operations.remove(0).payload)
+                Ok(operations.remove(0))
             }
             other => Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
                 got: format!("{other:?}"),
@@ -418,7 +412,7 @@ impl SupervisionFrameCodec {
     async fn write_frame(
         &self,
         stream: &mut UnixStream,
-        frame: &SupervisionFrame,
+        frame: &EngineManagementFrame,
     ) -> Result<(), ComponentSupervisionReadinessFailure> {
         let bytes = frame.encode_length_prefixed()?;
         stream.write_all(&bytes).await?;
@@ -429,7 +423,7 @@ impl SupervisionFrameCodec {
     async fn read_frame(
         &self,
         stream: &mut UnixStream,
-    ) -> Result<SupervisionFrame, ComponentSupervisionReadinessFailure> {
+    ) -> Result<EngineManagementFrame, ComponentSupervisionReadinessFailure> {
         let mut prefix = [0_u8; 4];
         stream.read_exact(&mut prefix).await?;
         let length = u32::from_be_bytes(prefix) as usize;
@@ -441,7 +435,7 @@ impl SupervisionFrameCodec {
         bytes.extend_from_slice(&prefix);
         bytes.resize(4 + length, 0);
         stream.read_exact(&mut bytes[4..]).await?;
-        Ok(SupervisionFrame::decode_length_prefixed(&bytes)?)
+        Ok(EngineManagementFrame::decode_length_prefixed(&bytes)?)
     }
 
     fn initial_exchange(&self) -> ExchangeIdentifier {
@@ -475,8 +469,8 @@ pub enum ComponentSupervisionReadinessFailure {
         actual_name: ComponentName,
         expected_kind: ComponentKind,
         actual_kind: ComponentKind,
-        expected_version: SupervisionProtocolVersion,
-        actual_version: SupervisionProtocolVersion,
+        expected_version: EngineManagementProtocolVersion,
+        actual_version: EngineManagementProtocolVersion,
     },
     #[error("component {component:?} is not ready: {not_ready:?}")]
     NotReady {
@@ -499,7 +493,7 @@ pub enum ComponentSupervisionReadinessFailure {
     #[error("supervision frame is too large: {bytes} bytes")]
     FrameTooLarge { bytes: usize },
     #[error("signal frame: {0}")]
-    SignalFrame(#[from] signal_core::FrameError),
+    SignalFrame(#[from] signal_frame::FrameError),
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 }

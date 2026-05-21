@@ -906,7 +906,7 @@
                 #    configuration, binds message.sock, and forwards to tap.sock as
                 #    if it were the router.
                 builder_uid="$(id -u)"
-                printf '(MessageDaemonConfiguration "%s" 432 "%s" 384 "%s" [] (UnixUser %s))\n' \
+                printf '("%s" 432 "%s" 384 "%s" [] (UnixUser %s))\n' \
                   "$message_socket" "$workdir/message.supervision.sock" "$tap_socket" "$builder_uid" \
                   > "$message_configuration"
                 ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon \
@@ -1801,7 +1801,7 @@
                   fi
                   grep -Fx "supervision_mode=600" "$capture"
                   test -f "$work/run/default/$component.envelope"
-                  grep -Fq "(SpawnEnvelope default" "$work/run/default/$component.envelope"
+                  grep -Fq "(default " "$work/run/default/$component.envelope"
                   grep -Fq "$component.sock" "$work/run/default/$component.envelope"
                   grep -Fq "$component.supervision.sock" "$work/run/default/$component.envelope"
                   grep -Fq "\"$work/persona.sock\"" "$work/run/default/$component.envelope"
@@ -1933,7 +1933,7 @@
                   fi
                   grep -Fx "supervision_mode=600" "$capture"
                   test -f "$work/run/default/$component.envelope"
-                  grep -Fq "(SpawnEnvelope default" "$work/run/default/$component.envelope"
+                  grep -Fq "(default " "$work/run/default/$component.envelope"
                   grep -Fq "$component.sock" "$work/run/default/$component.envelope"
                   grep -Fq "$component.supervision.sock" "$work/run/default/$component.envelope"
                 done

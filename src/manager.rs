@@ -1,10 +1,11 @@
 use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
+use signal_persona::engine::{Operation, Reply};
 use signal_persona::{
-    ComponentShutdown, ComponentStartup, ComponentStatusQuery, EngineCatalog, EngineCatalogEntry,
-    EngineLaunchRejection, EngineLaunchRejectionReason, EngineReply, EngineRequest,
-    EngineRetirementRejection, EngineRetirementRejectionReason, EngineStatusQuery,
+    ActionRejection, ActionRejectionReason, ComponentName, ComponentShutdown, ComponentStartup,
+    EngineCatalog, EngineCatalogEntry, LaunchRejection, LaunchRejectionReason, Query,
+    RetirementRejection, RetirementRejectionReason,
 };
 use signal_persona_auth::EngineId;
 
@@ -120,45 +121,41 @@ impl EngineManager {
         Ok(())
     }
 
-    async fn handle_request(&mut self, request: EngineRequest) -> Result<EngineReply> {
+    async fn handle_request(&mut self, request: Operation) -> Result<Reply> {
         self.events.push(ManagerEvent::EngineRequestAccepted);
-        let should_persist = matches!(
-            request,
-            EngineRequest::ComponentStartup(_) | EngineRequest::ComponentShutdown(_)
-        );
+        let should_persist = matches!(request, Operation::Start(_) | Operation::Stop(_));
         let reply = match request {
-            EngineRequest::EngineStatusQuery(EngineStatusQuery { .. }) => {
-                self.state.engine_status()
+            Operation::Query(Query::EngineStatus(_)) => self.state.engine_status(),
+            Operation::Query(Query::ComponentStatus(component)) => {
+                self.state.component_status(component)
             }
-            EngineRequest::ComponentStatusQuery(query) => self.state.component_status(query),
-            EngineRequest::ComponentStartup(startup) => self.state.start_component(startup),
-            EngineRequest::ComponentShutdown(shutdown) => self.state.stop_component(shutdown),
-            EngineRequest::EngineLaunchProposal(proposal) => {
-                EngineReply::EngineLaunchRejected(EngineLaunchRejection {
-                    label: proposal.label,
-                    reason: EngineLaunchRejectionReason::LaunchPlanRejected,
-                })
-            }
-            EngineRequest::EngineCatalogQuery(_) => EngineReply::EngineCatalog(EngineCatalog {
+            Operation::Start(startup) => self.state.start_component(startup),
+            Operation::Stop(shutdown) => self.state.stop_component(shutdown),
+            Operation::Launch(proposal) => Reply::LaunchRejected(LaunchRejection {
+                label: proposal.label,
+                reason: LaunchRejectionReason::LaunchPlanRejected,
+            }),
+            Operation::Query(Query::Catalog(_)) => Reply::Catalog(EngineCatalog {
                 engines: vec![EngineCatalogEntry {
                     engine: self.engine.clone(),
                     label: signal_persona::EngineLabel::new(self.engine.as_str()),
                     phase: self.state.snapshot().phase,
                 }],
             }),
-            EngineRequest::EngineRetirement(retirement) => {
-                let reason = if retirement.engine == self.engine {
-                    EngineRetirementRejectionReason::EngineStillRunning
+            Operation::Retire(engine) => {
+                let reason = if engine == self.engine {
+                    RetirementRejectionReason::EngineStillRunning
                 } else {
-                    EngineRetirementRejectionReason::EngineNotFound
+                    RetirementRejectionReason::EngineNotFound
                 };
-                EngineReply::EngineRetirementRejected(EngineRetirementRejection {
-                    engine: retirement.engine,
-                    reason,
-                })
+                Reply::RetireRejected(RetirementRejection { engine, reason })
             }
+            Operation::Tap(_) | Operation::Untap(_) => Reply::ActionRejected(ActionRejection {
+                component: ComponentName::new("persona-observer"),
+                reason: ActionRejectionReason::ComponentNotManaged,
+            }),
         };
-        if should_persist && matches!(reply, EngineReply::SupervisorActionAccepted(_)) {
+        if should_persist && matches!(reply, Reply::ActionAccepted(_)) {
             self.persist_state().await?;
         }
         self.events.push(ManagerEvent::EngineReplyCreated);
@@ -215,17 +212,17 @@ impl Actor for EngineManager {
 
 #[derive(Debug)]
 pub struct HandleEngineRequest {
-    request: EngineRequest,
+    request: Operation,
 }
 
 impl HandleEngineRequest {
-    pub fn new(request: EngineRequest) -> Self {
+    pub fn new(request: Operation) -> Self {
         Self { request }
     }
 }
 
 impl Message<HandleEngineRequest> for EngineManager {
-    type Reply = Result<EngineReply>;
+    type Reply = Result<Reply>;
 
     async fn handle(
         &mut self,
@@ -280,20 +277,14 @@ impl Message<ReadTrace> for EngineManager {
     }
 }
 
-impl From<ComponentStatusQuery> for HandleEngineRequest {
-    fn from(query: ComponentStatusQuery) -> Self {
-        Self::new(EngineRequest::ComponentStatusQuery(query))
-    }
-}
-
 impl From<ComponentStartup> for HandleEngineRequest {
     fn from(startup: ComponentStartup) -> Self {
-        Self::new(EngineRequest::ComponentStartup(startup))
+        Self::new(Operation::Start(startup))
     }
 }
 
 impl From<ComponentShutdown> for HandleEngineRequest {
     fn from(shutdown: ComponentShutdown) -> Self {
-        Self::new(EngineRequest::ComponentShutdown(shutdown))
+        Self::new(Operation::Stop(shutdown))
     }
 }

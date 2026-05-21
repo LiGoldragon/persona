@@ -3,14 +3,16 @@ use persona::request::{
 };
 use persona::schema::EngineStatusReport;
 use persona::transport::PersonaFrameCodec;
-use signal_core::{
-    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Operation, Request,
-    RequestRejectionReason, SessionEpoch, SignalVerb,
+use signal_frame::{
+    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Request, SessionEpoch,
+};
+use signal_persona::engine::{
+    Frame as PersonaFrame, FrameBody, Operation as EngineRequest, Reply as EngineReply,
 };
 use signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, ComponentStatus,
-    EngineFrame as PersonaFrame, EngineFrameBody as FrameBody, EngineGeneration, EnginePhase,
-    EngineReply, EngineStatus,
+    EngineGeneration, EnginePhase, EngineStatus, EngineStatusScope as ContractEngineStatusScope,
+    Query,
 };
 
 struct RequestFixture {
@@ -66,21 +68,21 @@ fn persona_request_lowers_to_signal_persona_engine_request() {
     let engine_request = request.into_engine_request();
 
     match engine_request {
-        signal_persona::EngineRequest::ComponentStatusQuery(query) => {
-            assert_eq!(query.component.as_str(), "persona-system");
+        EngineRequest::Query(Query::ComponentStatus(component)) => {
+            assert_eq!(component.as_str(), "persona-system");
         }
         other => panic!("expected signal component status query, got {other:?}"),
     }
 }
 
 #[test]
-fn persona_frame_codec_rejects_mismatched_signal_verb() {
-    let request = Request::from_operations(NonEmpty::single(Operation::new(
-        SignalVerb::Assert,
-        signal_persona::EngineRequest::EngineStatusQuery(
-            signal_persona::EngineStatusQuery::whole_engine(),
-        ),
-    )));
+fn persona_frame_codec_rejects_multi_operation_request() {
+    let request = Request::from_payloads(NonEmpty::from_head_and_tail(
+        EngineRequest::Query(Query::EngineStatus(ContractEngineStatusScope::WholeEngine)),
+        vec![EngineRequest::Query(Query::EngineStatus(
+            ContractEngineStatusScope::WholeEngine,
+        ))],
+    ));
     let frame = PersonaFrame::new(FrameBody::Request {
         exchange: ExchangeIdentifier::new(
             SessionEpoch::new(1),
@@ -91,16 +93,13 @@ fn persona_frame_codec_rejects_mismatched_signal_verb() {
     });
     let error = PersonaFrameCodec::default()
         .request_from_frame(frame)
-        .expect_err("mismatched verb is rejected");
+        .expect_err("multi-operation request is rejected");
 
     match error {
-        persona::Error::InvalidSignalRequest { reason } => {
-            assert_eq!(
-                reason,
-                RequestRejectionReason::VerbPayloadMismatch { index: 0 }
-            );
+        persona::Error::UnexpectedSignalFrame { got } => {
+            assert!(got.contains("currently accepts one operation"));
         }
-        other => panic!("expected typed signal request rejection, got {other:?}"),
+        other => panic!("expected unexpected frame rejection, got {other:?}"),
     }
 }
 
@@ -119,7 +118,7 @@ fn engine_status_reply_renders_as_nota() {
     let output = PersonaOutput::from_engine_reply(reply).to_nota().unwrap();
 
     assert!(output.starts_with("(EngineStatusReport 2 Starting ["));
-    assert!(output.contains("(ComponentStatus persona-mind Mind Running Starting)"));
+    assert!(output.contains("(persona-mind Mind Running Starting)"));
 }
 
 #[test]

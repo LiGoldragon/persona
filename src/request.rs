@@ -6,8 +6,8 @@ use signal_persona as contract;
 
 use crate::error::{Error, Result};
 use crate::schema::{
-    ComponentStatusMissingReport, ComponentStatusReport, EngineStatusReport,
-    SupervisorActionAcceptedReport, SupervisorActionRejectedReport,
+    ActionAcceptedReport, ActionRejectedReport, ComponentStatusMissingReport,
+    ComponentStatusReport, EngineStatusReport, RetirementAcceptanceReport,
 };
 
 #[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,25 +57,23 @@ impl PersonaRequest {
         Ok(request)
     }
 
-    pub fn into_engine_request(self) -> contract::EngineRequest {
+    pub fn into_engine_request(self) -> contract::engine::Operation {
         match self {
             Self::EngineStatusQuery(request) => match request.scope {
-                EngineStatusScope::WholeEngine => contract::EngineRequest::EngineStatusQuery(
-                    contract::EngineStatusQuery::whole_engine(),
+                EngineStatusScope::WholeEngine => contract::engine::Operation::Query(
+                    contract::Query::EngineStatus(contract::EngineStatusScope::WholeEngine),
                 ),
             },
-            Self::ComponentStatusQuery(request) => {
-                contract::EngineRequest::ComponentStatusQuery(contract::ComponentStatusQuery {
-                    component: request.component,
-                })
-            }
+            Self::ComponentStatusQuery(request) => contract::engine::Operation::Query(
+                contract::Query::ComponentStatus(request.component),
+            ),
             Self::ComponentStartup(request) => {
-                contract::EngineRequest::ComponentStartup(contract::ComponentStartup {
+                contract::engine::Operation::Start(contract::ComponentStartup {
                     component: request.component,
                 })
             }
             Self::ComponentShutdown(request) => {
-                contract::EngineRequest::ComponentShutdown(contract::ComponentShutdown {
+                contract::engine::Operation::Stop(contract::ComponentShutdown {
                     component: request.component,
                 })
             }
@@ -86,10 +84,26 @@ impl PersonaRequest {
 impl NotaEncode for PersonaRequest {
     fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
         match self {
-            Self::EngineStatusQuery(request) => request.encode(encoder),
-            Self::ComponentStatusQuery(request) => request.encode(encoder),
-            Self::ComponentStartup(request) => request.encode(encoder),
-            Self::ComponentShutdown(request) => request.encode(encoder),
+            Self::EngineStatusQuery(request) => {
+                encoder.start_record("EngineStatusQuery")?;
+                request.scope.encode(encoder)?;
+                encoder.end_record()
+            }
+            Self::ComponentStatusQuery(request) => {
+                encoder.start_record("ComponentStatusQuery")?;
+                request.component.encode(encoder)?;
+                encoder.end_record()
+            }
+            Self::ComponentStartup(request) => {
+                encoder.start_record("ComponentStartup")?;
+                request.component.encode(encoder)?;
+                encoder.end_record()
+            }
+            Self::ComponentShutdown(request) => {
+                encoder.start_record("ComponentShutdown")?;
+                request.component.encode(encoder)?;
+                encoder.end_record()
+            }
         }
     }
 }
@@ -98,14 +112,34 @@ impl NotaDecode for PersonaRequest {
     fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
         let head = decoder.peek_record_head()?;
         match head.as_str() {
-            "EngineStatusQuery" => Ok(Self::EngineStatusQuery(EngineStatusQuery::decode(decoder)?)),
-            "ComponentStatusQuery" => Ok(Self::ComponentStatusQuery(ComponentStatusQuery::decode(
-                decoder,
-            )?)),
-            "ComponentStartup" => Ok(Self::ComponentStartup(ComponentStartup::decode(decoder)?)),
-            "ComponentShutdown" => Ok(Self::ComponentShutdown(ComponentShutdown::decode(decoder)?)),
-            other => Err(nota_codec::Error::UnknownKindForVerb {
-                verb: "PersonaRequest",
+            "EngineStatusQuery" => {
+                decoder.expect_record_head("EngineStatusQuery")?;
+                let scope = EngineStatusScope::decode(decoder)?;
+                decoder.expect_record_end()?;
+                Ok(Self::EngineStatusQuery(EngineStatusQuery { scope }))
+            }
+            "ComponentStatusQuery" => {
+                decoder.expect_record_head("ComponentStatusQuery")?;
+                let component = contract::ComponentName::decode(decoder)?;
+                decoder.expect_record_end()?;
+                Ok(Self::ComponentStatusQuery(ComponentStatusQuery {
+                    component,
+                }))
+            }
+            "ComponentStartup" => {
+                decoder.expect_record_head("ComponentStartup")?;
+                let component = contract::ComponentName::decode(decoder)?;
+                decoder.expect_record_end()?;
+                Ok(Self::ComponentStartup(ComponentStartup { component }))
+            }
+            "ComponentShutdown" => {
+                decoder.expect_record_head("ComponentShutdown")?;
+                let component = contract::ComponentName::decode(decoder)?;
+                decoder.expect_record_end()?;
+                Ok(Self::ComponentShutdown(ComponentShutdown { component }))
+            }
+            other => Err(nota_codec::Error::UnknownVariant {
+                enum_name: "PersonaRequest",
                 got: other.to_string(),
             }),
         }
@@ -114,56 +148,54 @@ impl NotaDecode for PersonaRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PersonaOutput {
-    EngineLaunchAccepted(contract::EngineLaunchAcceptance),
-    EngineLaunchRejected(contract::EngineLaunchRejection),
+    LaunchAccepted(contract::LaunchAcceptance),
+    LaunchRejected(contract::LaunchRejection),
     EngineCatalog(contract::EngineCatalog),
-    EngineRetirementAccepted(contract::EngineRetirementAcceptance),
-    EngineRetirementRejected(contract::EngineRetirementRejection),
+    RetirementAccepted(RetirementAcceptanceReport),
+    RetirementRejected(contract::RetirementRejection),
     EngineStatusReport(EngineStatusReport),
     ComponentStatusReport(ComponentStatusReport),
     ComponentStatusMissingReport(ComponentStatusMissingReport),
-    SupervisorActionAcceptedReport(SupervisorActionAcceptedReport),
-    SupervisorActionRejectedReport(SupervisorActionRejectedReport),
+    ActionAcceptedReport(ActionAcceptedReport),
+    ActionRejectedReport(ActionRejectedReport),
+    ObserverSubscriptionOpened(contract::engine::ObserverSubscriptionOpened),
 }
 
 impl PersonaOutput {
-    pub fn from_engine_reply(reply: contract::EngineReply) -> Self {
+    pub fn from_engine_reply(reply: contract::engine::Reply) -> Self {
         match reply {
-            contract::EngineReply::EngineLaunchAccepted(acceptance) => {
-                Self::EngineLaunchAccepted(acceptance)
+            contract::engine::Reply::Launched(acceptance) => Self::LaunchAccepted(acceptance),
+            contract::engine::Reply::LaunchRejected(rejection) => Self::LaunchRejected(rejection),
+            contract::engine::Reply::Catalog(catalog) => Self::EngineCatalog(catalog),
+            contract::engine::Reply::Retired(engine) => {
+                Self::RetirementAccepted(RetirementAcceptanceReport { engine })
             }
-            contract::EngineReply::EngineLaunchRejected(rejection) => {
-                Self::EngineLaunchRejected(rejection)
+            contract::engine::Reply::RetireRejected(rejection) => {
+                Self::RetirementRejected(rejection)
             }
-            contract::EngineReply::EngineCatalog(catalog) => Self::EngineCatalog(catalog),
-            contract::EngineReply::EngineRetirementAccepted(acceptance) => {
-                Self::EngineRetirementAccepted(acceptance)
-            }
-            contract::EngineReply::EngineRetirementRejected(rejection) => {
-                Self::EngineRetirementRejected(rejection)
-            }
-            contract::EngineReply::EngineStatus(status) => {
+            contract::engine::Reply::EngineStatus(status) => {
                 Self::EngineStatusReport(EngineStatusReport::from_contract(status))
             }
-            contract::EngineReply::ComponentStatus(status) => {
+            contract::engine::Reply::ComponentStatus(status) => {
                 Self::ComponentStatusReport(ComponentStatusReport { component: status })
             }
-            contract::EngineReply::ComponentStatusMissing(missing) => {
-                Self::ComponentStatusMissingReport(ComponentStatusMissingReport {
-                    component: missing.component,
-                })
+            contract::engine::Reply::ComponentMissing(component) => {
+                Self::ComponentStatusMissingReport(ComponentStatusMissingReport { component })
             }
-            contract::EngineReply::SupervisorActionAccepted(acceptance) => {
-                Self::SupervisorActionAcceptedReport(SupervisorActionAcceptedReport {
+            contract::engine::Reply::ActionAccepted(acceptance) => {
+                Self::ActionAcceptedReport(ActionAcceptedReport {
                     component: acceptance.component,
                     desired_state: acceptance.desired_state,
                 })
             }
-            contract::EngineReply::SupervisorActionRejected(rejection) => {
-                Self::SupervisorActionRejectedReport(SupervisorActionRejectedReport {
+            contract::engine::Reply::ActionRejected(rejection) => {
+                Self::ActionRejectedReport(ActionRejectedReport {
                     component: rejection.component,
                     reason: rejection.reason,
                 })
+            }
+            contract::engine::Reply::ObserverSubscriptionOpened(opened) => {
+                Self::ObserverSubscriptionOpened(opened)
             }
         }
     }
@@ -178,16 +210,17 @@ impl PersonaOutput {
 impl NotaEncode for PersonaOutput {
     fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
         match self {
-            Self::EngineLaunchAccepted(output) => output.encode(encoder),
-            Self::EngineLaunchRejected(output) => output.encode(encoder),
+            Self::LaunchAccepted(output) => output.encode(encoder),
+            Self::LaunchRejected(output) => output.encode(encoder),
             Self::EngineCatalog(output) => output.encode(encoder),
-            Self::EngineRetirementAccepted(output) => output.encode(encoder),
-            Self::EngineRetirementRejected(output) => output.encode(encoder),
+            Self::RetirementAccepted(output) => output.encode(encoder),
+            Self::RetirementRejected(output) => output.encode(encoder),
             Self::EngineStatusReport(output) => output.encode(encoder),
             Self::ComponentStatusReport(output) => output.encode(encoder),
             Self::ComponentStatusMissingReport(output) => output.encode(encoder),
-            Self::SupervisorActionAcceptedReport(output) => output.encode(encoder),
-            Self::SupervisorActionRejectedReport(output) => output.encode(encoder),
+            Self::ActionAcceptedReport(output) => output.encode(encoder),
+            Self::ActionRejectedReport(output) => output.encode(encoder),
+            Self::ObserverSubscriptionOpened(output) => output.encode(encoder),
         }
     }
 }
@@ -196,20 +229,20 @@ impl NotaDecode for PersonaOutput {
     fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
         let head = decoder.peek_record_head()?;
         match head.as_str() {
-            "EngineLaunchAcceptance" => Ok(Self::EngineLaunchAccepted(
-                contract::EngineLaunchAcceptance::decode(decoder)?,
-            )),
-            "EngineLaunchRejection" => Ok(Self::EngineLaunchRejected(
-                contract::EngineLaunchRejection::decode(decoder)?,
-            )),
+            "LaunchAcceptance" => Ok(Self::LaunchAccepted(contract::LaunchAcceptance::decode(
+                decoder,
+            )?)),
+            "LaunchRejection" => Ok(Self::LaunchRejected(contract::LaunchRejection::decode(
+                decoder,
+            )?)),
             "EngineCatalog" => Ok(Self::EngineCatalog(contract::EngineCatalog::decode(
                 decoder,
             )?)),
-            "EngineRetirementAcceptance" => Ok(Self::EngineRetirementAccepted(
-                contract::EngineRetirementAcceptance::decode(decoder)?,
+            "RetirementAcceptanceReport" => Ok(Self::RetirementAccepted(
+                RetirementAcceptanceReport::decode(decoder)?,
             )),
-            "EngineRetirementRejection" => Ok(Self::EngineRetirementRejected(
-                contract::EngineRetirementRejection::decode(decoder)?,
+            "RetirementRejection" => Ok(Self::RetirementRejected(
+                contract::RetirementRejection::decode(decoder)?,
             )),
             "EngineStatusReport" => Ok(Self::EngineStatusReport(EngineStatusReport::decode(
                 decoder,
@@ -220,14 +253,17 @@ impl NotaDecode for PersonaOutput {
             "ComponentStatusMissingReport" => Ok(Self::ComponentStatusMissingReport(
                 ComponentStatusMissingReport::decode(decoder)?,
             )),
-            "SupervisorActionAcceptedReport" => Ok(Self::SupervisorActionAcceptedReport(
-                SupervisorActionAcceptedReport::decode(decoder)?,
+            "ActionAcceptedReport" => Ok(Self::ActionAcceptedReport(ActionAcceptedReport::decode(
+                decoder,
+            )?)),
+            "ActionRejectedReport" => Ok(Self::ActionRejectedReport(ActionRejectedReport::decode(
+                decoder,
+            )?)),
+            "ObserverSubscriptionOpened" => Ok(Self::ObserverSubscriptionOpened(
+                contract::engine::ObserverSubscriptionOpened::decode(decoder)?,
             )),
-            "SupervisorActionRejectedReport" => Ok(Self::SupervisorActionRejectedReport(
-                SupervisorActionRejectedReport::decode(decoder)?,
-            )),
-            other => Err(nota_codec::Error::UnknownKindForVerb {
-                verb: "PersonaOutput",
+            other => Err(nota_codec::Error::UnknownVariant {
+                enum_name: "PersonaOutput",
                 got: other.to_string(),
             }),
         }

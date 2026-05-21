@@ -775,10 +775,10 @@ impl ComponentSpawnEnvelope {
                 self.domain_socket_path.to_string_lossy().into_owned(),
             ),
             domain_socket_mode: signal_persona::SocketMode::new(self.domain_socket_mode.as_octal()),
-            supervision_socket_path: signal_persona::WirePath::new(
+            engine_management_socket_path: signal_persona::WirePath::new(
                 self.supervision_socket_path.to_string_lossy().into_owned(),
             ),
-            supervision_socket_mode: signal_persona::SocketMode::new(
+            engine_management_socket_mode: signal_persona::SocketMode::new(
                 self.supervision_socket_mode.as_octal(),
             ),
             peer_sockets: self
@@ -789,7 +789,8 @@ impl ComponentSpawnEnvelope {
             manager_socket: signal_persona::WirePath::new(
                 self.manager_socket.to_string_lossy().into_owned(),
             ),
-            supervision_protocol_version: signal_persona::SupervisionProtocolVersion::new(1),
+            engine_management_protocol_version:
+                signal_persona::EngineManagementProtocolVersion::new(1),
         }
     }
 }

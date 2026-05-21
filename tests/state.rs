@@ -1,7 +1,8 @@
 use persona::state::EngineState;
+use signal_persona::engine::Reply;
 use signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, ComponentStartup,
-    ComponentStatusQuery, EngineReply, SupervisorActionRejectionReason,
+    ActionRejectionReason, ComponentDesiredState, ComponentHealth, ComponentName,
+    ComponentShutdown, ComponentStartup,
 };
 
 #[test]
@@ -35,14 +36,12 @@ fn component_shutdown_advances_generation_and_updates_status() {
         component: ComponentName::new("persona-terminal"),
     });
 
-    assert!(matches!(reply, EngineReply::SupervisorActionAccepted(_)));
+    assert!(matches!(reply, Reply::ActionAccepted(_)));
     assert_eq!(state.snapshot().generation.into_u64(), 1);
 
-    let status = state.component_status(ComponentStatusQuery {
-        component: ComponentName::new("persona-terminal"),
-    });
+    let status = state.component_status(ComponentName::new("persona-terminal"));
     match status {
-        EngineReply::ComponentStatus(component) => {
+        Reply::ComponentStatus(component) => {
             assert_eq!(component.desired_state, ComponentDesiredState::Stopped);
             assert_eq!(component.health, ComponentHealth::Stopped);
         }
@@ -53,13 +52,11 @@ fn component_shutdown_advances_generation_and_updates_status() {
 #[test]
 fn missing_component_query_returns_typed_missing_reply() {
     let state = EngineState::default_catalog();
-    let reply = state.component_status(ComponentStatusQuery {
-        component: ComponentName::new("persona-missing"),
-    });
+    let reply = state.component_status(ComponentName::new("persona-missing"));
 
     match reply {
-        EngineReply::ComponentStatusMissing(missing) => {
-            assert_eq!(missing.component.as_str(), "persona-missing");
+        Reply::ComponentMissing(missing) => {
+            assert_eq!(missing.as_str(), "persona-missing");
         }
         other => panic!("expected missing component reply, got {other:?}"),
     }
@@ -73,10 +70,10 @@ fn repeated_startup_returns_already_desired_rejection() {
     });
 
     match reply {
-        EngineReply::SupervisorActionRejected(rejection) => {
+        Reply::ActionRejected(rejection) => {
             assert_eq!(
                 rejection.reason,
-                SupervisorActionRejectionReason::ComponentAlreadyInDesiredState
+                ActionRejectionReason::ComponentAlreadyInDesiredState
             );
         }
         other => panic!("expected rejection, got {other:?}"),

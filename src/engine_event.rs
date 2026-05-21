@@ -1,5 +1,5 @@
 use nota_codec::NotaEnum;
-pub use signal_persona::EngineOperationKind;
+pub use signal_persona::engine::OperationKind as EngineOperationKind;
 use signal_persona::{ComponentName, EnginePhase};
 use signal_persona_auth::EngineId;
 pub use signal_persona_harness::HarnessOperationKind;
@@ -31,6 +31,10 @@ impl EngineEventSequence {
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[rkyv(bytecheck(bounds(
+    __C: rkyv::validation::ArchiveContext,
+    __C::Error: rkyv::rancor::Source
+)))]
 pub struct EngineEvent {
     sequence: EngineEventSequence,
     engine: EngineId,
@@ -120,6 +124,10 @@ pub struct EngineEventDraftInput {
     Eq,
     EnumDiscriminants,
 )]
+#[rkyv(bytecheck(bounds(
+    __C: rkyv::validation::ArchiveContext,
+    __C::Error: rkyv::rancor::Source
+)))]
 #[strum_discriminants(name(EngineEventSourceKind))]
 #[strum_discriminants(derive(NotaEnum))]
 pub enum EngineEventSource {
@@ -138,6 +146,10 @@ pub enum EngineEventSource {
     Eq,
     EnumDiscriminants,
 )]
+#[rkyv(bytecheck(bounds(
+    __C: rkyv::validation::ArchiveContext,
+    __C::Error: rkyv::rancor::Source
+)))]
 #[strum_discriminants(name(EngineEventBodyKind))]
 #[strum_discriminants(derive(NotaEnum))]
 pub enum EngineEventBody {
@@ -159,6 +171,10 @@ pub enum EngineEventBody {
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[rkyv(bytecheck(bounds(
+    __C: rkyv::validation::ArchiveContext,
+    __C::Error: rkyv::rancor::Source
+)))]
 pub struct ComponentLifecycleEvent {
     component: ComponentName,
 }
@@ -174,6 +190,10 @@ impl ComponentLifecycleEvent {
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[rkyv(bytecheck(bounds(
+    __C: rkyv::validation::ArchiveContext,
+    __C::Error: rkyv::rancor::Source
+)))]
 pub struct ComponentUnimplemented {
     component: ComponentName,
     operation: ComponentOperation,
@@ -210,6 +230,10 @@ pub struct ComponentUnimplementedInput {
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[rkyv(bytecheck(bounds(
+    __C: rkyv::validation::ArchiveContext,
+    __C::Error: rkyv::rancor::Source
+)))]
 pub enum ComponentOperation {
     Engine(EngineOperationKind),
     Message(MessageOperationKind),
@@ -232,6 +256,10 @@ pub enum UnimplementedReason {
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[rkyv(bytecheck(bounds(
+    __C: rkyv::validation::ArchiveContext,
+    __C::Error: rkyv::rancor::Source
+)))]
 pub struct ComponentExited {
     component: ComponentName,
     exit_code: Option<i32>,
@@ -267,6 +295,10 @@ pub struct ComponentExitedInput {
 /// the sequence number of the `ComponentSpawned` event that started the
 /// orphan arc so audit can correlate the two events.
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[rkyv(bytecheck(bounds(
+    __C: rkyv::validation::ArchiveContext,
+    __C::Error: rkyv::rancor::Source
+)))]
 pub struct ComponentOrphaned {
     component: ComponentName,
     spawned_sequence: EngineEventSequence,
@@ -296,6 +328,10 @@ pub struct ComponentOrphanedInput {
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[rkyv(bytecheck(bounds(
+    __C: rkyv::validation::ArchiveContext,
+    __C::Error: rkyv::rancor::Source
+)))]
 pub struct RestartScheduled {
     component: ComponentName,
     attempt: u32,
@@ -325,6 +361,10 @@ pub struct RestartScheduledInput {
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[rkyv(bytecheck(bounds(
+    __C: rkyv::validation::ArchiveContext,
+    __C::Error: rkyv::rancor::Source
+)))]
 pub struct RestartExhausted {
     component: ComponentName,
     attempts: u32,
@@ -354,6 +394,10 @@ pub struct RestartExhaustedInput {
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[rkyv(bytecheck(bounds(
+    __C: rkyv::validation::ArchiveContext,
+    __C::Error: rkyv::rancor::Source
+)))]
 pub struct EngineStateChanged {
     phase: EnginePhase,
 }

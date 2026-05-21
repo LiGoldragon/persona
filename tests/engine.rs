@@ -454,11 +454,14 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     assert_eq!(signal_envelope.domain_socket_mode.into_u32(), 0o600);
     assert!(
         signal_envelope
-            .supervision_socket_path
+            .engine_management_socket_path
             .as_str()
             .ends_with("router.supervision.sock")
     );
-    assert_eq!(signal_envelope.supervision_socket_mode.into_u32(), 0o600);
+    assert_eq!(
+        signal_envelope.engine_management_socket_mode.into_u32(),
+        0o600
+    );
     assert_eq!(signal_envelope.peer_sockets.len(), 6);
 
     let mut encoder = Encoder::new();

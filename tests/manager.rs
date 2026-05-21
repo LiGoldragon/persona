@@ -1,7 +1,8 @@
 use persona::manager::{EngineManager, HandleEngineRequest, ManagerEvent, ReadTrace};
+use signal_persona::engine::{Operation as EngineRequest, Reply as EngineReply};
 use signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, ComponentStatusQuery,
-    EngineReply, EngineRequest, EngineStatusQuery,
+    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, EngineStatusScope,
+    Query,
 };
 
 #[tokio::test]
@@ -9,8 +10,8 @@ async fn constraint_engine_request_reply_is_created_by_kameo_manager_path() {
     let manager = EngineManager::start().await;
 
     let reply = manager
-        .ask(HandleEngineRequest::new(EngineRequest::EngineStatusQuery(
-            EngineStatusQuery::whole_engine(),
+        .ask(HandleEngineRequest::new(EngineRequest::Query(
+            Query::EngineStatus(EngineStatusScope::WholeEngine),
         )))
         .await
         .expect("request handled by actor");
@@ -44,23 +45,16 @@ async fn constraint_engine_manager_keeps_component_state_between_messages() {
         component: ComponentName::new("persona-terminal"),
     };
     let acceptance = manager
-        .ask(HandleEngineRequest::new(EngineRequest::ComponentShutdown(
-            shutdown,
-        )))
+        .ask(HandleEngineRequest::new(EngineRequest::Stop(shutdown)))
         .await
         .expect("shutdown handled by actor");
 
-    assert!(matches!(
-        acceptance,
-        EngineReply::SupervisorActionAccepted(_)
-    ));
+    assert!(matches!(acceptance, EngineReply::ActionAccepted(_)));
 
     let status = manager
-        .ask(HandleEngineRequest::new(
-            EngineRequest::ComponentStatusQuery(ComponentStatusQuery {
-                component: ComponentName::new("persona-terminal"),
-            }),
-        ))
+        .ask(HandleEngineRequest::new(EngineRequest::Query(
+            Query::ComponentStatus(ComponentName::new("persona-terminal")),
+        )))
         .await
         .expect("status handled by actor");
 

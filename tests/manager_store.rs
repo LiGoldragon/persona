@@ -15,9 +15,9 @@ use persona::schema::{
     ComponentOperationReport, EngineEventBodyReport, EngineEventReport, EngineEventSourceKind,
 };
 use persona::state::EngineState;
+use signal_persona::engine::{Operation as EngineRequest, Reply as EngineReply};
 use signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, ComponentStatusQuery,
-    EngineReply, EngineRequest,
+    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, Query,
 };
 use signal_persona_auth::EngineId;
 
@@ -140,13 +140,13 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
 
     let reply = manager
         .ask(persona::manager::HandleEngineRequest::new(
-            EngineRequest::ComponentShutdown(ComponentShutdown {
+            EngineRequest::Stop(ComponentShutdown {
                 component: ComponentName::new("persona-terminal"),
             }),
         ))
         .await
         .expect("shutdown handled through manager actor");
-    assert!(matches!(reply, EngineReply::SupervisorActionAccepted(_)));
+    assert!(matches!(reply, EngineReply::ActionAccepted(_)));
 
     let stored_record = store
         .ask(ReadEngineRecord::new(engine.clone()))
@@ -169,9 +169,9 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
 
     let query = manager
         .ask(persona::manager::HandleEngineRequest::new(
-            EngineRequest::ComponentStatusQuery(ComponentStatusQuery {
-                component: ComponentName::new("persona-terminal"),
-            }),
+            EngineRequest::Query(Query::ComponentStatus(ComponentName::new(
+                "persona-terminal",
+            ))),
         ))
         .await
         .expect("status handled through manager actor");
@@ -195,13 +195,13 @@ async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_
 
     let reply = manager
         .ask(persona::manager::HandleEngineRequest::new(
-            EngineRequest::ComponentShutdown(ComponentShutdown {
+            EngineRequest::Stop(ComponentShutdown {
                 component: ComponentName::new("persona-terminal"),
             }),
         ))
         .await
         .expect("shutdown handled through manager actor");
-    assert!(matches!(reply, EngineReply::SupervisorActionAccepted(_)));
+    assert!(matches!(reply, EngineReply::ActionAccepted(_)));
 
     EngineManager::stop(manager)
         .await
@@ -212,9 +212,9 @@ async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_
         .expect("engine manager restores from store");
     let status = restored
         .ask(persona::manager::HandleEngineRequest::new(
-            EngineRequest::ComponentStatusQuery(ComponentStatusQuery {
-                component: ComponentName::new("persona-terminal"),
-            }),
+            EngineRequest::Query(Query::ComponentStatus(ComponentName::new(
+                "persona-terminal",
+            ))),
         ))
         .await
         .expect("status handled through restored manager actor");
@@ -328,7 +328,10 @@ async fn constraint_engine_event_log_nota_projection_is_view() {
                 && unimplemented.reason == UnimplementedReason::NotBuiltYet
     ));
     assert!(
-        nota.starts_with("(EngineEventReport 1 engine-event-projection Component persona-harness (ComponentUnimplemented")
+        nota.starts_with(
+            "(EngineEventReport 1 engine-event-projection Component (Some persona-harness) (ComponentUnimplemented"
+        ),
+        "unexpected event projection: {nota}"
     );
 
     store.stop_gracefully().await.expect("manager store stops");
@@ -444,9 +447,9 @@ async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
 
     let reply = manager
         .ask(persona::manager::HandleEngineRequest::new(
-            EngineRequest::ComponentStatusQuery(ComponentStatusQuery {
-                component: ComponentName::new("persona-terminal"),
-            }),
+            EngineRequest::Query(Query::ComponentStatus(ComponentName::new(
+                "persona-terminal",
+            ))),
         ))
         .await
         .expect("status query handled through manager");

@@ -3,13 +3,11 @@ use std::path::{Path, PathBuf};
 use std::os::unix::fs::FileTypeExt;
 
 use kameo::actor::ActorRef;
-use signal_core::{
+use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
-    SignalVerb, SubReply,
+    SubReply,
 };
-use signal_persona::{
-    EngineFrame as Frame, EngineFrameBody as FrameBody, EngineReply, EngineRequest,
-};
+use signal_persona::engine::{Frame, FrameBody, Operation as EngineRequest, Reply as EngineReply};
 use signal_persona_auth::EngineId;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
@@ -106,28 +104,17 @@ impl PersonaFrameCodec {
         })
     }
 
-    pub fn reply_frame(
-        &self,
-        exchange: ExchangeIdentifier,
-        verb: SignalVerb,
-        reply: EngineReply,
-    ) -> Frame {
+    pub fn reply_frame(&self, exchange: ExchangeIdentifier, reply: EngineReply) -> Frame {
         Frame::new(FrameBody::Reply {
             exchange,
-            reply: Reply::completed(NonEmpty::single(SubReply::Ok {
-                verb,
-                payload: reply,
-            })),
+            reply: Reply::committed(NonEmpty::single(SubReply::Ok(reply))),
         })
     }
 
     pub fn request_from_frame(&self, frame: Frame) -> Result<ReceivedEngineRequest> {
         match frame.into_body() {
             FrameBody::Request { exchange, request } => {
-                let checked = request
-                    .into_checked()
-                    .map_err(|(reason, _request)| Error::InvalidSignalRequest { reason })?;
-                let mut operations = checked.operations.into_vec();
+                let mut operations = request.payloads.into_vec();
                 if operations.len() != 1 {
                     return Err(Error::UnexpectedSignalFrame {
                         got: format!(
@@ -137,11 +124,7 @@ impl PersonaFrameCodec {
                     });
                 }
                 let operation = operations.remove(0);
-                Ok(ReceivedEngineRequest::new(
-                    exchange,
-                    operation.verb,
-                    operation.payload,
-                ))
+                Ok(ReceivedEngineRequest::new(exchange, operation))
             }
             other => Err(Error::UnexpectedSignalFrame {
                 got: format!("{other:?}"),
@@ -163,7 +146,7 @@ impl PersonaFrameCodec {
                         });
                     }
                     match operations.remove(0) {
-                        SubReply::Ok { payload, .. } => Ok(payload),
+                        SubReply::Ok(payload) => Ok(payload),
                         other => Err(Error::UnexpectedSignalFrame {
                             got: format!("{other:?}"),
                         }),
@@ -197,25 +180,16 @@ impl Default for PersonaFrameCodec {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReceivedEngineRequest {
     exchange: ExchangeIdentifier,
-    verb: SignalVerb,
     request: EngineRequest,
 }
 
 impl ReceivedEngineRequest {
-    pub fn new(exchange: ExchangeIdentifier, verb: SignalVerb, request: EngineRequest) -> Self {
-        Self {
-            exchange,
-            verb,
-            request,
-        }
+    pub fn new(exchange: ExchangeIdentifier, request: EngineRequest) -> Self {
+        Self { exchange, request }
     }
 
     pub fn exchange(&self) -> ExchangeIdentifier {
         self.exchange
-    }
-
-    pub fn verb(&self) -> SignalVerb {
-        self.verb
     }
 
     pub fn into_request(self) -> EngineRequest {
@@ -343,12 +317,11 @@ impl PersonaDaemon {
         let frame = self.codec.read_frame(&mut stream).await?;
         let received = self.codec.request_from_frame(frame)?;
         let exchange = received.exchange();
-        let verb = received.verb();
         let reply = manager
             .ask(HandleEngineRequest::new(received.into_request()))
             .await
             .map_err(|error| Error::actor("handle daemon engine request", error))?;
-        let frame = self.codec.reply_frame(exchange, verb, reply);
+        let frame = self.codec.reply_frame(exchange, reply);
         self.codec.write_frame(&mut stream, &frame).await
     }
 }

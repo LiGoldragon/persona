@@ -21,7 +21,8 @@ use persona::launch::{
 };
 use persona::manager::{EngineManager, HandleEngineRequest};
 use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadEngineEvents};
-use signal_persona::{EngineReply, EngineRequest, EngineStatusQuery};
+use signal_persona::engine::{Operation as EngineRequest, Reply as EngineReply};
+use signal_persona::{EngineStatusScope, Query};
 use signal_persona_auth::EngineId;
 use signal_persona_harness::{HarnessDaemonConfiguration, HarnessKind};
 use signal_persona_message::MessageDaemonConfiguration;
@@ -279,9 +280,19 @@ impl DirectProcessFixture {
     fn process_is_alive(process: u32) -> bool {
         let result = unsafe { libc::kill(process as i32, 0) };
         if result == 0 {
-            return true;
+            return !Self::process_is_zombie(process);
         }
         std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+    }
+
+    fn process_is_zombie(process: u32) -> bool {
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{process}/stat")) else {
+            return false;
+        };
+        let Some(after_name) = stat.rsplit_once(") ") else {
+            return false;
+        };
+        after_name.1.starts_with("Z ")
     }
 
     async fn wait_until_process_exits(process: u32) {
@@ -693,8 +704,8 @@ async fn constraint_component_launcher_does_not_block_manager_mailbox() {
     assert_eq!(snapshot.launch_count(), 1);
 
     let manager_reply = manager
-        .ask(HandleEngineRequest::new(EngineRequest::EngineStatusQuery(
-            EngineStatusQuery::whole_engine(),
+        .ask(HandleEngineRequest::new(EngineRequest::Query(
+            Query::EngineStatus(EngineStatusScope::WholeEngine),
         )))
         .await
         .expect("manager mailbox replies while launched child runs");
@@ -811,12 +822,20 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
     assert_eq!(signal_envelope.domain_socket_mode.into_u32(), 0o600);
     assert!(
         signal_envelope
-            .supervision_socket_path
+            .engine_management_socket_path
             .as_str()
             .ends_with("mind.supervision.sock")
     );
-    assert_eq!(signal_envelope.supervision_socket_mode.into_u32(), 0o600);
-    assert_eq!(signal_envelope.supervision_protocol_version.into_u16(), 1);
+    assert_eq!(
+        signal_envelope.engine_management_socket_mode.into_u32(),
+        0o600
+    );
+    assert_eq!(
+        signal_envelope
+            .engine_management_protocol_version
+            .into_u16(),
+        1
+    );
 
     DirectProcessFixture::stop(&launcher, EngineComponent::Mind)
         .await
