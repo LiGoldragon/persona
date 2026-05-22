@@ -375,7 +375,7 @@ dependencies = [
 [[package]]
 name = "persona-spirit"
 version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/persona-spirit.git?branch=main#46e3798251d9f34f68ead5ca8c4d29c71e91c535"
+source = "git+https://github.com/LiGoldragon/persona-spirit.git?branch=main#e5dadc24fd6c1f80d4328b39475beebeb5ed6e04"
 dependencies = [
  "kameo 0.20.0 (git+https://github.com/LiGoldragon/kameo?branch=persona-lifecycle-terminal-outcome)",
  "nota-codec",

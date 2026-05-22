@@ -499,7 +499,7 @@ upgrade-related Kameo messages:
 |---|---|
 | `PrepareUpgrade { target }` | Quarantine-gates the target; appends `UpgradePrepared` to the event log; returns the first handover operation (`AskHandoverMarker(MarkerRequest)`). |
 | `CompleteUpgrade { target, marker }` | Validates the marker belongs to the target component; appends `ActiveVersionChanged` (source `HandoverMarker { commit_sequence }`); reducer updates the active-version snapshot. |
-| `DriveVersionHandover { target }` | Quarantine-gates; opens the `HandoverDriver`; verifies next marker parity, walks readiness/completion against the main upgrade socket, and appends `ActiveVersionChanged`. |
+| `DriveVersionHandover { target }` | Quarantine-gates; opens the `HandoverDriver`; verifies next marker parity, walks readiness/completion against the main upgrade socket, attempts `RecoverFromFailure` if completion fails after readiness, and appends `ActiveVersionChanged` only after finalization. |
 | `HandleOwnerVersionHandover { operation }` | Owner-socket entry point. Dispatches `AttemptHandover` -> `DriveVersionHandover`, `ForceFlip` -> direct `ActiveVersionChanged` append (source `ForceFlip { reason }`), `Rollback` -> direct `ActiveVersionChanged` append (source `Rollback { reason }`), `Quarantine` -> `VersionQuarantined` event-log append. |
 
 **Active-version snapshot.** `manager.active-version-snapshot` (per
@@ -548,11 +548,18 @@ sequenceDiagram
     driver->>current: ReadyToHandover(ReadinessReport)
     current-->>driver: HandoverAccepted
     driver->>current: HandoverCompleted(CompletionReport)
+    alt completion rejected after readiness
+        current-->>driver: HandoverRejected
+        driver->>current: RecoverFromFailure(RecoveryRequest)
+        current-->>driver: RecoveryCompleted
+        driver-->>manager: error; selector unchanged
+    else completion finalized
     current-->>driver: HandoverFinalized
     driver-->>manager: DrivenHandover
     manager->>store: AppendEngineEvent(ActiveVersionChanged)
     store->>store: active-version reducer
     manager-->>owner: HandoverSucceeded
+    end
 ```
 
 ## 1.7 · Startup Strategy
@@ -1432,6 +1439,7 @@ The apex repo owns tests that prove cross-component shape:
 | engine manager records the active component version only after handover completion | `nix build .#checks.x86_64-linux.persona-engine-manager-records-active-version-after-handover-completion` |
 | persona engine drives version handover through a component's private upgrade socket | `nix build .#checks.x86_64-linux.persona-engine-drives-version-handover-over-component-upgrade-socket` |
 | persona engine refuses handover when the next daemon's private upgrade marker is stale | `nix build .#checks.x86_64-linux.persona-engine-refuses-stale-next-handover-marker` |
+| persona engine asks the current daemon to recover if completion fails after readiness | `nix build .#checks.x86_64-linux.persona-engine-recovers-current-handover-after-completion-failure` |
 | owner `AttemptHandover` authority drives the same private-socket handover path as the internal manager driver | `nix build .#checks.x86_64-linux.persona-engine-owner-attempt-drives-version-handover` |
 | persona engine refuses normal handover when either target version is quarantined by owner authority | `nix build .#checks.x86_64-linux.persona-engine-refuses-version-handover-with-quarantined-version` |
 | owner `AttemptHandover` returns a typed `Rejected(VersionQuarantined)` reply for quarantined versions instead of dropping the owner connection | `nix build .#checks.x86_64-linux.persona-engine-owner-attempt-rejects-quarantined-version` |

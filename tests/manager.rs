@@ -22,7 +22,8 @@ use signal_persona::{
 };
 use signal_persona_auth::EngineId;
 use signal_version_handover::{
-    Date, HandoverAcceptance, HandoverFinalization, HandoverMarker, Operation as HandoverOperation,
+    Date, HandoverAcceptance, HandoverFinalization, HandoverMarker, HandoverRejection,
+    HandoverRejectionReason, Operation as HandoverOperation, RecoveryResult,
     Reply as HandoverReply, Time,
 };
 use version_projection::{ComponentName as HandoverComponentName, ContractVersion};
@@ -198,6 +199,54 @@ async fn serve_current_handover_socket(
                 })
             }
             other => panic!("unexpected handover operation in test server: {other:?}"),
+        };
+        let frame = codec.reply_frame(exchange, reply);
+        codec.write_frame(&mut stream, &frame).await?;
+        operations.push(operation);
+    }
+    Ok(operations)
+}
+
+async fn serve_current_handover_socket_with_completion_rejection(
+    path: std::path::PathBuf,
+    marker: HandoverMarker,
+) -> persona::Result<Vec<HandoverOperation>> {
+    let listener = tokio::net::UnixListener::bind(path)?;
+    let codec = HandoverFrameCodec::default();
+    let mut operations = Vec::new();
+    for _ in 0..4 {
+        let (mut stream, _) = listener.accept().await?;
+        let frame = codec.read_frame(&mut stream).await?;
+        let received = codec.request_from_frame(frame)?;
+        let exchange = received.exchange();
+        let operation = received.into_operation();
+        let reply = match &operation {
+            HandoverOperation::AskHandoverMarker(request) => {
+                assert_eq!(request.component.as_str(), "persona-spirit");
+                HandoverReply::HandoverMarker(marker.clone())
+            }
+            HandoverOperation::ReadyToHandover(report) => {
+                assert_eq!(report.component.as_str(), "persona-spirit");
+                assert_eq!(report.source_marker.commit_sequence, marker.commit_sequence);
+                HandoverReply::HandoverAccepted(HandoverAcceptance {
+                    accepted_marker: marker.clone(),
+                })
+            }
+            HandoverOperation::HandoverCompleted(report) => {
+                assert_eq!(report.component.as_str(), "persona-spirit");
+                HandoverReply::HandoverRejected(HandoverRejection {
+                    component: report.component.clone(),
+                    reason: HandoverRejectionReason::CommitSequenceAdvanced,
+                })
+            }
+            HandoverOperation::RecoverFromFailure(request) => {
+                assert_eq!(request.component.as_str(), "persona-spirit");
+                HandoverReply::RecoveryCompleted(RecoveryResult {
+                    component: request.component.clone(),
+                    recovered: true,
+                })
+            }
+            other => panic!("unexpected handover operation in recovery test server: {other:?}"),
         };
         let frame = codec.reply_frame(exchange, reply);
         codec.write_frame(&mut stream, &frame).await?;
@@ -518,6 +567,79 @@ async fn constraint_persona_engine_refuses_handover_when_next_marker_is_stale() 
     assert!(matches!(
         current_operations.as_slice(),
         [HandoverOperation::AskHandoverMarker(_)]
+    ));
+    let next_operations = next_server
+        .await
+        .expect("next handover marker socket server joins")
+        .expect("next handover marker socket server succeeds");
+    assert!(matches!(
+        next_operations.as_slice(),
+        [HandoverOperation::AskHandoverMarker(_)]
+    ));
+
+    let active = store
+        .ask(ReadActiveVersion::new(
+            engine,
+            ComponentName::new("persona-spirit"),
+        ))
+        .await
+        .expect("active version snapshot read");
+    assert!(active.is_none());
+
+    EngineManager::stop(manager)
+        .await
+        .expect("manager stops cleanly");
+    ManagerStore::close_and_stop(store)
+        .await
+        .expect("manager store closes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_persona_engine_recovers_current_handover_when_completion_fails() {
+    let fixture = StoreFixture::new("persona-manager-handover-completion-recovery");
+    let current_socket = fixture.root.join("spirit-current-upgrade.sock");
+    let next_socket = fixture.root.join("spirit-next-upgrade.sock");
+    let marker = handover_marker(149);
+    let current_server = tokio::spawn(serve_current_handover_socket_with_completion_rejection(
+        current_socket.clone(),
+        marker.clone(),
+    ));
+    let next_server = tokio::spawn(serve_marker_handover_socket(
+        next_socket.clone(),
+        marker.clone(),
+    ));
+    wait_for_socket(&current_socket).await;
+    wait_for_socket(&next_socket).await;
+    let engine = EngineId::new("engine-handover-completion-recovery");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    let manager = EngineManager::start_with_store(engine.clone(), store.clone())
+        .await
+        .expect("manager starts with store");
+    let target = spirit_upgrade_target_with_upgrade_sockets(&current_socket, &next_socket);
+
+    let error = manager
+        .ask(DriveVersionHandover::new(target))
+        .await
+        .expect_err("completion rejection keeps active selector unchanged");
+
+    assert!(matches!(
+        error,
+        kameo::error::SendError::HandlerError(Error::UnexpectedSignalFrame { got })
+            if got.contains("HandoverRejected")
+    ));
+
+    let current_operations = current_server
+        .await
+        .expect("current handover recovery server joins")
+        .expect("current handover recovery server succeeds");
+    assert!(matches!(
+        current_operations.as_slice(),
+        [
+            HandoverOperation::AskHandoverMarker(_),
+            HandoverOperation::ReadyToHandover(_),
+            HandoverOperation::HandoverCompleted(_),
+            HandoverOperation::RecoverFromFailure(_),
+        ]
     ));
     let next_operations = next_server
         .await

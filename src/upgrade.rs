@@ -8,7 +8,7 @@ use signal_persona::{ComponentName, WirePath};
 use signal_version_handover::{
     CompletionReport, Frame as HandoverFrame, FrameBody as HandoverFrameBody, HandoverAcceptance,
     HandoverFinalization, HandoverMarker, MarkerRequest, Operation as HandoverOperation,
-    ReadinessReport, Reply as HandoverReply,
+    ReadinessReport, RecoveryRequest, RecoveryResult, Reply as HandoverReply,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
@@ -362,6 +362,18 @@ impl HandoverClient {
             }),
         }
     }
+
+    pub async fn recover_from_failure(&self, request: RecoveryRequest) -> Result<RecoveryResult> {
+        match self
+            .submit(HandoverOperation::RecoverFromFailure(request))
+            .await?
+        {
+            HandoverReply::RecoveryCompleted(result) => Ok(result),
+            other => Err(Error::UnexpectedSignalFrame {
+                got: format!("{other:?}"),
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -441,13 +453,26 @@ impl HandoverDriver {
                 source_marker: marker.clone(),
             })
             .await?;
-        let finalization = self
+        let finalization = match self
             .current
             .complete_handover(CompletionReport {
-                component,
+                component: component.clone(),
                 accepted_marker: acceptance.accepted_marker.clone(),
             })
-            .await?;
+            .await
+        {
+            Ok(finalization) => finalization,
+            Err(error) => {
+                let _ = self
+                    .current
+                    .recover_from_failure(RecoveryRequest {
+                        component,
+                        failure_identifier: acceptance.accepted_marker.commit_sequence,
+                    })
+                    .await;
+                return Err(error);
+            }
+        };
         Ok(DrivenHandover::new(marker, acceptance, finalization))
     }
 

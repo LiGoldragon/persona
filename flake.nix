@@ -1600,6 +1600,15 @@
                   cargoTestExtraArgs = "--test manager constraint_persona_engine_refuses_handover_when_next_marker_is_stale -- --exact";
                 }
               );
+          persona-engine-recovers-current-handover-after-completion-failure =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager constraint_persona_engine_recovers_current_handover_when_completion_fails -- --exact";
+                }
+              );
           persona-engine-owner-attempt-drives-version-handover =
             context.craneLib.cargoTest
               (
