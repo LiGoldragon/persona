@@ -270,6 +270,27 @@ component desired state, lifecycle observations, and inter-engine route
 declarations. Every transition appends a typed event and reduces into the
 manager tables.
 
+### Spirit-per-engine
+
+**Pattern-based decision (per §1.5 engine-id-scoped resources): each
+engine has its own `persona-spirit` daemon, scoped under
+`/var/lib/persona/<engine-id>/spirit.redb`.** Spirit is part of the
+per-engine component federation alongside `persona-mind`,
+`persona-router`, and the others; it does not span engines. The
+implicit default that each engine owns its own component federation
+applies to spirit identically. Per-engine spirit isolates the intent
+substrate, observation scope, and bootstrap-policy provenance to its
+engine; cross-engine intent flow (if ever needed) is a federation
+concern, not a shared-spirit one.
+
+Concrete resource shape (consistent with the table above):
+
+| Resource | Shape |
+|---|---|
+| Spirit redb | `/var/lib/persona/<engine-id>/spirit.redb` |
+| Spirit ordinary socket | `/var/run/persona/<engine-id>/spirit.sock` |
+| Spirit owner socket | `/var/run/persona/<engine-id>/owner-spirit.sock` |
+
 ## 1.6 · Local Boundary and Routes
 
 The local engine boundary is not an in-band proof scheme. `persona-daemon`
