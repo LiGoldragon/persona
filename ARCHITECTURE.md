@@ -603,6 +603,41 @@ environment variables, and leave inspectable artifacts. This is the
 `persona-dev-stack` surface; it exists so integration work can happen before
 host-level service installation is settled.
 
+### 1.7.1 · Spawn order
+
+Persona spawns supervised components in a fixed order:
+
+```
+supervisor (Persona itself) → sema-upgrade → mind → orchestrate →
+router → harness → terminal → message → introspect → spirit
+```
+
+Three positions in this ordering are load-bearing:
+
+- **`sema-upgrade` is first** among supervised components. Every
+  other component needs the upgrade substrate available before its
+  own startup can attempt a schema migration. A component coming up
+  against an existing redb must either find no schema drift or have
+  a migration path through sema-upgrade; without that path any
+  contract edit after first deploy breaks the next restart.
+- **The infrastructure components precede the cognitive components.**
+  Router, harness, terminal, and message bind their sockets and
+  reach readiness before the cognitive apex. Introspect — the
+  observation plane — comes online next, ready to receive Tap
+  streams from earlier-spawned components.
+- **`persona-spirit` spawns last.** Spirit is the apex of the
+  cognitive authority chain; it owns mind; it animates the system.
+  Every component spirit depends on must be up before spirit
+  reaches readiness. The supervisor (Persona itself) has higher
+  *infrastructure* permission than spirit, but spirit is apex among
+  thinking components. This is the rule "spirit-as-apex spawns
+  last because every supervised component must be up before the
+  cognitive layer animates."
+
+The order applies per-engine. When Persona supervises multiple
+engines, each engine's component federation follows this sequence
+independently.
+
 Host deployment is systemd-shaped. The production `persona` daemon is the
 host-level manager and should be started by a NixOS module as a systemd
 service. Component daemons are represented to the manager as `ComponentUnit`
