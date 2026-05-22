@@ -18,5 +18,6 @@ pub mod state;
 pub mod supervision_readiness;
 pub mod supervisor;
 pub mod transport;
+pub mod upgrade;
 
 pub use error::{Error, Result};

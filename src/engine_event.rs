@@ -9,6 +9,8 @@ pub use signal_persona_system::SystemOperationKind;
 pub use signal_persona_terminal::TerminalOperationKind;
 use strum::EnumDiscriminants;
 
+use crate::upgrade::{ActiveVersionChanged, PreparedEvent};
+
 /// Monotonic event key scoped to one manager catalog.
 ///
 /// The sequence is not per engine. It gives the manager log one total order
@@ -168,6 +170,8 @@ pub enum EngineEventBody {
     RestartExhausted(RestartExhausted),
     ComponentStopped(ComponentLifecycleEvent),
     EngineStateChanged(EngineStateChanged),
+    UpgradePrepared(PreparedEvent),
+    ActiveVersionChanged(ActiveVersionChanged),
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]

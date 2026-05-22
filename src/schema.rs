@@ -144,6 +144,20 @@ pub struct EngineStateChangedReport {
     pub phase: EnginePhase,
 }
 
+#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+pub struct UpgradePreparedReport {
+    pub component: ComponentName,
+    pub current_version: String,
+    pub next_version: String,
+}
+
+#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+pub struct ActiveVersionChangedReport {
+    pub component: ComponentName,
+    pub active_version: String,
+    pub commit_sequence: u64,
+}
+
 #[derive(NotaEnum, Debug, Clone, PartialEq, Eq)]
 pub enum EngineEventBodyReport {
     ComponentSpawned(ComponentLifecycleEventReport),
@@ -155,6 +169,8 @@ pub enum EngineEventBodyReport {
     RestartExhausted(RestartExhaustedReport),
     ComponentStopped(ComponentLifecycleEventReport),
     EngineStateChanged(EngineStateChangedReport),
+    UpgradePrepared(UpgradePreparedReport),
+    ActiveVersionChanged(ActiveVersionChangedReport),
 }
 
 #[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -392,6 +408,20 @@ impl EngineEventBodyReport {
             EngineEventBody::EngineStateChanged(event) => {
                 Self::EngineStateChanged(EngineStateChangedReport {
                     phase: event.phase(),
+                })
+            }
+            EngineEventBody::UpgradePrepared(event) => {
+                Self::UpgradePrepared(UpgradePreparedReport {
+                    component: event.component().clone(),
+                    current_version: event.current_version().as_str().to_string(),
+                    next_version: event.next_version().as_str().to_string(),
+                })
+            }
+            EngineEventBody::ActiveVersionChanged(event) => {
+                Self::ActiveVersionChanged(ActiveVersionChangedReport {
+                    component: event.component().clone(),
+                    active_version: event.active_version().as_str().to_string(),
+                    commit_sequence: event.commit_sequence(),
                 })
             }
         }

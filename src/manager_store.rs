@@ -12,9 +12,10 @@ use crate::engine_event::{
     ComponentExited, ComponentOrphaned, ComponentOrphanedInput, EngineEvent, EngineEventBody,
     EngineEventDraft, EngineEventDraftInput, EngineEventSequence, EngineEventSource,
 };
+use crate::upgrade::ActiveVersion;
 
 const MANAGER_SCHEMA: Schema = Schema {
-    version: SchemaVersion::new(3),
+    version: SchemaVersion::new(4),
 };
 
 const ENGINE_RECORDS: Table<&'static str, StoredEngineRecord> =
@@ -24,6 +25,8 @@ const ENGINE_LIFECYCLE_SNAPSHOT: Table<&'static str, ComponentLifecycleSnapshotR
     Table::new("manager.engine-lifecycle-snapshot");
 const ENGINE_STATUS_SNAPSHOT: Table<&'static str, ComponentStatusSnapshotRow> =
     Table::new("manager.engine-status-snapshot");
+const ACTIVE_VERSION_SNAPSHOT: Table<&'static str, ActiveVersion> =
+    Table::new("manager.active-version-snapshot");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManagerStoreLocation {
@@ -176,6 +179,7 @@ impl ManagerTables {
             ENGINE_EVENTS.ensure(transaction)?;
             ENGINE_LIFECYCLE_SNAPSHOT.ensure(transaction)?;
             ENGINE_STATUS_SNAPSHOT.ensure(transaction)?;
+            ACTIVE_VERSION_SNAPSHOT.ensure(transaction)?;
             Ok(())
         })?;
         let tables = Self { database };
@@ -272,6 +276,17 @@ impl ManagerTables {
         })?)
     }
 
+    fn active_version(
+        &self,
+        engine: &EngineId,
+        component: &ComponentName,
+    ) -> Result<Option<ActiveVersion>> {
+        let key = SnapshotKey::new(engine, component);
+        Ok(self
+            .database
+            .read(|transaction| ACTIVE_VERSION_SNAPSHOT.get(transaction, key.as_str()))?)
+    }
+
     /// Replay every persisted `EngineEvent` into both snapshot tables. Run
     /// once per `open` so a manager that crashes mid-append still presents
     /// a snapshot consistent with the event log.
@@ -312,12 +327,22 @@ impl ManagerTables {
                 .map(|(key, _row)| key)
                 .collect())
         })?;
+        let active_version_keys: Vec<String> = self.database.read(|transaction| {
+            Ok(ACTIVE_VERSION_SNAPSHOT
+                .iter(transaction)?
+                .into_iter()
+                .map(|(key, _row)| key)
+                .collect())
+        })?;
         self.database.write(|transaction| {
             for key in &lifecycle_keys {
                 ENGINE_LIFECYCLE_SNAPSHOT.remove(transaction, key.as_str())?;
             }
             for key in &status_keys {
                 ENGINE_STATUS_SNAPSHOT.remove(transaction, key.as_str())?;
+            }
+            for key in &active_version_keys {
+                ACTIVE_VERSION_SNAPSHOT.remove(transaction, key.as_str())?;
             }
             Ok(())
         })?;
@@ -373,7 +398,13 @@ impl ManagerTables {
                 ComponentProcessState::Exited,
                 ComponentHealth::Failed,
             )?,
-            EngineEventBody::ComponentUnimplemented(_) | EngineEventBody::EngineStateChanged(_) => {
+            EngineEventBody::ComponentUnimplemented(_)
+            | EngineEventBody::EngineStateChanged(_)
+            | EngineEventBody::UpgradePrepared(_) => {}
+            EngineEventBody::ActiveVersionChanged(change) => {
+                let row = ActiveVersion::from_change(change);
+                let key = SnapshotKey::new(engine, row.component());
+                ACTIVE_VERSION_SNAPSHOT.insert(transaction, key.as_str(), &row)?;
             }
         }
         Ok(())
@@ -482,6 +513,14 @@ impl ManagerStore {
         engine: &EngineId,
     ) -> Result<Vec<ComponentStatusSnapshotRow>> {
         self.tables()?.engine_status_snapshot(engine)
+    }
+
+    fn read_active_version(
+        &self,
+        engine: &EngineId,
+        component: &ComponentName,
+    ) -> Result<Option<ActiveVersion>> {
+        self.tables()?.active_version(engine, component)
     }
 
     fn force_rebuild_snapshots(&mut self) -> Result<()> {
@@ -597,7 +636,9 @@ impl ManagerStore {
                 EngineEventBody::ComponentStopped(_)
                 | EngineEventBody::ComponentUnimplemented(_)
                 | EngineEventBody::RestartScheduled(_)
-                | EngineEventBody::EngineStateChanged(_) => {}
+                | EngineEventBody::EngineStateChanged(_)
+                | EngineEventBody::UpgradePrepared(_)
+                | EngineEventBody::ActiveVersionChanged(_) => {}
             }
         }
         let mut candidates: Vec<OrphanCandidate> = arcs
@@ -856,6 +897,29 @@ impl Message<ReadEngineStatusSnapshot> for ManagerStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.read_engine_status_snapshot(&message.engine)
+    }
+}
+
+pub struct ReadActiveVersion {
+    engine: EngineId,
+    component: ComponentName,
+}
+
+impl ReadActiveVersion {
+    pub fn new(engine: EngineId, component: ComponentName) -> Self {
+        Self { engine, component }
+    }
+}
+
+impl Message<ReadActiveVersion> for ManagerStore {
+    type Reply = Result<Option<ActiveVersion>>;
+
+    async fn handle(
+        &mut self,
+        message: ReadActiveVersion,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.read_active_version(&message.engine, &message.component)
     }
 }
 

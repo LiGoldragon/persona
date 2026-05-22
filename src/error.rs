@@ -62,6 +62,12 @@ pub enum Error {
 
     #[error("component command resolution: {0}")]
     CommandResolution(#[from] crate::launch::CommandResolutionFailure),
+
+    #[error("component upgrade orchestration requires a manager store")]
+    UpgradeRequiresManagerStore,
+
+    #[error("handover marker component mismatch: expected {expected}, got {actual}")]
+    HandoverMarkerComponentMismatch { expected: String, actual: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

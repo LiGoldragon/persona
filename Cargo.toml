@@ -27,6 +27,7 @@ redb                   = "4"
 rkyv                   = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
 sema                   = { git = "https://github.com/LiGoldragon/sema.git" }
 signal-frame           = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "main" }
+signal-version-handover = { git = "https://github.com/LiGoldragon/signal-version-handover.git", branch = "main" }
 signal-core            = { git = "https://github.com/LiGoldragon/signal-core.git" }
 signal-persona          = { git = "https://github.com/LiGoldragon/signal-persona.git" }
 signal-persona-auth     = { git = "https://github.com/LiGoldragon/signal-persona-auth.git" }
@@ -40,6 +41,7 @@ signal-persona-terminal   = { git = "https://github.com/LiGoldragon/signal-perso
 strum                  = { version = "0.28", features = ["derive"] }
 thiserror              = "2"
 tokio                  = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "process", "time"] }
+version-projection     = { git = "https://github.com/LiGoldragon/version-projection.git", branch = "main" }
 
 # ─── Wire-test shim binaries (for nix-chained tests) ──────
 # These exercise signal-persona-message end-to-end through

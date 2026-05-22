@@ -312,9 +312,11 @@ dependencies = [
  "signal-persona-router",
  "signal-persona-system",
  "signal-persona-terminal",
+ "signal-version-handover",
  "strum",
  "thiserror",
  "tokio",
+ "version-projection",
 ]
 
 [[package]]
@@ -645,6 +647,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-version-handover"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-version-handover.git?branch=main#f2dfe3b48261bdf933dc24a8980dac2b39f3e319"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "signal-frame",
+ "thiserror",
+ "version-projection",
+]
+
+[[package]]
 name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -774,6 +788,16 @@ checksum = "ddd74a9687298c6858e9b88ec8935ec45d22e8fd5e6394fa1bd4e99a87789c76"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "version-projection"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/version-projection.git?branch=main#69bd2dd01e457f86ce48f7e9347b2ea6fb6d3620"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "thiserror",
 ]
 
 [[package]]

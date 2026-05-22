@@ -1557,6 +1557,31 @@
               cargoTestExtraArgs = "--test manager_store constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapshot_truncation -- --exact";
             }
           );
+          persona-manager-store-projects-active-component-version = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test manager_store constraint_manager_store_projects_active_component_version_from_event_log -- --exact";
+            }
+          );
+          persona-engine-manager-prepares-upgrade-with-version-handover-request =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager constraint_engine_manager_prepares_upgrade_with_version_handover_request -- --exact";
+                }
+              );
+          persona-engine-manager-records-active-version-after-handover-completion =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager constraint_engine_manager_records_active_version_after_handover_completion -- --exact";
+                }
+              );
           persona-manager-store-close-protocol-releases-redb-lock-before-shutdown =
             context.craneLib.cargoTest
               (

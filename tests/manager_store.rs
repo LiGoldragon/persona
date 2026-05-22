@@ -8,8 +8,8 @@ use persona::manager_store::AppendOrphansFromEventLog;
 use persona::manager_store::{
     AppendEngineEvent, ComponentLifecycleSnapshotRow, ComponentProcessState,
     ComponentStatusSnapshotRow, ManagerStore, ManagerStoreLocation, PersistEngineRecord,
-    ReadEngineEvents, ReadEngineLifecycleSnapshot, ReadEngineRecord, ReadEngineStatusSnapshot,
-    ReadManagerStoreWriteCount, RebuildSnapshotsFromEventLog,
+    ReadActiveVersion, ReadEngineEvents, ReadEngineLifecycleSnapshot, ReadEngineRecord,
+    ReadEngineStatusSnapshot, ReadManagerStoreWriteCount, RebuildSnapshotsFromEventLog,
 };
 use persona::schema::{
     ComponentOperationReport, EngineEventBodyReport, EngineEventReport, EngineEventSourceKind,
@@ -17,9 +17,13 @@ use persona::schema::{
 use persona::state::EngineState;
 use signal_persona::engine::{Operation as EngineRequest, Reply as EngineReply};
 use signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, Query,
+    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, Query, WirePath,
 };
 use signal_persona_auth::EngineId;
+use signal_version_handover::{Date, HandoverMarker, Time};
+use version_projection::{ComponentName as HandoverComponentName, ContractVersion};
+
+use persona::upgrade::{ActiveVersionChanged, PreparedEvent, Target, TargetInput, Version};
 
 struct StoreFixture {
     root: std::path::PathBuf,
@@ -64,6 +68,36 @@ impl StoreFixture {
                 },
             )),
         })
+    }
+
+    fn spirit_upgrade_target() -> Target {
+        Target::from_input(TargetInput {
+            component: ComponentName::new("persona-spirit"),
+            current_version: Version::new("v0.1.0"),
+            next_version: Version::new("v0.1.1"),
+            current_owner_socket_path: WirePath::new(
+                "/run/persona/default/spirit/v0.1.0/owner.sock",
+            ),
+            current_upgrade_socket_path: WirePath::new(
+                "/run/persona/default/spirit/v0.1.0/upgrade.sock",
+            ),
+            next_owner_socket_path: WirePath::new("/run/persona/default/spirit/v0.1.1/owner.sock"),
+            next_upgrade_socket_path: WirePath::new(
+                "/run/persona/default/spirit/v0.1.1/upgrade.sock",
+            ),
+        })
+    }
+
+    fn spirit_handover_marker(commit_sequence: u64) -> HandoverMarker {
+        HandoverMarker {
+            component: HandoverComponentName::new("persona-spirit"),
+            schema_hash: ContractVersion::new([7; 32]),
+            commit_sequence,
+            write_counter: 99,
+            last_record_identifier: Some(210),
+            recorded_at_date: Date::new(2026, 5, 22),
+            recorded_at_time: Time::new(16, 0, 0),
+        }
     }
 }
 
@@ -279,6 +313,67 @@ async fn constraint_engine_event_log_records_typed_manager_events() {
             if unimplemented.operation()
                 == &ComponentOperation::Harness(HarnessOperationKind::MessageDelivery)
     ));
+
+    store.stop_gracefully().await.expect("manager store stops");
+    let _shutdown_completion = store.wait_for_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_manager_store_projects_active_component_version_from_event_log() {
+    let fixture = StoreFixture::new("persona-manager-active-version");
+    let engine = EngineId::new("engine-active-version");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    let target = StoreFixture::spirit_upgrade_target();
+    let marker = StoreFixture::spirit_handover_marker(45);
+    let change = ActiveVersionChanged::from_marker(&target, &marker);
+
+    store
+        .ask(AppendEngineEvent::new(EngineEventDraft::from_input(
+            EngineEventDraftInput {
+                engine: engine.clone(),
+                source: EngineEventSource::Manager,
+                body: EngineEventBody::UpgradePrepared(PreparedEvent::from_target(&target)),
+            },
+        )))
+        .await
+        .expect("upgrade prepared event appends");
+    store
+        .ask(AppendEngineEvent::new(EngineEventDraft::from_input(
+            EngineEventDraftInput {
+                engine: engine.clone(),
+                source: EngineEventSource::Manager,
+                body: EngineEventBody::ActiveVersionChanged(change.clone()),
+            },
+        )))
+        .await
+        .expect("active version event appends");
+
+    let active = store
+        .ask(ReadActiveVersion::new(
+            engine.clone(),
+            ComponentName::new("persona-spirit"),
+        ))
+        .await
+        .expect("active version snapshot reads")
+        .expect("active version exists");
+    assert_eq!(active.active_version().as_str(), "v0.1.1");
+    assert_eq!(active.schema_hash(), ContractVersion::new([7; 32]));
+    assert_eq!(active.commit_sequence(), 45);
+
+    store
+        .ask(RebuildSnapshotsFromEventLog)
+        .await
+        .expect("rebuild from event log succeeds");
+    let rebuilt = store
+        .ask(ReadActiveVersion::new(
+            engine.clone(),
+            ComponentName::new("persona-spirit"),
+        ))
+        .await
+        .expect("active version snapshot reads after rebuild")
+        .expect("active version exists after rebuild");
+    assert_eq!(rebuilt.active_version().as_str(), "v0.1.1");
+    assert_eq!(rebuilt.commit_sequence(), 45);
 
     store.stop_gracefully().await.expect("manager store stops");
     let _shutdown_completion = store.wait_for_shutdown().await;

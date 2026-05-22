@@ -516,10 +516,11 @@ it has state to persist.
 
 **Manager state — event log is authoritative; snapshots are acceleration**:
 the manager owns one append-only `engine-events` log inside `manager.redb`.
-The log is the only durable source of truth for engine lifecycle and component
-health. Two snapshot tables — `engine-lifecycle-snapshot` and
-`engine-status-snapshot` — are **materialised projections** over the event log,
-maintained by two reducers:
+The log is the only durable source of truth for engine lifecycle, component
+health, and active component versions. Three snapshot tables —
+`engine-lifecycle-snapshot`, `engine-status-snapshot`, and
+`manager.active-version-snapshot` — are **materialised projections** over the
+event log, maintained by reducers:
 
 - **Engine-lifecycle reducer** — per `(EngineId, ComponentName)`, materialises
   `ComponentProcessState` (closed enum: `Launched → Ready → Stopping → Exited`,
@@ -529,20 +530,25 @@ maintained by two reducers:
 - **Engine-status reducer** — per `(EngineId, ComponentName)`, materialises
   `ComponentHealth` (closed enum: `Starting | Running | Degraded | Stopped |
   Failed`). Snapshot table: `engine-status-snapshot`.
+- **Active-version reducer** — per `(EngineId, ComponentName)`, materialises
+  the component version selected by a completed upgrade handover, together with
+  its schema hash and handover commit sequence. Snapshot table:
+  `manager.active-version-snapshot`.
 
-The two reducers run together. One redb write transaction appends the event
-and reduces it into both snapshot tables; the event log and the snapshots
+The reducers run together. One redb write transaction appends the event
+and reduces it into all snapshot tables; the event log and the snapshots
 move together or not at all. A snapshot table can be deleted, truncated, or
 corrupted in any way without losing manager truth: the snapshot rebuilds from
 the event log on next `ManagerStore::open` (see "Manager restore" below).
 This is the **hybrid model**: lazy reducer-on-append plus eager rebuild on
 startup. CLI status queries (`ComponentStatusQuery`, `EngineStatusQuery`)
-read the engine-status snapshot. Audit/debug paths walk the event log
+read the engine-status snapshot. Upgrade orchestration reads the active-version
+snapshot after a successful handover. Audit/debug paths walk the event log
 directly. Snapshots accelerate reads; the event log decides truth.
 
 **Manager restore**: on daemon startup the manager loads the latest
 `StoredEngineRecord` per engine from `manager.redb`, then replays every
-persisted `EngineEvent` through both reducers, overwriting any existing
+persisted `EngineEvent` through every reducer, overwriting any existing
 snapshot rows. The two-step open — schema-check + table-ensure, then
 event-log replay into snapshots — runs once per `ManagerStore::open`, so
 the on-disk snapshot state always equals the event log's projection by the
@@ -1301,6 +1307,9 @@ The apex repo owns tests that prove cross-component shape:
 | manager store reduces lifecycle events into both snapshot tables in one transaction | `nix build .#checks.x86_64-linux.persona-manager-store-reduces-lifecycle-events-into-snapshots` |
 | engine manager hydrates component health from the status snapshot on startup | `nix build .#checks.x86_64-linux.persona-engine-manager-hydrates-component-health-from-snapshot` |
 | snapshot tables rebuild from the event log after a `ManagerStore::open` against an empty snapshot table | `nix build .#checks.x86_64-linux.persona-manager-store-rebuilds-snapshots-from-event-log` |
+| active component version is projected from the manager event log and survives snapshot rebuild | `nix build .#checks.x86_64-linux.persona-manager-store-projects-active-component-version` |
+| engine manager prepares a component upgrade by emitting the first version-handover marker request | `nix build .#checks.x86_64-linux.persona-engine-manager-prepares-upgrade-with-version-handover-request` |
+| engine manager records the active component version only after handover completion | `nix build .#checks.x86_64-linux.persona-engine-manager-records-active-version-after-handover-completion` |
 | manager store close protocol releases its redb lock before shutdown completion | `nix build .#checks.x86_64-linux.persona-manager-store-close-protocol-releases-redb-lock-before-shutdown` |
 | manager startup detects orphans — `ComponentSpawned` without matching `ComponentReady` or `ComponentExited` — and appends `ComponentOrphaned` events | `nix build .#checks.x86_64-linux.persona-manager-startup-appends-orphaned-events-for-unfinished-spawn` |
 | event-log append and snapshot reduce land in one redb write transaction (no daemon crash can persist an event without its snapshot reduction) | `nix build .#checks.x86_64-linux.persona-manager-store-event-append-and-snapshot-reduce-share-one-transaction` |

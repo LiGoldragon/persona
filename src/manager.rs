@@ -8,13 +8,18 @@ use signal_persona::{
     RetirementRejection, RetirementRejectionReason,
 };
 use signal_persona_auth::EngineId;
+use signal_version_handover::HandoverMarker;
 
+use crate::engine_event::{
+    EngineEventBody, EngineEventDraft, EngineEventDraftInput, EngineEventSource,
+};
 use crate::error::{Error, Result};
 use crate::manager_store::{
-    AppendOrphansFromEventLog, ComponentStatusSnapshotRow, ManagerStore, PersistEngineRecord,
-    ReadEngineRecord, ReadEngineStatusSnapshot,
+    AppendEngineEvent, AppendOrphansFromEventLog, ComponentStatusSnapshotRow, ManagerStore,
+    PersistEngineRecord, ReadEngineRecord, ReadEngineStatusSnapshot,
 };
 use crate::state::EngineState;
+use crate::upgrade::{ActiveVersionChanged, Prepared, PreparedEvent, Target};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ManagerEvent {
@@ -22,6 +27,8 @@ pub enum ManagerEvent {
     EngineRequestAccepted,
     EngineReplyCreated,
     TraceRead,
+    UpgradePrepared,
+    ActiveVersionChanged,
     Stopping,
 }
 
@@ -176,6 +183,51 @@ impl EngineManager {
         Ok(())
     }
 
+    async fn append_event(&self, body: EngineEventBody) -> Result<()> {
+        let Some(store) = &self.store else {
+            return Err(Error::UpgradeRequiresManagerStore);
+        };
+        store
+            .ask(AppendEngineEvent::new(EngineEventDraft::from_input(
+                EngineEventDraftInput {
+                    engine: self.engine.clone(),
+                    source: EngineEventSource::Manager,
+                    body,
+                },
+            )))
+            .await
+            .map_err(|error| Error::actor("append manager upgrade event", error))?;
+        Ok(())
+    }
+
+    async fn prepare_upgrade(&mut self, target: Target) -> Result<Prepared> {
+        let prepared = target.prepare();
+        self.append_event(EngineEventBody::UpgradePrepared(
+            PreparedEvent::from_target(prepared.target()),
+        ))
+        .await?;
+        self.events.push(ManagerEvent::UpgradePrepared);
+        Ok(prepared)
+    }
+
+    async fn complete_upgrade(
+        &mut self,
+        target: Target,
+        marker: HandoverMarker,
+    ) -> Result<ActiveVersionChanged> {
+        if marker.component.as_str() != target.component().as_str() {
+            return Err(Error::HandoverMarkerComponentMismatch {
+                expected: target.component().as_str().to_string(),
+                actual: marker.component.as_str().to_string(),
+            });
+        }
+        let change = ActiveVersionChanged::from_marker(&target, &marker);
+        self.append_event(EngineEventBody::ActiveVersionChanged(change.clone()))
+            .await?;
+        self.events.push(ManagerEvent::ActiveVersionChanged);
+        Ok(change)
+    }
+
     fn read_events(&mut self, probe: TraceProbe) -> Vec<ManagerEvent> {
         let _satisfied = self.events.len() >= probe.minimum_events;
         self.events.push(ManagerEvent::TraceRead);
@@ -230,6 +282,53 @@ impl Message<HandleEngineRequest> for EngineManager {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.handle_request(message.request).await
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PrepareUpgrade {
+    target: Target,
+}
+
+impl PrepareUpgrade {
+    pub fn new(target: Target) -> Self {
+        Self { target }
+    }
+}
+
+impl Message<PrepareUpgrade> for EngineManager {
+    type Reply = Result<Prepared>;
+
+    async fn handle(
+        &mut self,
+        message: PrepareUpgrade,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.prepare_upgrade(message.target).await
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CompleteUpgrade {
+    target: Target,
+    marker: HandoverMarker,
+}
+
+impl CompleteUpgrade {
+    pub fn new(target: Target, marker: HandoverMarker) -> Self {
+        Self { target, marker }
+    }
+}
+
+impl Message<CompleteUpgrade> for EngineManager {
+    type Reply = Result<ActiveVersionChanged>;
+
+    async fn handle(
+        &mut self,
+        message: CompleteUpgrade,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.complete_upgrade(message.target, message.marker).await
     }
 }
 
