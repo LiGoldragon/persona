@@ -242,7 +242,7 @@ impl EngineManager {
     }
 
     async fn drive_version_handover(&mut self, target: Target) -> Result<DrivenHandover> {
-        self.ensure_target_not_quarantined(&target).await?;
+        self.prepare_upgrade(target.clone()).await?;
         let driven = HandoverDriver::from_target(target.clone())
             .drive_current_side()
             .await?;

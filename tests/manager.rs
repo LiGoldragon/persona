@@ -509,9 +509,11 @@ async fn constraint_persona_engine_drives_version_handover_over_component_upgrad
     assert_eq!(active.commit_sequence(), Some(118));
 
     let trace = manager
-        .ask(ReadTrace::expecting_at_least(3))
+        .ask(ReadTrace::expecting_at_least(4))
         .await
         .expect("trace read through actor");
+    assert!(trace.contains(&ManagerEvent::UpgradePrepared));
+    assert!(trace.contains(&ManagerEvent::ActiveVersionChanged));
     assert!(trace.contains(&ManagerEvent::VersionHandoverDriven));
 
     EngineManager::stop(manager)
@@ -579,12 +581,25 @@ async fn constraint_persona_engine_refuses_handover_when_next_marker_is_stale() 
 
     let active = store
         .ask(ReadActiveVersion::new(
-            engine,
+            engine.clone(),
             ComponentName::new("persona-spirit"),
         ))
         .await
         .expect("active version snapshot read");
     assert!(active.is_none());
+
+    let events = store
+        .ask(ReadEngineEvents::new(engine))
+        .await
+        .expect("engine events read");
+    assert!(matches!(
+        events.as_slice(),
+        [event] if matches!(
+            event.body(),
+            EngineEventBody::UpgradePrepared(prepared)
+                if prepared.component().as_str() == "persona-spirit"
+        )
+    ));
 
     EngineManager::stop(manager)
         .await
@@ -652,12 +667,25 @@ async fn constraint_persona_engine_recovers_current_handover_when_completion_fai
 
     let active = store
         .ask(ReadActiveVersion::new(
-            engine,
+            engine.clone(),
             ComponentName::new("persona-spirit"),
         ))
         .await
         .expect("active version snapshot read");
     assert!(active.is_none());
+
+    let events = store
+        .ask(ReadEngineEvents::new(engine))
+        .await
+        .expect("engine events read");
+    assert!(matches!(
+        events.as_slice(),
+        [event] if matches!(
+            event.body(),
+            EngineEventBody::UpgradePrepared(prepared)
+                if prepared.component().as_str() == "persona-spirit"
+        )
+    ));
 
     EngineManager::stop(manager)
         .await
