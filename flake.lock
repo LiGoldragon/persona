@@ -572,12 +572,13 @@
         ]
       },
       "locked": {
-        "lastModified": 1779387139,
-        "narHash": "sha256-KoB0qNrmcHXZ7ie3D8dpTZHN9pTLMFrBVP/D6n5UN6s=",
-        "owner": "LiGoldragon",
-        "repo": "persona-harness",
-        "rev": "f5da611e703ca19ed17325b98fe5a6b46197c9d3",
-        "type": "github"
+        "lastModified": 1779491799,
+        "narHash": "sha256-/eg4Is7BTnmVKpihYkiob9xMqzyIpOxUpOxFEFZ9BPA=",
+        "ref": "main",
+        "rev": "649103e92f73702fabb0122f4cc372e46addeb8f",
+        "revCount": 39,
+        "type": "git",
+        "url": "https://github.com/LiGoldragon/persona-harness.git"
       },
       "original": {
         "owner": "LiGoldragon",
