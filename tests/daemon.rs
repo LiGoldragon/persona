@@ -2,8 +2,14 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 
+use owner_signal_version_handover::{
+    Operation as OwnerOperation, Quarantine, QuarantineReason, Reply as OwnerReply,
+    Version as OwnerVersion, VersionLabel,
+};
 use persona::engine::{EngineComponent, EngineTopology};
 use persona::engine_event::EngineEventBody;
+use persona::transport::{OwnerClient, OwnerEndpoint};
+use version_projection::{ComponentName as HandoverComponentName, ContractVersion};
 
 mod support;
 
@@ -130,6 +136,12 @@ impl DaemonFixture {
         String::from_utf8(output.stdout).expect("persona output is utf8")
     }
 
+    fn owner_client(&self) -> OwnerClient {
+        OwnerClient::new(OwnerEndpoint::from_path(
+            self.root.join("persona-owner.sock"),
+        ))
+    }
+
     fn component_capture(&self, component: EngineComponent) -> PathBuf {
         self.root
             .join("state")
@@ -177,6 +189,18 @@ impl DaemonFixture {
                 libc::killpg(process, libc::SIGKILL);
             }
         }
+    }
+}
+
+fn owner_version(label: &str, byte: u8) -> OwnerVersion {
+    OwnerVersion::new(VersionLabel::new(label), ContractVersion::new([byte; 32]))
+}
+
+fn owner_quarantine_order() -> Quarantine {
+    Quarantine {
+        component: HandoverComponentName::new("persona-spirit"),
+        version: owner_version("v0.1.1", 2),
+        reason: QuarantineReason::SuspectState,
     }
 }
 
@@ -246,6 +270,24 @@ async fn constraint_persona_daemon_launches_three_harness_chain_topology_through
 
     store.stop_gracefully().await.expect("manager store stops");
     let _shutdown_completion = store.wait_for_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_persona_daemon_serves_owner_version_handover_socket() {
+    let fixture = DaemonFixture::start();
+    let reply = fixture
+        .owner_client()
+        .submit(OwnerOperation::Quarantine(owner_quarantine_order()))
+        .await
+        .expect("owner version handover request succeeds");
+
+    match reply {
+        OwnerReply::Quarantined(quarantined) => {
+            assert_eq!(quarantined.component.as_str(), "persona-spirit");
+            assert_eq!(quarantined.version.label.as_str(), "v0.1.1");
+        }
+        other => panic!("expected quarantine reply, got {other:?}"),
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -23,7 +23,10 @@ use crate::manager_store::{
     PersistEngineRecord, ReadEngineRecord, ReadEngineStatusSnapshot,
 };
 use crate::state::EngineState;
-use crate::upgrade::{ActiveVersionChanged, Prepared, PreparedEvent, Target, VersionQuarantined};
+use crate::upgrade::{
+    ActiveVersionChanged, DrivenHandover, HandoverDriver, Prepared, PreparedEvent, Target,
+    VersionQuarantined,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ManagerEvent {
@@ -33,6 +36,7 @@ pub enum ManagerEvent {
     TraceRead,
     UpgradePrepared,
     ActiveVersionChanged,
+    VersionHandoverDriven,
     VersionAuthorityApplied,
     VersionQuarantined,
     Stopping,
@@ -234,6 +238,16 @@ impl EngineManager {
         Ok(change)
     }
 
+    async fn drive_version_handover(&mut self, target: Target) -> Result<DrivenHandover> {
+        let driven = HandoverDriver::from_target(target.clone())
+            .drive_current_side()
+            .await?;
+        self.complete_upgrade(target, driven.marker().clone())
+            .await?;
+        self.events.push(ManagerEvent::VersionHandoverDriven);
+        Ok(driven)
+    }
+
     async fn handle_owner_version_handover(
         &mut self,
         operation: OwnerVersionHandoverOperation,
@@ -379,6 +393,29 @@ impl Message<CompleteUpgrade> for EngineManager {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.complete_upgrade(message.target, message.marker).await
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DriveVersionHandover {
+    target: Target,
+}
+
+impl DriveVersionHandover {
+    pub fn new(target: Target) -> Self {
+        Self { target }
+    }
+}
+
+impl Message<DriveVersionHandover> for EngineManager {
+    type Reply = Result<DrivenHandover>;
+
+    async fn handle(
+        &mut self,
+        message: DriveVersionHandover,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.drive_version_handover(message.target).await
     }
 }
 

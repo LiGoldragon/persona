@@ -4,20 +4,25 @@ use owner_signal_version_handover::{
 };
 use persona::engine_event::EngineEventBody;
 use persona::manager::{
-    CompleteUpgrade, EngineManager, HandleEngineRequest, HandleOwnerVersionHandover, ManagerEvent,
-    PrepareUpgrade, ReadTrace,
+    CompleteUpgrade, DriveVersionHandover, EngineManager, HandleEngineRequest,
+    HandleOwnerVersionHandover, ManagerEvent, PrepareUpgrade, ReadTrace,
 };
 use persona::manager_store::{
     ManagerStore, ManagerStoreLocation, ReadActiveVersion, ReadEngineEvents,
 };
-use persona::upgrade::{ActiveVersionChangeSource, Target, TargetInput, Version};
+use persona::upgrade::{
+    ActiveVersionChangeSource, HandoverFrameCodec, Target, TargetInput, Version,
+};
 use signal_persona::engine::{Operation as EngineRequest, Reply as EngineReply};
 use signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, EngineStatusScope,
     Query, WirePath,
 };
 use signal_persona_auth::EngineId;
-use signal_version_handover::{Date, HandoverMarker, Operation as HandoverOperation, Time};
+use signal_version_handover::{
+    Date, HandoverAcceptance, HandoverFinalization, HandoverMarker, Operation as HandoverOperation,
+    Reply as HandoverReply, Time,
+};
 use version_projection::{ComponentName as HandoverComponentName, ContractVersion};
 
 struct StoreFixture {
@@ -65,6 +70,18 @@ fn spirit_upgrade_target() -> Target {
     })
 }
 
+fn spirit_upgrade_target_with_current_upgrade_socket(path: &std::path::Path) -> Target {
+    Target::from_input(TargetInput {
+        component: ComponentName::new("persona-spirit"),
+        current_version: Version::new("v0.1.0"),
+        next_version: Version::new("v0.1.1"),
+        current_owner_socket_path: WirePath::new("/run/persona/default/spirit/v0.1.0/owner.sock"),
+        current_upgrade_socket_path: WirePath::new(path.to_string_lossy().into_owned()),
+        next_owner_socket_path: WirePath::new("/run/persona/default/spirit/v0.1.1/owner.sock"),
+        next_upgrade_socket_path: WirePath::new("/run/persona/default/spirit/v0.1.1/upgrade.sock"),
+    })
+}
+
 fn handover_marker(commit_sequence: u64) -> HandoverMarker {
     HandoverMarker {
         component: HandoverComponentName::new("persona-spirit"),
@@ -105,6 +122,50 @@ fn owner_quarantine_order() -> Quarantine {
         version: owner_version("v0.1.1", 2),
         reason: QuarantineReason::SuspectState,
     }
+}
+
+async fn serve_current_handover_socket(
+    path: std::path::PathBuf,
+    marker: HandoverMarker,
+) -> persona::Result<Vec<HandoverOperation>> {
+    let listener = tokio::net::UnixListener::bind(path)?;
+    let codec = HandoverFrameCodec::default();
+    let mut operations = Vec::new();
+    for _ in 0..3 {
+        let (mut stream, _) = listener.accept().await?;
+        let frame = codec.read_frame(&mut stream).await?;
+        let received = codec.request_from_frame(frame)?;
+        let exchange = received.exchange();
+        let operation = received.into_operation();
+        let reply = match &operation {
+            HandoverOperation::AskHandoverMarker(request) => {
+                assert_eq!(request.component.as_str(), "persona-spirit");
+                HandoverReply::HandoverMarker(marker.clone())
+            }
+            HandoverOperation::ReadyToHandover(report) => {
+                assert_eq!(report.component.as_str(), "persona-spirit");
+                assert_eq!(report.source_marker.commit_sequence, marker.commit_sequence);
+                HandoverReply::HandoverAccepted(HandoverAcceptance {
+                    accepted_marker: marker.clone(),
+                })
+            }
+            HandoverOperation::HandoverCompleted(report) => {
+                assert_eq!(report.component.as_str(), "persona-spirit");
+                assert_eq!(
+                    report.accepted_marker.commit_sequence,
+                    marker.commit_sequence
+                );
+                HandoverReply::HandoverFinalized(HandoverFinalization {
+                    finalized_marker: marker.clone(),
+                })
+            }
+            other => panic!("unexpected handover operation in test server: {other:?}"),
+        };
+        let frame = codec.reply_frame(exchange, reply);
+        codec.write_frame(&mut stream, &frame).await?;
+        operations.push(operation);
+    }
+    Ok(operations)
 }
 
 #[tokio::test]
@@ -254,6 +315,69 @@ async fn constraint_engine_manager_records_active_version_after_handover_complet
         .await
         .expect("trace read through actor");
     assert!(trace.contains(&ManagerEvent::ActiveVersionChanged));
+
+    EngineManager::stop(manager)
+        .await
+        .expect("manager stops cleanly");
+    ManagerStore::close_and_stop(store)
+        .await
+        .expect("manager store closes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_persona_engine_drives_version_handover_over_component_upgrade_socket() {
+    let fixture = StoreFixture::new("persona-manager-upgrade-socket-drive");
+    let socket = fixture.root.join("spirit-upgrade.sock");
+    let marker = handover_marker(118);
+    let server = tokio::spawn(serve_current_handover_socket(
+        socket.clone(),
+        marker.clone(),
+    ));
+    let engine = EngineId::new("engine-upgrade-socket-drive");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    let manager = EngineManager::start_with_store(engine.clone(), store.clone())
+        .await
+        .expect("manager starts with store");
+    let target = spirit_upgrade_target_with_current_upgrade_socket(&socket);
+
+    let driven = manager
+        .ask(DriveVersionHandover::new(target))
+        .await
+        .expect("manager drives version handover over socket");
+
+    assert_eq!(driven.marker().commit_sequence, 118);
+    assert_eq!(driven.acceptance().accepted_marker.commit_sequence, 118);
+    assert_eq!(driven.finalization().finalized_marker.commit_sequence, 118);
+
+    let operations = server
+        .await
+        .expect("handover socket server joins")
+        .expect("handover socket server succeeds");
+    assert!(matches!(
+        operations.as_slice(),
+        [
+            HandoverOperation::AskHandoverMarker(_),
+            HandoverOperation::ReadyToHandover(_),
+            HandoverOperation::HandoverCompleted(_)
+        ]
+    ));
+
+    let active = store
+        .ask(ReadActiveVersion::new(
+            engine,
+            ComponentName::new("persona-spirit"),
+        ))
+        .await
+        .expect("active version snapshot read")
+        .expect("active version persisted");
+    assert_eq!(active.active_version().as_str(), "v0.1.1");
+    assert_eq!(active.commit_sequence(), Some(118));
+
+    let trace = manager
+        .ask(ReadTrace::expecting_at_least(3))
+        .await
+        .expect("trace read through actor");
+    assert!(trace.contains(&ManagerEvent::VersionHandoverDriven));
 
     EngineManager::stop(manager)
         .await

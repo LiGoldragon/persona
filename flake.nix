@@ -1582,6 +1582,15 @@
                   cargoTestExtraArgs = "--test manager constraint_engine_manager_records_active_version_after_handover_completion -- --exact";
                 }
               );
+          persona-engine-drives-version-handover-over-component-upgrade-socket =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager constraint_persona_engine_drives_version_handover_over_component_upgrade_socket -- --exact";
+                }
+              );
           persona-manager-store-close-protocol-releases-redb-lock-before-shutdown =
             context.craneLib.cargoTest
               (
@@ -1704,6 +1713,13 @@
             // {
               inherit (context) cargoArtifacts;
               cargoTestExtraArgs = "--test daemon constraint_persona_daemon_persists_cli_mutation_to_manager_store -- --exact";
+            }
+          );
+          persona-daemon-serves-owner-version-handover-socket = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test daemon constraint_persona_daemon_serves_owner_version_handover_socket -- --exact";
             }
           );
           persona-daemon-launches-prototype-supervised-components-through-engine-supervisor =

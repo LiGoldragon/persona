@@ -1,6 +1,20 @@
+use std::path::{Path, PathBuf};
+
+use signal_frame::{
+    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
+    SubReply,
+};
 use signal_persona::{ComponentName, WirePath};
-use signal_version_handover::{HandoverMarker, MarkerRequest, Operation as HandoverOperation};
+use signal_version_handover::{
+    CompletionReport, Frame as HandoverFrame, FrameBody as HandoverFrameBody, HandoverAcceptance,
+    HandoverFinalization, HandoverMarker, MarkerRequest, Operation as HandoverOperation,
+    ReadinessReport, Reply as HandoverReply,
+};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::UnixStream;
 use version_projection::{ComponentName as HandoverComponentName, ContractVersion};
+
+use crate::error::{Error, Result};
 
 #[derive(
     rkyv::Archive,
@@ -119,6 +133,295 @@ impl Prepared {
 
     pub fn first_handover_operation(&self) -> &HandoverOperation {
         &self.first_handover_operation
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HandoverEndpoint {
+    path: PathBuf,
+}
+
+impl HandoverEndpoint {
+    pub fn from_wire_path(path: &WirePath) -> Self {
+        Self {
+            path: PathBuf::from(path.as_str()),
+        }
+    }
+
+    pub fn from_path(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+
+    pub fn as_path(&self) -> &Path {
+        self.path.as_path()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HandoverFrameCodec {
+    maximum_frame_bytes: usize,
+}
+
+impl HandoverFrameCodec {
+    pub const fn new(maximum_frame_bytes: usize) -> Self {
+        Self {
+            maximum_frame_bytes,
+        }
+    }
+
+    pub async fn read_frame(&self, stream: &mut UnixStream) -> Result<HandoverFrame> {
+        let mut prefix = [0_u8; 4];
+        stream.read_exact(&mut prefix).await?;
+        let length = u32::from_be_bytes(prefix) as usize;
+        if length > self.maximum_frame_bytes {
+            return Err(Error::DaemonFrameTooLarge { bytes: length });
+        }
+
+        let mut bytes = Vec::with_capacity(4 + length);
+        bytes.extend_from_slice(&prefix);
+        bytes.resize(4 + length, 0);
+        stream.read_exact(&mut bytes[4..]).await?;
+
+        Ok(HandoverFrame::decode_length_prefixed(&bytes)?)
+    }
+
+    pub async fn write_frame(&self, stream: &mut UnixStream, frame: &HandoverFrame) -> Result<()> {
+        let bytes = frame.encode_length_prefixed()?;
+        stream.write_all(&bytes).await?;
+        stream.flush().await?;
+        Ok(())
+    }
+
+    pub fn request_frame(&self, operation: HandoverOperation) -> HandoverFrame {
+        HandoverFrame::new(HandoverFrameBody::Request {
+            exchange: self.exchange(),
+            request: Request::from_payload(operation),
+        })
+    }
+
+    pub fn reply_frame(&self, exchange: ExchangeIdentifier, reply: HandoverReply) -> HandoverFrame {
+        HandoverFrame::new(HandoverFrameBody::Reply {
+            exchange,
+            reply: Reply::committed(NonEmpty::single(SubReply::Ok(reply))),
+        })
+    }
+
+    pub fn request_from_frame(&self, frame: HandoverFrame) -> Result<ReceivedHandoverRequest> {
+        match frame.into_body() {
+            HandoverFrameBody::Request { exchange, request } => {
+                let mut operations = request.payloads.into_vec();
+                if operations.len() != 1 {
+                    return Err(Error::UnexpectedSignalFrame {
+                        got: format!(
+                            "version handover endpoint currently accepts one operation, got {}",
+                            operations.len()
+                        ),
+                    });
+                }
+                Ok(ReceivedHandoverRequest {
+                    exchange,
+                    operation: operations.remove(0),
+                })
+            }
+            other => Err(Error::UnexpectedSignalFrame {
+                got: format!("{other:?}"),
+            }),
+        }
+    }
+
+    pub fn reply_from_frame(&self, frame: HandoverFrame) -> Result<HandoverReply> {
+        match frame.into_body() {
+            HandoverFrameBody::Reply { reply, .. } => match reply {
+                Reply::Accepted { per_operation, .. } => {
+                    let mut operations = per_operation.into_vec();
+                    if operations.len() != 1 {
+                        return Err(Error::UnexpectedSignalFrame {
+                            got: format!(
+                                "version handover client currently accepts one reply operation, got {}",
+                                operations.len()
+                            ),
+                        });
+                    }
+                    match operations.remove(0) {
+                        SubReply::Ok(payload) => Ok(payload),
+                        other => Err(Error::UnexpectedSignalFrame {
+                            got: format!("{other:?}"),
+                        }),
+                    }
+                }
+                Reply::Rejected { reason } => Err(Error::UnexpectedSignalFrame {
+                    got: format!("{reason:?}"),
+                }),
+            },
+            other => Err(Error::UnexpectedSignalFrame {
+                got: format!("{other:?}"),
+            }),
+        }
+    }
+
+    fn exchange(&self) -> ExchangeIdentifier {
+        ExchangeIdentifier::new(
+            SessionEpoch::new(1),
+            ExchangeLane::Connector,
+            LaneSequence::first(),
+        )
+    }
+}
+
+impl Default for HandoverFrameCodec {
+    fn default() -> Self {
+        Self::new(1024 * 1024)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReceivedHandoverRequest {
+    exchange: ExchangeIdentifier,
+    operation: HandoverOperation,
+}
+
+impl ReceivedHandoverRequest {
+    pub fn exchange(&self) -> ExchangeIdentifier {
+        self.exchange
+    }
+
+    pub fn into_operation(self) -> HandoverOperation {
+        self.operation
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HandoverClient {
+    endpoint: HandoverEndpoint,
+    codec: HandoverFrameCodec,
+}
+
+impl HandoverClient {
+    pub fn new(endpoint: HandoverEndpoint) -> Self {
+        Self {
+            endpoint,
+            codec: HandoverFrameCodec::default(),
+        }
+    }
+
+    pub async fn submit(&self, operation: HandoverOperation) -> Result<HandoverReply> {
+        let mut stream = UnixStream::connect(self.endpoint.as_path()).await?;
+        let frame = self.codec.request_frame(operation);
+        self.codec.write_frame(&mut stream, &frame).await?;
+        let reply = self.codec.read_frame(&mut stream).await?;
+        self.codec.reply_from_frame(reply)
+    }
+
+    pub async fn ask_marker(&self, request: MarkerRequest) -> Result<HandoverMarker> {
+        match self
+            .submit(HandoverOperation::AskHandoverMarker(request))
+            .await?
+        {
+            HandoverReply::HandoverMarker(marker) => Ok(marker),
+            other => Err(Error::UnexpectedSignalFrame {
+                got: format!("{other:?}"),
+            }),
+        }
+    }
+
+    pub async fn ready_to_handover(&self, report: ReadinessReport) -> Result<HandoverAcceptance> {
+        match self
+            .submit(HandoverOperation::ReadyToHandover(report))
+            .await?
+        {
+            HandoverReply::HandoverAccepted(acceptance) => Ok(acceptance),
+            other => Err(Error::UnexpectedSignalFrame {
+                got: format!("{other:?}"),
+            }),
+        }
+    }
+
+    pub async fn complete_handover(
+        &self,
+        report: CompletionReport,
+    ) -> Result<HandoverFinalization> {
+        match self
+            .submit(HandoverOperation::HandoverCompleted(report))
+            .await?
+        {
+            HandoverReply::HandoverFinalized(finalization) => Ok(finalization),
+            other => Err(Error::UnexpectedSignalFrame {
+                got: format!("{other:?}"),
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DrivenHandover {
+    marker: HandoverMarker,
+    acceptance: HandoverAcceptance,
+    finalization: HandoverFinalization,
+}
+
+impl DrivenHandover {
+    pub fn new(
+        marker: HandoverMarker,
+        acceptance: HandoverAcceptance,
+        finalization: HandoverFinalization,
+    ) -> Self {
+        Self {
+            marker,
+            acceptance,
+            finalization,
+        }
+    }
+
+    pub fn marker(&self) -> &HandoverMarker {
+        &self.marker
+    }
+
+    pub fn acceptance(&self) -> &HandoverAcceptance {
+        &self.acceptance
+    }
+
+    pub fn finalization(&self) -> &HandoverFinalization {
+        &self.finalization
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HandoverDriver {
+    target: Target,
+    current: HandoverClient,
+}
+
+impl HandoverDriver {
+    pub fn from_target(target: Target) -> Self {
+        let current = HandoverClient::new(HandoverEndpoint::from_wire_path(
+            target.current_upgrade_socket_path(),
+        ));
+        Self { target, current }
+    }
+
+    pub async fn drive_current_side(&self) -> Result<DrivenHandover> {
+        let component = HandoverComponentName::new(self.target.component().as_str());
+        let marker = self
+            .current
+            .ask_marker(MarkerRequest {
+                component: component.clone(),
+            })
+            .await?;
+        let acceptance = self
+            .current
+            .ready_to_handover(ReadinessReport {
+                component: component.clone(),
+                source_marker: marker.clone(),
+            })
+            .await?;
+        let finalization = self
+            .current
+            .complete_handover(CompletionReport {
+                component,
+                accepted_marker: acceptance.accepted_marker.clone(),
+            })
+            .await?;
+        Ok(DrivenHandover::new(marker, acceptance, finalization))
     }
 }
 
