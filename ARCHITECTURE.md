@@ -1,13 +1,16 @@
 # persona — architecture
 
-*Engine manager and apex integration repository for the Persona component ecosystem.*
+*Persona — the engine-management daemon and apex integration repository for the Persona component ecosystem.*
 
-> `persona` is the host-level engine manager for the Persona component
-> ecosystem. One privileged `persona` daemon supervises multiple engine
-> instances, keeps component daemons visible and coordinated, allocates their
-> per-engine sockets and state directories, wires them through Nix, documents
-> the whole topology, and owns deployment-level verification. Component
-> implementations live in component repositories.
+> `persona` is the host-level engine-management daemon for the Persona
+> component ecosystem (per spirit records 215 + 216, the canonical short
+> name for this component is "Persona"; the repo is `persona`, the daemon
+> binary is `persona-daemon`, the CLI binary is `persona`). One privileged
+> `persona` daemon supervises multiple engine instances, keeps component
+> daemons visible and coordinated, allocates their per-engine sockets and
+> state directories, wires them through Nix, documents the whole topology,
+> and owns deployment-level verification. Component implementations live in
+> component repositories.
 
 ---
 
@@ -15,16 +18,16 @@
 
 Persona coordinates interactive AI harnesses as first-class participants in
 durable, inspectable engines. The top-level `persona-daemon` process is the
-host-level engine manager: it runs as the dedicated `persona` system user,
-supervises multiple engine instances, exposes engine status, allocates local
-socket/state boundaries, records origin context for audit, and gives operators
-and harnesses one place to ask whether the total system is up, healthy, and
-coherent.
+host-level engine-management daemon: it runs as the dedicated `persona` system
+user, supervises multiple engine instances, exposes engine status, allocates
+local socket/state boundaries, records origin context for audit, and gives
+operators and harnesses one place to ask whether the total system is up,
+healthy, and coherent.
 
-`signal-persona` is the management contract for the `persona` engine manager.
-It is the contract a client uses to ask for engine status, component health,
-engine-visible projections, and supervisor actions. Component-to-component
-behavior uses the relation-specific `signal-persona-*` contracts.
+`signal-persona` is the management contract for Persona. It is the contract a
+client uses to ask for engine status, component health, engine-visible
+projections, and engine-management actions. Component-to-component behavior
+uses the relation-specific `signal-persona-*` contracts.
 
 The `persona` CLI is a thin daemon client. It decodes one NOTA request record,
 sends one length-prefixed `signal-persona` frame to `persona-daemon`, waits for one
@@ -41,7 +44,7 @@ The architecture is contract-first. A wire boundary is defined in a dedicated
 move against it. Contract crates own typed records and rkyv frame behavior;
 runtime crates own actors, policy, storage, and side effects.
 
-`persona` is the apex repo and engine-manager home. It owns architecture,
+`persona` is the apex repo and Persona's home. It owns architecture,
 flake composition, supervisor wiring, deployment verification, and
 cross-component tests. Component repositories own router policy, mind state
 transitions, terminal adapters, storage table internals, actor logic, and
@@ -49,10 +52,9 @@ relation-specific signal records.
 
 Sema belongs to the component that owns the state inside an engine:
 `persona-mind` has mind Sema / `mind.redb`, `persona-router` has router Sema /
-`router.redb`, and so on. The `persona` engine manager owns manager-level
-state: the engine catalog, component desired state, health, lifecycle
-observations, startup/shutdown activity, inter-engine routes, and
-engine-level status.
+`router.redb`, and so on. Persona owns manager-level state: the engine
+catalog, component desired state, health, lifecycle observations,
+startup/shutdown activity, inter-engine routes, and engine-level status.
 
 ```mermaid
 graph TB
@@ -198,12 +200,12 @@ when `PERSONA_ORCHESTRATE_EXECUTABLE` points at the launcher or daemon.
 | `persona-message` | Message ingress component: `message` NOTA CLI plus supervised `persona-message-daemon`; the daemon forwards typed message frames to the internal router socket. |
 | `persona-system` | System/window focus observation adapters. |
 | `persona-harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
-| `persona-terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. It exposes an ordinary terminal communication surface, an owner-only terminal lifecycle surface, plus one supervision socket. |
+| `persona-terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. It exposes an ordinary terminal communication surface, an owner-only terminal lifecycle surface, plus one engine-management socket. |
 | `terminal-cell` | Low-level PTY/transcript library consumed by `persona-terminal`; standalone daemon form is a development/test harness. |
 | `sema` | Typed database kernel library over redb/rkyv. |
 | `signal-frame` | Signal wire kernel: frames, exchange identifiers, handshake, channel macro. (Renamed from `signal-core`.) |
 | `signal-sema` | Universal payloadless Sema classification labels (`Assert` / `Mutate` / `Retract` / `Match` / `Subscribe` / `Validate`) used for observation only; `PatternField<T>`, `Slot<T>`, `Revision` primitives. |
-| `signal-persona` | Management contract for the `persona` engine manager. |
+| `signal-persona` | Management contract for Persona. |
 | `signal-persona-message` | Message ingress contract. |
 | `signal-persona-system` | System observation contract. |
 | `signal-persona-harness` | Router/harness delivery and observation contract. |
@@ -632,7 +634,7 @@ the manager's common spawn-envelope environment
 inspectable capture file under the component state directory, then execs the
 real Nix-built component binary. This is integration glue, not a new
 component. The component daemon owns both its domain socket and its typed
-supervision relation.
+engine-management relation.
 
 The engine launch configuration is the place for explicit component command
 overrides. A NOTA launch record may provide an override for one component
@@ -651,9 +653,9 @@ test. Omitted components use the Nix-provided default.
 - **`signal-persona::SpawnEnvelope`** — the **child-readable typed
   wire form**. Carries engine_id, component_kind, component_name,
   owner_identity, state_dir, domain_socket_path, domain_socket_mode,
-  supervision_socket_path, supervision_socket_mode, peer_sockets,
-  manager_socket, and supervision_protocol_version. The manager writes
-  the envelope file at
+  engine_management_socket_path, engine_management_socket_mode,
+  peer_sockets, manager_socket, and engine_management_protocol_version.
+  The manager writes the envelope file at
   `/var/run/persona/<engine-id>/<component>.envelope` at spawn
   time; the child reads it via `signal-persona`'s typed decoder
   and proceeds. Per ESSENCE §"Infrastructure mints identity, time,
@@ -718,16 +720,16 @@ snapshot reduce is not possible — both happen in one transaction; a daemon
 that crashes between transactions resumes at the highest persisted event
 sequence with no state lost.
 
-**Socket and supervision verification**: each child binds its own domain
-socket from the envelope and applies the requested mode. Each child also binds
-the envelope's supervision socket at mode `0600`.
+**Socket and engine-management verification**: each child binds its own
+domain socket from the envelope and applies the requested mode. Each child
+also binds the envelope's engine-management socket at mode `0600`.
 The manager verifies both sockets' *type*, *path*, and *mode* on disk, then
-sends typed `signal-persona::SupervisionRequest` frames over the supervision
-socket: `ComponentHello`, `ComponentReadinessQuery`, and
-`ComponentHealthQuery`. Only a matching identity, ready reply, and `Running`
+sends typed `signal_persona::engine_management::Operation` frames over the
+engine-management socket: `Announce`, `Query(ReadinessStatus)`, and
+`Query(HealthStatus)`. Only a matching identity, ready reply, and `Running`
 health report lets the manager append `ComponentReady` to the event log. A
 child that fails to bind, binds the wrong mode, gives the wrong identity, or
-does not answer the supervision relation does not progress to `Ready`.
+does not answer the engine-management relation does not progress to `Ready`.
 
 **Bounded reachability probe vs ongoing polling**: the kernel offers no push
 primitive for *"another process has called `bind(2)` on a path I just minted
@@ -739,7 +741,7 @@ reachability-probe carveout. The probe terminates: success appends
 `ComponentReady`; timeout returns a typed `ComponentReadinessTimeout`. No
 manager loop continues to ask *"did anything change?"* after the probe
 resolves. Ongoing health observation is push-shaped: the component's
-supervision socket emits typed health events to the manager when its
+engine-management socket emits typed health events to the manager when its
 own state changes, not on a manager-driven clock.
 
 **Child-exit observation is push, not poll**: the manager does not poll
@@ -886,7 +888,7 @@ keeps manager state across CLI invocations. The manager redb path is present
 through a dedicated `ManagerStore` Kameo actor backed by Sema; manager
 mutations persist by sending typed messages to that actor.
 
-The first supervision slice is also present. When the daemon receives an
+The first engine-management slice is also present. When the daemon receives an
 explicit launch plan from environment, it starts the data-bearing
 `EngineSupervisor` actor, resolves prototype-supervised component commands through
 `ComponentCommandResolver`, prepares EngineId-scoped state/run directories,
@@ -900,8 +902,8 @@ for hosts that have not yet supplied component commands.
 `persona-daemon` with the Nix-built prototype launcher set. In a pure Nix
 builder it proves every prototype-supervised component receives the spawn
 envelope and reaches its launcher, proves every domain socket binds with the
-envelope-declared mode, proves every supervision socket binds with mode `0600`,
-and proves the manager receives typed supervision identity/readiness/health
+envelope-declared mode, proves every engine-management socket binds with mode `0600`,
+and proves the manager receives typed engine-management identity/readiness/health
 replies before recording `ComponentReady`. `persona-terminal` still needs the
 stateful terminal-cell smoke lane for real PTY readiness, because pure Nix
 builders do not provide the PTY environment that terminal-cell needs. The
@@ -953,9 +955,9 @@ orchestrate client path, and stop treating lock files as authoritative state.
 Rust-to-Rust traffic uses Signal frames: length-prefixed rkyv archives with
 channel-specific request/reply payloads.
 
-`signal-persona` is the contract for talking to the top-level `persona` engine
-manager. A client uses it to ask the engine manager for engine status,
-component health, engine-visible projections, and supervisor actions.
+`signal-persona` is the contract for talking to Persona. A client uses it
+to ask Persona for engine status, component health, engine-visible
+projections, and engine-management actions.
 It is also the home for engine catalog and lifecycle records: `EngineId`,
 component desired state, component health, socket layout, spawn envelopes, and
 shutdown/restart requests. Authorization/provenance vocabulary belongs in the
@@ -1086,7 +1088,7 @@ stream-shaped.
 communication socket that speaks `signal-persona-terminal` frames
 (length-prefixed rkyv), an owner-only terminal surface that speaks
 `owner-signal-persona-terminal` frames for session lifecycle mutation, and the
-component supervision socket. The production daemon embeds `terminal-cell` as
+component engine-management socket. The production daemon embeds `terminal-cell` as
 its low-level PTY/transcript library.
 
 `terminal-cell` still has a local control/data split inside the terminal
@@ -1210,8 +1212,8 @@ Migration rules:
   the stateful terminal-cell lane because pure builders do not provide a real
   interactive PTY surface.
 - Resolved spawn envelopes carry executable path, argv, environment, state
-  path, domain socket path/mode, supervision socket path/mode, and peer sockets.
-- The first engine-supervision witness starts every prototype-supervised component, not
+  path, domain socket path/mode, engine-management socket path/mode, and peer sockets.
+- The first engine-management witness starts every prototype-supervised component, not
   only the components with useful behavior already implemented.
 - Every prototype-supervised component has a Nix-built prototype launcher before
   the full-topology witness is considered real.
@@ -1219,8 +1221,8 @@ Migration rules:
   health/status/readiness, and returns typed unfinished-state replies for
   valid requests whose behavior is not built yet.
 - Prototype `ComponentReady` means the manager observed the component's
-  envelope-declared domain socket, observed the component's supervision socket,
-  and completed a typed supervision identity/readiness/health round-trip. It is
+  envelope-declared domain socket, observed the component's engine-management socket,
+  and completed a typed engine-management identity/readiness/health round-trip. It is
   not emitted merely because `spawn(2)` returned a child PID.
 - Unfinished-state replies are closed typed records such as `Unimplemented`,
   `Unsupported`, `Unavailable`, or `Failed`; they are never plain strings or
@@ -1266,12 +1268,12 @@ Migration rules:
   actor. Plain `on_stop` also drops the handle as a fallback, but the
   close-then-stop protocol is the path with a redb lock-release witness.
 - `ComponentReady` is appended only after Hello + ReadinessQuery + HealthQuery
-  all return non-error replies over the child's supervision socket. Filesystem
+  all return non-error replies over the child's engine-management socket. Filesystem
   socket existence alone does not promote a component to `Ready`.
 - Manager startup-time socket reachability is a bounded reachability probe
   carrying the `ESSENCE.md` §"Named carve-outs" carveout, not ongoing
   state-change polling. Ongoing health observation is push-shaped from the
-  component's supervision socket.
+  component's engine-management socket.
 - Each `DirectProcessLauncher`-spawned child is owned by a dedicated watcher
   task that awaits `child.wait()` and pushes one of two messages: a
   `StopComponentReceipt` for manager-initiated stops, or a
@@ -1410,9 +1412,9 @@ Migration rules:
   rebuilds them from the event log.
 - Full-engine supervision first proves every prototype-supervised component is
   launched from the Nix-built stack, that each component domain socket reaches
-  the envelope-declared type/mode, and that each supervision socket answers the
-  typed supervision relation. PTY readiness stays in a stateful terminal-cell
-  witness.
+  the envelope-declared type/mode, and that each engine-management socket answers
+  the typed engine-management relation. PTY readiness stays in a stateful
+  terminal-cell witness.
 - The message-router topology first proves a two-component sandbox can launch
   through the same manager/supervisor/launcher path, with one peer socket per
   component and no accidental full-stack component spawn.
@@ -1465,23 +1467,23 @@ The apex repo owns tests that prove cross-component shape:
 | persona CLI is daemon client | CLI accepts exactly one NOTA request and prints one NOTA reply. |
 | persona-daemon preserves unrelated files | daemon startup refuses a non-socket endpoint path instead of deleting it. |
 | manager catalog writes go through the writer actor | `nix build .#checks.x86_64-linux.persona-manager-store-writes-engine-status-through-writer-actor` |
-| engine manager persists accepted mutations | `nix build .#checks.x86_64-linux.persona-engine-manager-persists-component-mutation-through-manager-store` |
-| engine manager restores persisted snapshot before serving status | `nix build .#checks.x86_64-linux.persona-engine-manager-restores-persisted-snapshot-before-status` |
+| Persona persists accepted mutations | `nix build .#checks.x86_64-linux.persona-engine-manager-persists-component-mutation-through-manager-store` |
+| Persona restores persisted snapshot before serving status | `nix build .#checks.x86_64-linux.persona-engine-manager-restores-persisted-snapshot-before-status` |
 | manager store reduces lifecycle events into both snapshot tables in one transaction | `nix build .#checks.x86_64-linux.persona-manager-store-reduces-lifecycle-events-into-snapshots` |
-| engine manager hydrates component health from the status snapshot on startup | `nix build .#checks.x86_64-linux.persona-engine-manager-hydrates-component-health-from-snapshot` |
+| Persona hydrates component health from the status snapshot on startup | `nix build .#checks.x86_64-linux.persona-engine-manager-hydrates-component-health-from-snapshot` |
 | snapshot tables rebuild from the event log after a `ManagerStore::open` against an empty snapshot table | `nix build .#checks.x86_64-linux.persona-manager-store-rebuilds-snapshots-from-event-log` |
 | active component version is projected from the manager event log and survives snapshot rebuild | `nix build .#checks.x86_64-linux.persona-manager-store-projects-active-component-version` |
-| engine manager prepares a component upgrade by emitting the first version-handover marker request | `nix build .#checks.x86_64-linux.persona-engine-manager-prepares-upgrade-with-version-handover-request` |
-| engine manager records the active component version only after handover completion | `nix build .#checks.x86_64-linux.persona-engine-manager-records-active-version-after-handover-completion` |
-| persona engine drives version handover through a component's private upgrade socket | `nix build .#checks.x86_64-linux.persona-engine-drives-version-handover-over-component-upgrade-socket` |
-| persona engine starts the next component unit before probing handover sockets | `nix build .#checks.x86_64-linux.persona-engine-starts-next-component-unit-before-handover-socket-probe` |
+| Persona prepares a component upgrade by emitting the first version-handover marker request | `nix build .#checks.x86_64-linux.persona-engine-manager-prepares-upgrade-with-version-handover-request` |
+| Persona records the active component version only after handover completion | `nix build .#checks.x86_64-linux.persona-engine-manager-records-active-version-after-handover-completion` |
+| Persona drives version handover through a component's private upgrade socket | `nix build .#checks.x86_64-linux.persona-engine-drives-version-handover-over-component-upgrade-socket` |
+| Persona starts the next component unit before probing handover sockets | `nix build .#checks.x86_64-linux.persona-engine-starts-next-component-unit-before-handover-socket-probe` |
 | component unit names use the component+version systemd template instance shape | `nix build .#checks.x86_64-linux.persona-component-unit-name-is-component-version-template-instance` |
 | component unit manager dispatches start, stop, restart, and status through the controller boundary | `nix build .#checks.x86_64-linux.persona-component-unit-manager-dispatches-control-actions` |
 | transient unit definitions project component commands into systemd start properties | `nix build .#checks.x86_64-linux.persona-transient-unit-definition-projects-exec-start` |
-| persona engine refuses handover when the next daemon's private upgrade marker is stale | `nix build .#checks.x86_64-linux.persona-engine-refuses-stale-next-handover-marker` |
-| persona engine asks the current daemon to recover if completion fails after readiness | `nix build .#checks.x86_64-linux.persona-engine-recovers-current-handover-after-completion-failure` |
+| Persona refuses handover when the next daemon's private upgrade marker is stale | `nix build .#checks.x86_64-linux.persona-engine-refuses-stale-next-handover-marker` |
+| Persona asks the main daemon to recover if completion fails after readiness | `nix build .#checks.x86_64-linux.persona-engine-recovers-current-handover-after-completion-failure` |
 | owner `AttemptHandover` authority drives the same private-socket handover path as the internal manager driver | `nix build .#checks.x86_64-linux.persona-engine-owner-attempt-drives-version-handover` |
-| persona engine refuses normal handover when either target version is quarantined by owner authority | `nix build .#checks.x86_64-linux.persona-engine-refuses-version-handover-with-quarantined-version` |
+| Persona refuses normal handover when either target version is quarantined by owner authority | `nix build .#checks.x86_64-linux.persona-engine-refuses-version-handover-with-quarantined-version` |
 | owner `AttemptHandover` returns a typed `Rejected(VersionQuarantined)` reply for quarantined versions instead of dropping the owner connection | `nix build .#checks.x86_64-linux.persona-engine-owner-attempt-rejects-quarantined-version` |
 | manager store close protocol releases its redb lock before shutdown completion | `nix build .#checks.x86_64-linux.persona-manager-store-close-protocol-releases-redb-lock-before-shutdown` |
 | manager startup detects orphans — `ComponentSpawned` without matching `ComponentReady` or `ComponentExited` — and appends `ComponentOrphaned` events | `nix build .#checks.x86_64-linux.persona-manager-startup-appends-orphaned-events-for-unfinished-spawn` |
@@ -1683,13 +1685,13 @@ src/unit.rs      component unit identity, transient unit definitions, unit-manag
 src/direct_process.rs  direct child-process launcher actor
 src/launch/      launch configuration, resolved commands, command resolver actor
 src/supervisor.rs  Kameo EngineSupervisor actor that starts/stops prototype-supervised processes
-src/supervision_readiness.rs  Kameo actor for typed component supervision probes
+src/supervision_readiness.rs  Kameo actor for typed component engine-management probes (file pending rename to engine_management_readiness.rs per primary-u8vo)
 src/transport.rs Unix-socket Signal codec, client, daemon, endpoint, caller
 src/manager.rs   Kameo EngineManager actor scaffold and trace witness
 src/manager_store.rs  Kameo ManagerStore actor and manager.redb Sema tables
 src/request.rs   NOTA projection into signal-persona requests and replies
 src/state.rs     in-memory engine-state reducer
-src/bin/persona_component_fixture.rs  typed component/supervision fixture for tests
+src/bin/persona_component_fixture.rs  typed component/engine-management fixture for tests
 src/bin/wire_*   signal-persona-message wire-test shims
 tests/           daemon, manager, store, supervisor, process, layout, wire, and meta-test witnesses
 ```
