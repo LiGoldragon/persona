@@ -9,7 +9,7 @@ pub use signal_persona_system::SystemOperationKind;
 pub use signal_persona_terminal::TerminalOperationKind;
 use strum::EnumDiscriminants;
 
-use crate::upgrade::{ActiveVersionChanged, PreparedEvent};
+use crate::upgrade::{ActiveVersionChanged, PreparedEvent, VersionQuarantined};
 
 /// Monotonic event key scoped to one manager catalog.
 ///
@@ -172,6 +172,7 @@ pub enum EngineEventBody {
     EngineStateChanged(EngineStateChanged),
     UpgradePrepared(PreparedEvent),
     ActiveVersionChanged(ActiveVersionChanged),
+    VersionQuarantined(VersionQuarantined),
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]

@@ -1,8 +1,16 @@
-use persona::manager::{
-    CompleteUpgrade, EngineManager, HandleEngineRequest, ManagerEvent, PrepareUpgrade, ReadTrace,
+use owner_signal_version_handover::{
+    ForceFlip, ForceReason, Operation as OwnerVersionOperation, Quarantine, QuarantineReason,
+    Reply as OwnerVersionReply, Rollback, RollbackReason, Version as OwnerVersion, VersionLabel,
 };
-use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadActiveVersion};
-use persona::upgrade::{Target, TargetInput, Version};
+use persona::engine_event::EngineEventBody;
+use persona::manager::{
+    CompleteUpgrade, EngineManager, HandleEngineRequest, HandleOwnerVersionHandover, ManagerEvent,
+    PrepareUpgrade, ReadTrace,
+};
+use persona::manager_store::{
+    ManagerStore, ManagerStoreLocation, ReadActiveVersion, ReadEngineEvents,
+};
+use persona::upgrade::{ActiveVersionChangeSource, Target, TargetInput, Version};
 use signal_persona::engine::{Operation as EngineRequest, Reply as EngineReply};
 use signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, EngineStatusScope,
@@ -66,6 +74,36 @@ fn handover_marker(commit_sequence: u64) -> HandoverMarker {
         last_record_identifier: Some(210),
         recorded_at_date: Date::new(2026, 5, 22),
         recorded_at_time: Time::new(16, 30, 0),
+    }
+}
+
+fn owner_version(label: &str, byte: u8) -> OwnerVersion {
+    OwnerVersion::new(VersionLabel::new(label), ContractVersion::new([byte; 32]))
+}
+
+fn owner_force_flip_order() -> ForceFlip {
+    ForceFlip {
+        component: HandoverComponentName::new("persona-spirit"),
+        current_version: owner_version("v0.1.0", 1),
+        target_version: owner_version("v0.1.1", 2),
+        reason: ForceReason::OperatorOverride,
+    }
+}
+
+fn owner_rollback_order() -> Rollback {
+    Rollback {
+        component: HandoverComponentName::new("persona-spirit"),
+        active_version: owner_version("v0.1.1", 2),
+        restore_version: owner_version("v0.1.0", 1),
+        reason: RollbackReason::PostCutoverFailure,
+    }
+}
+
+fn owner_quarantine_order() -> Quarantine {
+    Quarantine {
+        component: HandoverComponentName::new("persona-spirit"),
+        version: owner_version("v0.1.1", 2),
+        reason: QuarantineReason::SuspectState,
     }
 }
 
@@ -197,7 +235,7 @@ async fn constraint_engine_manager_records_active_version_after_handover_complet
         .await
         .expect("complete upgrade succeeds");
     assert_eq!(change.active_version().as_str(), "v0.1.1");
-    assert_eq!(change.commit_sequence(), 77);
+    assert_eq!(change.commit_sequence(), Some(77));
 
     let active = store
         .ask(ReadActiveVersion::new(
@@ -209,13 +247,160 @@ async fn constraint_engine_manager_records_active_version_after_handover_complet
         .expect("active version persisted");
     assert_eq!(active.active_version().as_str(), "v0.1.1");
     assert_eq!(active.schema_hash(), ContractVersion::new([9; 32]));
-    assert_eq!(active.commit_sequence(), 77);
+    assert_eq!(active.commit_sequence(), Some(77));
 
     let trace = manager
         .ask(ReadTrace::expecting_at_least(2))
         .await
         .expect("trace read through actor");
     assert!(trace.contains(&ManagerEvent::ActiveVersionChanged));
+
+    EngineManager::stop(manager)
+        .await
+        .expect("manager stops cleanly");
+    ManagerStore::close_and_stop(store)
+        .await
+        .expect("manager store closes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_engine_manager_applies_owner_force_flip_to_active_selector() {
+    let fixture = StoreFixture::new("persona-manager-owner-force-flip");
+    let engine = EngineId::new("engine-owner-force-flip");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    let manager = EngineManager::start_with_store(engine.clone(), store.clone())
+        .await
+        .expect("manager starts with store");
+
+    let reply = manager
+        .ask(HandleOwnerVersionHandover::new(
+            OwnerVersionOperation::ForceFlip(owner_force_flip_order()),
+        ))
+        .await
+        .expect("owner force flip succeeds");
+    let OwnerVersionReply::FlipForced(accepted) = reply else {
+        panic!("expected FlipForced reply, got {reply:?}");
+    };
+    assert_eq!(accepted.component.as_str(), "persona-spirit");
+    assert_eq!(accepted.active_version.label.as_str(), "v0.1.1");
+
+    let active = store
+        .ask(ReadActiveVersion::new(
+            engine,
+            ComponentName::new("persona-spirit"),
+        ))
+        .await
+        .expect("active version snapshot read")
+        .expect("active version persisted");
+    assert_eq!(active.active_version().as_str(), "v0.1.1");
+    assert_eq!(active.schema_hash(), ContractVersion::new([2; 32]));
+    assert_eq!(active.commit_sequence(), None);
+    assert_eq!(
+        active.source(),
+        &ActiveVersionChangeSource::ForceFlip {
+            reason: ForceReason::OperatorOverride
+        }
+    );
+
+    let trace = manager
+        .ask(ReadTrace::expecting_at_least(2))
+        .await
+        .expect("trace read through actor");
+    assert!(trace.contains(&ManagerEvent::VersionAuthorityApplied));
+
+    EngineManager::stop(manager)
+        .await
+        .expect("manager stops cleanly");
+    ManagerStore::close_and_stop(store)
+        .await
+        .expect("manager store closes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_engine_manager_applies_owner_rollback_to_active_selector() {
+    let fixture = StoreFixture::new("persona-manager-owner-rollback");
+    let engine = EngineId::new("engine-owner-rollback");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    let manager = EngineManager::start_with_store(engine.clone(), store.clone())
+        .await
+        .expect("manager starts with store");
+
+    let reply = manager
+        .ask(HandleOwnerVersionHandover::new(
+            OwnerVersionOperation::Rollback(owner_rollback_order()),
+        ))
+        .await
+        .expect("owner rollback succeeds");
+    let OwnerVersionReply::RolledBack(accepted) = reply else {
+        panic!("expected RolledBack reply, got {reply:?}");
+    };
+    assert_eq!(accepted.component.as_str(), "persona-spirit");
+    assert_eq!(accepted.active_version.label.as_str(), "v0.1.0");
+
+    let active = store
+        .ask(ReadActiveVersion::new(
+            engine,
+            ComponentName::new("persona-spirit"),
+        ))
+        .await
+        .expect("active version snapshot read")
+        .expect("active version persisted");
+    assert_eq!(active.active_version().as_str(), "v0.1.0");
+    assert_eq!(active.schema_hash(), ContractVersion::new([1; 32]));
+    assert_eq!(
+        active.source(),
+        &ActiveVersionChangeSource::Rollback {
+            reason: RollbackReason::PostCutoverFailure
+        }
+    );
+
+    EngineManager::stop(manager)
+        .await
+        .expect("manager stops cleanly");
+    ManagerStore::close_and_stop(store)
+        .await
+        .expect("manager store closes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_engine_manager_records_owner_quarantine_event() {
+    let fixture = StoreFixture::new("persona-manager-owner-quarantine");
+    let engine = EngineId::new("engine-owner-quarantine");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    let manager = EngineManager::start_with_store(engine.clone(), store.clone())
+        .await
+        .expect("manager starts with store");
+
+    let reply = manager
+        .ask(HandleOwnerVersionHandover::new(
+            OwnerVersionOperation::Quarantine(owner_quarantine_order()),
+        ))
+        .await
+        .expect("owner quarantine succeeds");
+    let OwnerVersionReply::Quarantined(accepted) = reply else {
+        panic!("expected Quarantined reply, got {reply:?}");
+    };
+    assert_eq!(accepted.component.as_str(), "persona-spirit");
+    assert_eq!(accepted.version.label.as_str(), "v0.1.1");
+
+    let events = store
+        .ask(ReadEngineEvents::new(engine))
+        .await
+        .expect("engine events read");
+    assert!(matches!(
+        events.last().map(|event| event.body()),
+        Some(EngineEventBody::VersionQuarantined(event))
+            if event.component().as_str() == "persona-spirit"
+                && event.version().as_str() == "v0.1.1"
+                && event.schema_hash() == ContractVersion::new([2; 32])
+                && event.reason() == QuarantineReason::SuspectState
+    ));
+
+    let trace = manager
+        .ask(ReadTrace::expecting_at_least(2))
+        .await
+        .expect("trace read through actor");
+    assert!(trace.contains(&ManagerEvent::VersionQuarantined));
 
     EngineManager::stop(manager)
         .await

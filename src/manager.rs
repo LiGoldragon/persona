@@ -1,6 +1,10 @@
 use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
+use owner_signal_version_handover::{
+    ForcedFlip, Operation as OwnerVersionHandoverOperation, Quarantined,
+    Reply as OwnerVersionReply, RequestUnimplemented, RolledBack, UnimplementedReason,
+};
 use signal_persona::engine::{Operation, Reply};
 use signal_persona::{
     ActionRejection, ActionRejectionReason, ComponentName, ComponentShutdown, ComponentStartup,
@@ -19,7 +23,7 @@ use crate::manager_store::{
     PersistEngineRecord, ReadEngineRecord, ReadEngineStatusSnapshot,
 };
 use crate::state::EngineState;
-use crate::upgrade::{ActiveVersionChanged, Prepared, PreparedEvent, Target};
+use crate::upgrade::{ActiveVersionChanged, Prepared, PreparedEvent, Target, VersionQuarantined};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ManagerEvent {
@@ -29,6 +33,8 @@ pub enum ManagerEvent {
     TraceRead,
     UpgradePrepared,
     ActiveVersionChanged,
+    VersionAuthorityApplied,
+    VersionQuarantined,
     Stopping,
 }
 
@@ -228,6 +234,50 @@ impl EngineManager {
         Ok(change)
     }
 
+    async fn handle_owner_version_handover(
+        &mut self,
+        operation: OwnerVersionHandoverOperation,
+    ) -> Result<OwnerVersionReply> {
+        let reply = match operation {
+            OwnerVersionHandoverOperation::ForceFlip(order) => {
+                let change = ActiveVersionChanged::from_force_flip(&order);
+                self.append_event(EngineEventBody::ActiveVersionChanged(change))
+                    .await?;
+                self.events.push(ManagerEvent::VersionAuthorityApplied);
+                OwnerVersionReply::FlipForced(ForcedFlip {
+                    component: order.component,
+                    active_version: order.target_version,
+                })
+            }
+            OwnerVersionHandoverOperation::Rollback(order) => {
+                let change = ActiveVersionChanged::from_rollback(&order);
+                self.append_event(EngineEventBody::ActiveVersionChanged(change))
+                    .await?;
+                self.events.push(ManagerEvent::VersionAuthorityApplied);
+                OwnerVersionReply::RolledBack(RolledBack {
+                    component: order.component,
+                    active_version: order.restore_version,
+                })
+            }
+            OwnerVersionHandoverOperation::Quarantine(order) => {
+                let event = VersionQuarantined::from_quarantine(&order);
+                self.append_event(EngineEventBody::VersionQuarantined(event))
+                    .await?;
+                self.events.push(ManagerEvent::VersionQuarantined);
+                OwnerVersionReply::Quarantined(Quarantined {
+                    component: order.component,
+                    version: order.version,
+                })
+            }
+            OwnerVersionHandoverOperation::Tap(_) | OwnerVersionHandoverOperation::Untap(_) => {
+                OwnerVersionReply::RequestUnimplemented(RequestUnimplemented {
+                    reason: UnimplementedReason::IntegrationNotLanded,
+                })
+            }
+        };
+        Ok(reply)
+    }
+
     fn read_events(&mut self, probe: TraceProbe) -> Vec<ManagerEvent> {
         let _satisfied = self.events.len() >= probe.minimum_events;
         self.events.push(ManagerEvent::TraceRead);
@@ -329,6 +379,29 @@ impl Message<CompleteUpgrade> for EngineManager {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.complete_upgrade(message.target, message.marker).await
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HandleOwnerVersionHandover {
+    operation: OwnerVersionHandoverOperation,
+}
+
+impl HandleOwnerVersionHandover {
+    pub fn new(operation: OwnerVersionHandoverOperation) -> Self {
+        Self { operation }
+    }
+}
+
+impl Message<HandleOwnerVersionHandover> for EngineManager {
+    type Reply = Result<OwnerVersionReply>;
+
+    async fn handle(
+        &mut self,
+        message: HandleOwnerVersionHandover,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.handle_owner_version_handover(message.operation).await
     }
 }
 

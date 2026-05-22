@@ -26,6 +26,12 @@ impl Version {
     }
 }
 
+impl From<&owner_signal_version_handover::Version> for Version {
+    fn from(version: &owner_signal_version_handover::Version) -> Self {
+        Self::new(version.label.as_str())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Target {
     component: ComponentName,
@@ -162,11 +168,37 @@ impl PreparedEvent {
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
 )))]
+pub enum ActiveVersionChangeSource {
+    HandoverMarker {
+        commit_sequence: u64,
+    },
+    ForceFlip {
+        reason: owner_signal_version_handover::ForceReason,
+    },
+    Rollback {
+        reason: owner_signal_version_handover::RollbackReason,
+    },
+}
+
+impl ActiveVersionChangeSource {
+    pub fn commit_sequence(&self) -> Option<u64> {
+        match self {
+            Self::HandoverMarker { commit_sequence } => Some(*commit_sequence),
+            Self::ForceFlip { .. } | Self::Rollback { .. } => None,
+        }
+    }
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[rkyv(bytecheck(bounds(
+    __C: rkyv::validation::ArchiveContext,
+    __C::Error: rkyv::rancor::Source
+)))]
 pub struct ActiveVersionChanged {
     component: ComponentName,
     active_version: Version,
     schema_hash: ContractVersion,
-    commit_sequence: u64,
+    source: ActiveVersionChangeSource,
 }
 
 impl ActiveVersionChanged {
@@ -175,7 +207,31 @@ impl ActiveVersionChanged {
             component: target.component.clone(),
             active_version: target.next_version.clone(),
             schema_hash: marker.schema_hash,
-            commit_sequence: marker.commit_sequence,
+            source: ActiveVersionChangeSource::HandoverMarker {
+                commit_sequence: marker.commit_sequence,
+            },
+        }
+    }
+
+    pub fn from_force_flip(order: &owner_signal_version_handover::ForceFlip) -> Self {
+        Self {
+            component: ComponentName::new(order.component.as_str()),
+            active_version: Version::from(&order.target_version),
+            schema_hash: order.target_version.contract_version,
+            source: ActiveVersionChangeSource::ForceFlip {
+                reason: order.reason,
+            },
+        }
+    }
+
+    pub fn from_rollback(order: &owner_signal_version_handover::Rollback) -> Self {
+        Self {
+            component: ComponentName::new(order.component.as_str()),
+            active_version: Version::from(&order.restore_version),
+            schema_hash: order.restore_version.contract_version,
+            source: ActiveVersionChangeSource::Rollback {
+                reason: order.reason,
+            },
         }
     }
 
@@ -191,8 +247,51 @@ impl ActiveVersionChanged {
         self.schema_hash
     }
 
-    pub fn commit_sequence(&self) -> u64 {
-        self.commit_sequence
+    pub fn source(&self) -> &ActiveVersionChangeSource {
+        &self.source
+    }
+
+    pub fn commit_sequence(&self) -> Option<u64> {
+        self.source.commit_sequence()
+    }
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[rkyv(bytecheck(bounds(
+    __C: rkyv::validation::ArchiveContext,
+    __C::Error: rkyv::rancor::Source
+)))]
+pub struct VersionQuarantined {
+    component: ComponentName,
+    version: Version,
+    schema_hash: ContractVersion,
+    reason: owner_signal_version_handover::QuarantineReason,
+}
+
+impl VersionQuarantined {
+    pub fn from_quarantine(order: &owner_signal_version_handover::Quarantine) -> Self {
+        Self {
+            component: ComponentName::new(order.component.as_str()),
+            version: Version::from(&order.version),
+            schema_hash: order.version.contract_version,
+            reason: order.reason,
+        }
+    }
+
+    pub fn component(&self) -> &ComponentName {
+        &self.component
+    }
+
+    pub fn version(&self) -> &Version {
+        &self.version
+    }
+
+    pub fn schema_hash(&self) -> ContractVersion {
+        self.schema_hash
+    }
+
+    pub fn reason(&self) -> owner_signal_version_handover::QuarantineReason {
+        self.reason
     }
 }
 
@@ -201,7 +300,7 @@ pub struct ActiveVersion {
     component: ComponentName,
     active_version: Version,
     schema_hash: ContractVersion,
-    commit_sequence: u64,
+    source: ActiveVersionChangeSource,
 }
 
 impl ActiveVersion {
@@ -209,13 +308,13 @@ impl ActiveVersion {
         component: ComponentName,
         active_version: Version,
         schema_hash: ContractVersion,
-        commit_sequence: u64,
+        source: ActiveVersionChangeSource,
     ) -> Self {
         Self {
             component,
             active_version,
             schema_hash,
-            commit_sequence,
+            source,
         }
     }
 
@@ -224,7 +323,7 @@ impl ActiveVersion {
             change.component.clone(),
             change.active_version.clone(),
             change.schema_hash,
-            change.commit_sequence,
+            change.source.clone(),
         )
     }
 
@@ -240,7 +339,11 @@ impl ActiveVersion {
         self.schema_hash
     }
 
-    pub fn commit_sequence(&self) -> u64 {
-        self.commit_sequence
+    pub fn source(&self) -> &ActiveVersionChangeSource {
+        &self.source
+    }
+
+    pub fn commit_sequence(&self) -> Option<u64> {
+        self.source.commit_sequence()
     }
 }

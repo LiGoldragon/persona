@@ -1,4 +1,5 @@
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode, NotaEnum, NotaRecord};
+use owner_signal_version_handover::{ForceReason, QuarantineReason, RollbackReason};
 use signal_persona as contract;
 use signal_persona_auth::EngineId;
 
@@ -13,6 +14,7 @@ use crate::engine_event::{
     HarnessOperationKind, MessageOperationKind, MindOperationKind, SystemOperationKind,
     TerminalOperationKind, UnimplementedReason,
 };
+use crate::upgrade::ActiveVersionChangeSource;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineEventReport {
@@ -155,7 +157,21 @@ pub struct UpgradePreparedReport {
 pub struct ActiveVersionChangedReport {
     pub component: ComponentName,
     pub active_version: String,
-    pub commit_sequence: u64,
+    pub source: ActiveVersionChangeSourceReport,
+}
+
+#[derive(NotaEnum, Debug, Clone, PartialEq, Eq)]
+pub enum ActiveVersionChangeSourceReport {
+    HandoverMarker { commit_sequence: u64 },
+    ForceFlip { reason: ForceReason },
+    Rollback { reason: RollbackReason },
+}
+
+#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+pub struct VersionQuarantinedReport {
+    pub component: ComponentName,
+    pub version: String,
+    pub reason: QuarantineReason,
 }
 
 #[derive(NotaEnum, Debug, Clone, PartialEq, Eq)]
@@ -171,6 +187,7 @@ pub enum EngineEventBodyReport {
     EngineStateChanged(EngineStateChangedReport),
     UpgradePrepared(UpgradePreparedReport),
     ActiveVersionChanged(ActiveVersionChangedReport),
+    VersionQuarantined(VersionQuarantinedReport),
 }
 
 #[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -421,9 +438,28 @@ impl EngineEventBodyReport {
                 Self::ActiveVersionChanged(ActiveVersionChangedReport {
                     component: event.component().clone(),
                     active_version: event.active_version().as_str().to_string(),
-                    commit_sequence: event.commit_sequence(),
+                    source: ActiveVersionChangeSourceReport::from_source(event.source()),
                 })
             }
+            EngineEventBody::VersionQuarantined(event) => {
+                Self::VersionQuarantined(VersionQuarantinedReport {
+                    component: event.component().clone(),
+                    version: event.version().as_str().to_string(),
+                    reason: event.reason(),
+                })
+            }
+        }
+    }
+}
+
+impl ActiveVersionChangeSourceReport {
+    fn from_source(source: &ActiveVersionChangeSource) -> Self {
+        match source {
+            ActiveVersionChangeSource::HandoverMarker { commit_sequence } => Self::HandoverMarker {
+                commit_sequence: *commit_sequence,
+            },
+            ActiveVersionChangeSource::ForceFlip { reason } => Self::ForceFlip { reason: *reason },
+            ActiveVersionChangeSource::Rollback { reason } => Self::Rollback { reason: *reason },
         }
     }
 }

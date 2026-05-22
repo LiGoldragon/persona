@@ -358,7 +358,7 @@ async fn constraint_manager_store_projects_active_component_version_from_event_l
         .expect("active version exists");
     assert_eq!(active.active_version().as_str(), "v0.1.1");
     assert_eq!(active.schema_hash(), ContractVersion::new([7; 32]));
-    assert_eq!(active.commit_sequence(), 45);
+    assert_eq!(active.commit_sequence(), Some(45));
 
     store
         .ask(RebuildSnapshotsFromEventLog)
@@ -373,7 +373,7 @@ async fn constraint_manager_store_projects_active_component_version_from_event_l
         .expect("active version snapshot reads after rebuild")
         .expect("active version exists after rebuild");
     assert_eq!(rebuilt.active_version().as_str(), "v0.1.1");
-    assert_eq!(rebuilt.commit_sequence(), 45);
+    assert_eq!(rebuilt.commit_sequence(), Some(45));
 
     store.stop_gracefully().await.expect("manager store stops");
     let _shutdown_completion = store.wait_for_shutdown().await;

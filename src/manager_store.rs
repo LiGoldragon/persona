@@ -400,7 +400,8 @@ impl ManagerTables {
             )?,
             EngineEventBody::ComponentUnimplemented(_)
             | EngineEventBody::EngineStateChanged(_)
-            | EngineEventBody::UpgradePrepared(_) => {}
+            | EngineEventBody::UpgradePrepared(_)
+            | EngineEventBody::VersionQuarantined(_) => {}
             EngineEventBody::ActiveVersionChanged(change) => {
                 let row = ActiveVersion::from_change(change);
                 let key = SnapshotKey::new(engine, row.component());
@@ -638,7 +639,8 @@ impl ManagerStore {
                 | EngineEventBody::RestartScheduled(_)
                 | EngineEventBody::EngineStateChanged(_)
                 | EngineEventBody::UpgradePrepared(_)
-                | EngineEventBody::ActiveVersionChanged(_) => {}
+                | EngineEventBody::ActiveVersionChanged(_)
+                | EngineEventBody::VersionQuarantined(_) => {}
             }
         }
         let mut candidates: Vec<OrphanCandidate> = arcs

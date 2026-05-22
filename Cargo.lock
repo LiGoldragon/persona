@@ -292,12 +292,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
+name = "owner-signal-version-handover"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/owner-signal-version-handover.git?branch=main#f3f1896d2cc8aee87d7c4089c694cc16a15e05bc"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "signal-frame",
+ "signal-sema",
+ "thiserror",
+ "version-projection",
+]
+
+[[package]]
 name = "persona"
 version = "0.1.0"
 dependencies = [
  "kameo",
  "libc",
  "nota-codec",
+ "owner-signal-version-handover",
  "redb",
  "rkyv",
  "sema",
