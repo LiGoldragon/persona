@@ -1311,6 +1311,7 @@ The apex repo owns tests that prove cross-component shape:
 | engine manager prepares a component upgrade by emitting the first version-handover marker request | `nix build .#checks.x86_64-linux.persona-engine-manager-prepares-upgrade-with-version-handover-request` |
 | engine manager records the active component version only after handover completion | `nix build .#checks.x86_64-linux.persona-engine-manager-records-active-version-after-handover-completion` |
 | persona engine drives version handover through a component's private upgrade socket | `nix build .#checks.x86_64-linux.persona-engine-drives-version-handover-over-component-upgrade-socket` |
+| persona engine refuses normal handover when either target version is quarantined by owner authority | `nix build .#checks.x86_64-linux.persona-engine-refuses-version-handover-with-quarantined-version` |
 | manager store close protocol releases its redb lock before shutdown completion | `nix build .#checks.x86_64-linux.persona-manager-store-close-protocol-releases-redb-lock-before-shutdown` |
 | manager startup detects orphans — `ComponentSpawned` without matching `ComponentReady` or `ComponentExited` — and appends `ComponentOrphaned` events | `nix build .#checks.x86_64-linux.persona-manager-startup-appends-orphaned-events-for-unfinished-spawn` |
 | event-log append and snapshot reduce land in one redb write transaction (no daemon crash can persist an event without its snapshot reduction) | `nix build .#checks.x86_64-linux.persona-manager-store-event-append-and-snapshot-reduce-share-one-transaction` |

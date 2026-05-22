@@ -2,6 +2,7 @@ use owner_signal_version_handover::{
     ForceFlip, ForceReason, Operation as OwnerVersionOperation, Quarantine, QuarantineReason,
     Reply as OwnerVersionReply, Rollback, RollbackReason, Version as OwnerVersion, VersionLabel,
 };
+use persona::Error;
 use persona::engine_event::EngineEventBody;
 use persona::manager::{
     CompleteUpgrade, DriveVersionHandover, EngineManager, HandleEngineRequest,
@@ -378,6 +379,44 @@ async fn constraint_persona_engine_drives_version_handover_over_component_upgrad
         .await
         .expect("trace read through actor");
     assert!(trace.contains(&ManagerEvent::VersionHandoverDriven));
+
+    EngineManager::stop(manager)
+        .await
+        .expect("manager stops cleanly");
+    ManagerStore::close_and_stop(store)
+        .await
+        .expect("manager store closes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_engine_manager_refuses_handover_with_quarantined_version() {
+    let fixture = StoreFixture::new("persona-manager-quarantine-gates-handover");
+    let engine = EngineId::new("engine-quarantine-gates-handover");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    let manager = EngineManager::start_with_store(engine, store.clone())
+        .await
+        .expect("manager starts with store");
+
+    manager
+        .ask(HandleOwnerVersionHandover::new(
+            OwnerVersionOperation::Quarantine(owner_quarantine_order()),
+        ))
+        .await
+        .expect("owner quarantine succeeds");
+
+    let error = manager
+        .ask(DriveVersionHandover::new(spirit_upgrade_target()))
+        .await
+        .expect_err("quarantined target version rejects handover before socket IO");
+
+    assert!(matches!(
+        error,
+        kameo::error::SendError::HandlerError(Error::ComponentVersionQuarantined {
+            component,
+            version,
+            reason: QuarantineReason::SuspectState,
+        }) if component == "persona-spirit" && version == "v0.1.1"
+    ));
 
     EngineManager::stop(manager)
         .await

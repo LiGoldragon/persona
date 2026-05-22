@@ -68,6 +68,15 @@ pub enum Error {
 
     #[error("handover marker component mismatch: expected {expected}, got {actual}")]
     HandoverMarkerComponentMismatch { expected: String, actual: String },
+
+    #[error(
+        "component version is quarantined: component={component}, version={version}, reason={reason:?}"
+    )]
+    ComponentVersionQuarantined {
+        component: String,
+        version: String,
+        reason: owner_signal_version_handover::QuarantineReason,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

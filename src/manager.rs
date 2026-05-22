@@ -20,7 +20,7 @@ use crate::engine_event::{
 use crate::error::{Error, Result};
 use crate::manager_store::{
     AppendEngineEvent, AppendOrphansFromEventLog, ComponentStatusSnapshotRow, ManagerStore,
-    PersistEngineRecord, ReadEngineRecord, ReadEngineStatusSnapshot,
+    PersistEngineRecord, ReadEngineEvents, ReadEngineRecord, ReadEngineStatusSnapshot,
 };
 use crate::state::EngineState;
 use crate::upgrade::{
@@ -211,6 +211,7 @@ impl EngineManager {
     }
 
     async fn prepare_upgrade(&mut self, target: Target) -> Result<Prepared> {
+        self.ensure_target_not_quarantined(&target).await?;
         let prepared = target.prepare();
         self.append_event(EngineEventBody::UpgradePrepared(
             PreparedEvent::from_target(prepared.target()),
@@ -225,6 +226,7 @@ impl EngineManager {
         target: Target,
         marker: HandoverMarker,
     ) -> Result<ActiveVersionChanged> {
+        self.ensure_target_not_quarantined(&target).await?;
         if marker.component.as_str() != target.component().as_str() {
             return Err(Error::HandoverMarkerComponentMismatch {
                 expected: target.component().as_str().to_string(),
@@ -239,6 +241,7 @@ impl EngineManager {
     }
 
     async fn drive_version_handover(&mut self, target: Target) -> Result<DrivenHandover> {
+        self.ensure_target_not_quarantined(&target).await?;
         let driven = HandoverDriver::from_target(target.clone())
             .drive_current_side()
             .await?;
@@ -246,6 +249,34 @@ impl EngineManager {
             .await?;
         self.events.push(ManagerEvent::VersionHandoverDriven);
         Ok(driven)
+    }
+
+    async fn ensure_target_not_quarantined(&self, target: &Target) -> Result<()> {
+        let Some(store) = &self.store else {
+            return Err(Error::UpgradeRequiresManagerStore);
+        };
+        let events = store
+            .ask(ReadEngineEvents::new(self.engine.clone()))
+            .await
+            .map_err(|error| Error::actor("read quarantine events", error))?;
+        for event in events {
+            let EngineEventBody::VersionQuarantined(quarantine) = event.body() else {
+                continue;
+            };
+            if quarantine.component() != target.component() {
+                continue;
+            }
+            if quarantine.version() == target.current_version()
+                || quarantine.version() == target.next_version()
+            {
+                return Err(Error::ComponentVersionQuarantined {
+                    component: target.component().as_str().to_string(),
+                    version: quarantine.version().as_str().to_string(),
+                    reason: quarantine.reason(),
+                });
+            }
+        }
+        Ok(())
     }
 
     async fn handle_owner_version_handover(

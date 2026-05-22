@@ -1591,6 +1591,15 @@
                   cargoTestExtraArgs = "--test manager constraint_persona_engine_drives_version_handover_over_component_upgrade_socket -- --exact";
                 }
               );
+          persona-engine-refuses-version-handover-with-quarantined-version =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager constraint_engine_manager_refuses_handover_with_quarantined_version -- --exact";
+                }
+              );
           persona-manager-store-close-protocol-releases-redb-lock-before-shutdown =
             context.craneLib.cargoTest
               (
