@@ -70,6 +70,18 @@ impl Target {
         }
     }
 
+    pub fn from_owner_attempt(order: &owner_signal_version_handover::AttemptHandover) -> Self {
+        Self::from_input(TargetInput {
+            component: ComponentName::new(order.component.as_str()),
+            current_version: Version::from(&order.current.version),
+            next_version: Version::from(&order.next.version),
+            current_owner_socket_path: WirePath::new(order.current.owner_socket_path.as_str()),
+            current_upgrade_socket_path: WirePath::new(order.current.upgrade_socket_path.as_str()),
+            next_owner_socket_path: WirePath::new(order.next.owner_socket_path.as_str()),
+            next_upgrade_socket_path: WirePath::new(order.next.upgrade_socket_path.as_str()),
+        })
+    }
+
     pub fn component(&self) -> &ComponentName {
         &self.component
     }

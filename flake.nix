@@ -1591,6 +1591,15 @@
                   cargoTestExtraArgs = "--test manager constraint_persona_engine_drives_version_handover_over_component_upgrade_socket -- --exact";
                 }
               );
+          persona-engine-owner-attempt-drives-version-handover =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager constraint_owner_attempt_handover_drives_component_upgrade_socket -- --exact";
+                }
+              );
           persona-engine-refuses-version-handover-with-quarantined-version =
             context.craneLib.cargoTest
               (
@@ -1598,6 +1607,15 @@
                 // {
                   inherit (context) cargoArtifacts;
                   cargoTestExtraArgs = "--test manager constraint_engine_manager_refuses_handover_with_quarantined_version -- --exact";
+                }
+              );
+          persona-engine-owner-attempt-rejects-quarantined-version =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager constraint_owner_attempt_handover_reports_quarantined_version -- --exact";
                 }
               );
           persona-manager-store-close-protocol-releases-redb-lock-before-shutdown =
@@ -1729,6 +1747,13 @@
             // {
               inherit (context) cargoArtifacts;
               cargoTestExtraArgs = "--test daemon constraint_persona_daemon_serves_owner_version_handover_socket -- --exact";
+            }
+          );
+          persona-daemon-owner-attempt-drives-version-handover = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test daemon constraint_persona_daemon_owner_socket_drives_version_handover -- --exact";
             }
           );
           persona-daemon-launches-prototype-supervised-components-through-engine-supervisor =

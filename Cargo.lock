@@ -294,7 +294,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "owner-signal-version-handover"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/owner-signal-version-handover.git?branch=main#f3f1896d2cc8aee87d7c4089c694cc16a15e05bc"
+source = "git+https://github.com/LiGoldragon/owner-signal-version-handover.git?branch=main#1a78b08162a7325c2712e89ba2813644bbafa29c"
 dependencies = [
  "nota-codec",
  "rkyv",

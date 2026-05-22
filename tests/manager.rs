@@ -1,6 +1,7 @@
 use owner_signal_version_handover::{
-    ForceFlip, ForceReason, Operation as OwnerVersionOperation, Quarantine, QuarantineReason,
-    Reply as OwnerVersionReply, Rollback, RollbackReason, Version as OwnerVersion, VersionLabel,
+    AttemptHandover, ForceFlip, ForceReason, Operation as OwnerVersionOperation, Quarantine,
+    QuarantineReason, RejectionReason, Reply as OwnerVersionReply, Rollback, RollbackReason,
+    SocketPath, Version as OwnerVersion, VersionEndpoint, VersionLabel,
 };
 use persona::Error;
 use persona::engine_event::EngineEventBody;
@@ -99,6 +100,33 @@ fn owner_version(label: &str, byte: u8) -> OwnerVersion {
     OwnerVersion::new(VersionLabel::new(label), ContractVersion::new([byte; 32]))
 }
 
+fn owner_version_endpoint(
+    label: &str,
+    byte: u8,
+    upgrade_socket_path: &std::path::Path,
+) -> VersionEndpoint {
+    let root = format!("/run/persona/default/spirit/{label}");
+    VersionEndpoint {
+        version: owner_version(label, byte),
+        owner_socket_path: SocketPath::new(format!("{root}/owner.sock")),
+        upgrade_socket_path: SocketPath::new(upgrade_socket_path.to_string_lossy().into_owned()),
+    }
+}
+
+fn owner_attempt_handover_order_with_current_upgrade_socket(
+    current_upgrade_socket_path: &std::path::Path,
+) -> AttemptHandover {
+    AttemptHandover {
+        component: HandoverComponentName::new("persona-spirit"),
+        current: owner_version_endpoint("v0.1.0", 1, current_upgrade_socket_path),
+        next: owner_version_endpoint(
+            "v0.1.1",
+            2,
+            std::path::Path::new("/run/persona/default/spirit/v0.1.1/upgrade.sock"),
+        ),
+    }
+}
+
 fn owner_force_flip_order() -> ForceFlip {
     ForceFlip {
         component: HandoverComponentName::new("persona-spirit"),
@@ -167,6 +195,16 @@ async fn serve_current_handover_socket(
         operations.push(operation);
     }
     Ok(operations)
+}
+
+async fn wait_for_socket(path: &std::path::Path) {
+    for _attempt in 0..80 {
+        if path.exists() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    panic!("socket did not appear: {}", path.display());
 }
 
 #[tokio::test]
@@ -334,6 +372,7 @@ async fn constraint_persona_engine_drives_version_handover_over_component_upgrad
         socket.clone(),
         marker.clone(),
     ));
+    wait_for_socket(&socket).await;
     let engine = EngineId::new("engine-upgrade-socket-drive");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
@@ -389,6 +428,71 @@ async fn constraint_persona_engine_drives_version_handover_over_component_upgrad
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_owner_attempt_handover_drives_component_upgrade_socket() {
+    let fixture = StoreFixture::new("persona-manager-owner-attempt-handover");
+    let socket = fixture.root.join("spirit-upgrade.sock");
+    let marker = handover_marker(144);
+    let server = tokio::spawn(serve_current_handover_socket(
+        socket.clone(),
+        marker.clone(),
+    ));
+    let engine = EngineId::new("engine-owner-attempt-handover");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    let manager = EngineManager::start_with_store(engine.clone(), store.clone())
+        .await
+        .expect("manager starts with store");
+
+    let reply = manager
+        .ask(HandleOwnerVersionHandover::new(
+            OwnerVersionOperation::AttemptHandover(
+                owner_attempt_handover_order_with_current_upgrade_socket(&socket),
+            ),
+        ))
+        .await
+        .expect("owner attempt handover succeeds");
+
+    match reply {
+        OwnerVersionReply::HandoverSucceeded(success) => {
+            assert_eq!(success.component.as_str(), "persona-spirit");
+            assert_eq!(success.active_version.label.as_str(), "v0.1.1");
+            assert_eq!(success.commit_sequence, 144);
+        }
+        other => panic!("expected owner handover success, got {other:?}"),
+    }
+
+    let operations = server
+        .await
+        .expect("handover socket server joins")
+        .expect("handover socket server succeeds");
+    assert!(matches!(
+        operations.as_slice(),
+        [
+            HandoverOperation::AskHandoverMarker(_),
+            HandoverOperation::ReadyToHandover(_),
+            HandoverOperation::HandoverCompleted(_)
+        ]
+    ));
+
+    let active = store
+        .ask(ReadActiveVersion::new(
+            engine,
+            ComponentName::new("persona-spirit"),
+        ))
+        .await
+        .expect("active version snapshot read")
+        .expect("active version persisted");
+    assert_eq!(active.active_version().as_str(), "v0.1.1");
+    assert_eq!(active.commit_sequence(), Some(144));
+
+    EngineManager::stop(manager)
+        .await
+        .expect("manager stops cleanly");
+    ManagerStore::close_and_stop(store)
+        .await
+        .expect("manager store closes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_refuses_handover_with_quarantined_version() {
     let fixture = StoreFixture::new("persona-manager-quarantine-gates-handover");
     let engine = EngineId::new("engine-quarantine-gates-handover");
@@ -417,6 +521,48 @@ async fn constraint_engine_manager_refuses_handover_with_quarantined_version() {
             reason: QuarantineReason::SuspectState,
         }) if component == "persona-spirit" && version == "v0.1.1"
     ));
+
+    EngineManager::stop(manager)
+        .await
+        .expect("manager stops cleanly");
+    ManagerStore::close_and_stop(store)
+        .await
+        .expect("manager store closes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_owner_attempt_handover_reports_quarantined_version() {
+    let fixture = StoreFixture::new("persona-manager-owner-attempt-quarantined");
+    let engine = EngineId::new("engine-owner-attempt-quarantined");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    let manager = EngineManager::start_with_store(engine, store.clone())
+        .await
+        .expect("manager starts with store");
+
+    manager
+        .ask(HandleOwnerVersionHandover::new(
+            OwnerVersionOperation::Quarantine(owner_quarantine_order()),
+        ))
+        .await
+        .expect("owner quarantine succeeds");
+
+    let missing_socket = fixture.root.join("missing-upgrade.sock");
+    let reply = manager
+        .ask(HandleOwnerVersionHandover::new(
+            OwnerVersionOperation::AttemptHandover(
+                owner_attempt_handover_order_with_current_upgrade_socket(&missing_socket),
+            ),
+        ))
+        .await
+        .expect("owner attempt returns typed reply");
+
+    match reply {
+        OwnerVersionReply::Rejected(rejected) => {
+            assert_eq!(rejected.component.as_str(), "persona-spirit");
+            assert_eq!(rejected.reason, RejectionReason::VersionQuarantined);
+        }
+        other => panic!("expected owner rejection reply, got {other:?}"),
+    }
 
     EngineManager::stop(manager)
         .await

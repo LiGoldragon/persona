@@ -3,12 +3,17 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 
 use owner_signal_version_handover::{
-    Operation as OwnerOperation, Quarantine, QuarantineReason, Reply as OwnerReply,
-    Version as OwnerVersion, VersionLabel,
+    AttemptHandover, Operation as OwnerOperation, Quarantine, QuarantineReason,
+    Reply as OwnerReply, SocketPath, Version as OwnerVersion, VersionEndpoint, VersionLabel,
 };
 use persona::engine::{EngineComponent, EngineTopology};
 use persona::engine_event::EngineEventBody;
 use persona::transport::{OwnerClient, OwnerEndpoint};
+use persona::upgrade::HandoverFrameCodec;
+use signal_version_handover::{
+    Date, HandoverAcceptance, HandoverFinalization, HandoverMarker, Operation as HandoverOperation,
+    Reply as HandoverReply, Time,
+};
 use version_projection::{ComponentName as HandoverComponentName, ContractVersion};
 
 mod support;
@@ -196,12 +201,105 @@ fn owner_version(label: &str, byte: u8) -> OwnerVersion {
     OwnerVersion::new(VersionLabel::new(label), ContractVersion::new([byte; 32]))
 }
 
+fn handover_marker(commit_sequence: u64) -> HandoverMarker {
+    HandoverMarker {
+        component: HandoverComponentName::new("persona-spirit"),
+        schema_hash: ContractVersion::new([9; 32]),
+        commit_sequence,
+        write_counter: 3,
+        last_record_identifier: Some(210),
+        recorded_at_date: Date::new(2026, 5, 22),
+        recorded_at_time: Time::new(17, 30, 0),
+    }
+}
+
+fn owner_version_endpoint(
+    label: &str,
+    byte: u8,
+    upgrade_socket_path: &std::path::Path,
+) -> VersionEndpoint {
+    let root = format!("/run/persona/default/spirit/{label}");
+    VersionEndpoint {
+        version: owner_version(label, byte),
+        owner_socket_path: SocketPath::new(format!("{root}/owner.sock")),
+        upgrade_socket_path: SocketPath::new(upgrade_socket_path.to_string_lossy().into_owned()),
+    }
+}
+
+fn owner_attempt_handover_order_with_current_upgrade_socket(
+    current_upgrade_socket_path: &std::path::Path,
+) -> AttemptHandover {
+    AttemptHandover {
+        component: HandoverComponentName::new("persona-spirit"),
+        current: owner_version_endpoint("v0.1.0", 1, current_upgrade_socket_path),
+        next: owner_version_endpoint(
+            "v0.1.1",
+            2,
+            std::path::Path::new("/run/persona/default/spirit/v0.1.1/upgrade.sock"),
+        ),
+    }
+}
+
 fn owner_quarantine_order() -> Quarantine {
     Quarantine {
         component: HandoverComponentName::new("persona-spirit"),
         version: owner_version("v0.1.1", 2),
         reason: QuarantineReason::SuspectState,
     }
+}
+
+async fn serve_current_handover_socket(
+    path: std::path::PathBuf,
+    marker: HandoverMarker,
+) -> persona::Result<Vec<HandoverOperation>> {
+    let listener = tokio::net::UnixListener::bind(path)?;
+    let codec = HandoverFrameCodec::default();
+    let mut operations = Vec::new();
+    for _ in 0..3 {
+        let (mut stream, _) = listener.accept().await?;
+        let frame = codec.read_frame(&mut stream).await?;
+        let received = codec.request_from_frame(frame)?;
+        let exchange = received.exchange();
+        let operation = received.into_operation();
+        let reply = match &operation {
+            HandoverOperation::AskHandoverMarker(request) => {
+                assert_eq!(request.component.as_str(), "persona-spirit");
+                HandoverReply::HandoverMarker(marker.clone())
+            }
+            HandoverOperation::ReadyToHandover(report) => {
+                assert_eq!(report.component.as_str(), "persona-spirit");
+                assert_eq!(report.source_marker.commit_sequence, marker.commit_sequence);
+                HandoverReply::HandoverAccepted(HandoverAcceptance {
+                    accepted_marker: marker.clone(),
+                })
+            }
+            HandoverOperation::HandoverCompleted(report) => {
+                assert_eq!(report.component.as_str(), "persona-spirit");
+                assert_eq!(
+                    report.accepted_marker.commit_sequence,
+                    marker.commit_sequence
+                );
+                HandoverReply::HandoverFinalized(HandoverFinalization {
+                    finalized_marker: marker.clone(),
+                })
+            }
+            other => panic!("unexpected handover operation in test server: {other:?}"),
+        };
+        let frame = codec.reply_frame(exchange, reply);
+        codec.write_frame(&mut stream, &frame).await?;
+        operations.push(operation);
+    }
+    Ok(operations)
+}
+
+async fn wait_for_socket(path: &std::path::Path) {
+    for _attempt in 0..80 {
+        if path.exists() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    panic!("socket did not appear: {}", path.display());
 }
 
 impl Drop for DaemonFixture {
@@ -288,6 +386,68 @@ async fn constraint_persona_daemon_serves_owner_version_handover_socket() {
         }
         other => panic!("expected quarantine reply, got {other:?}"),
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_persona_daemon_owner_socket_drives_version_handover() {
+    let mut fixture = DaemonFixture::start();
+    let upgrade_socket = fixture.root.join("spirit-upgrade.sock");
+    let marker = handover_marker(233);
+    let server = tokio::spawn(serve_current_handover_socket(
+        upgrade_socket.clone(),
+        marker.clone(),
+    ));
+    wait_for_socket(&upgrade_socket).await;
+
+    let reply = fixture
+        .owner_client()
+        .submit(OwnerOperation::AttemptHandover(
+            owner_attempt_handover_order_with_current_upgrade_socket(&upgrade_socket),
+        ))
+        .await
+        .expect("owner attempt handover request succeeds");
+
+    match reply {
+        OwnerReply::HandoverSucceeded(success) => {
+            assert_eq!(success.component.as_str(), "persona-spirit");
+            assert_eq!(success.active_version.label.as_str(), "v0.1.1");
+            assert_eq!(success.commit_sequence, 233);
+        }
+        other => panic!("expected handover success reply, got {other:?}"),
+    }
+
+    let operations = server
+        .await
+        .expect("handover socket server joins")
+        .expect("handover socket server succeeds");
+    assert!(matches!(
+        operations.as_slice(),
+        [
+            HandoverOperation::AskHandoverMarker(_),
+            HandoverOperation::ReadyToHandover(_),
+            HandoverOperation::HandoverCompleted(_)
+        ]
+    ));
+
+    fixture.stop_daemon();
+
+    let store = persona::manager_store::ManagerStore::start(
+        persona::manager_store::ManagerStoreLocation::new(&fixture.manager_store),
+    )
+    .expect("manager store starts for inspection");
+    let active = store
+        .ask(persona::manager_store::ReadActiveVersion::new(
+            signal_persona_auth::EngineId::new("default"),
+            signal_persona::ComponentName::new("persona-spirit"),
+        ))
+        .await
+        .expect("active version read")
+        .expect("active version persisted");
+    assert_eq!(active.active_version().as_str(), "v0.1.1");
+    assert_eq!(active.commit_sequence(), Some(233));
+
+    store.stop_gracefully().await.expect("manager store stops");
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

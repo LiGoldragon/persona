@@ -2,8 +2,9 @@ use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use owner_signal_version_handover::{
-    ForcedFlip, Operation as OwnerVersionHandoverOperation, Quarantined,
-    Reply as OwnerVersionReply, RequestUnimplemented, RolledBack, UnimplementedReason,
+    ForcedFlip, HandoverSucceeded, Operation as OwnerVersionHandoverOperation, Quarantined,
+    Rejected, RejectionReason, Reply as OwnerVersionReply, RequestUnimplemented, RolledBack,
+    UnimplementedReason,
 };
 use signal_persona::engine::{Operation, Reply};
 use signal_persona::{
@@ -284,6 +285,20 @@ impl EngineManager {
         operation: OwnerVersionHandoverOperation,
     ) -> Result<OwnerVersionReply> {
         let reply = match operation {
+            OwnerVersionHandoverOperation::AttemptHandover(order) => {
+                let target = Target::from_owner_attempt(&order);
+                match self.drive_version_handover(target).await {
+                    Ok(driven) => OwnerVersionReply::HandoverSucceeded(HandoverSucceeded {
+                        component: order.component,
+                        active_version: order.next.version,
+                        commit_sequence: driven.finalization().finalized_marker.commit_sequence,
+                    }),
+                    Err(error) => OwnerVersionReply::Rejected(Rejected {
+                        component: order.component,
+                        reason: Self::handover_rejection_reason(&error),
+                    }),
+                }
+            }
             OwnerVersionHandoverOperation::ForceFlip(order) => {
                 let change = ActiveVersionChanged::from_force_flip(&order);
                 self.append_event(EngineEventBody::ActiveVersionChanged(change))
@@ -321,6 +336,17 @@ impl EngineManager {
             }
         };
         Ok(reply)
+    }
+
+    fn handover_rejection_reason(error: &Error) -> RejectionReason {
+        match error {
+            Error::ComponentVersionQuarantined { .. } => RejectionReason::VersionQuarantined,
+            Error::Io(_) => RejectionReason::UpgradeSocketUnavailable,
+            Error::UnexpectedSignalFrame { .. } | Error::HandoverMarkerComponentMismatch { .. } => {
+                RejectionReason::HandoverRejected
+            }
+            _ => RejectionReason::HandoverRejected,
+        }
     }
 
     fn read_events(&mut self, probe: TraceProbe) -> Vec<ManagerEvent> {

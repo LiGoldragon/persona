@@ -425,15 +425,112 @@ path scoping is baked in (every per-engine resource is keyed by
 engine id; see §1.5), but cross-engine ops are deferred until a
 second engine is demonstrated alive.
 
-### 1.6.6 · Multi-engine as upgrade substrate
+### 1.6.6 · Multi-engine as substrate for federation-level migration
 
-Engine-level upgrade replaces component-level hot-swap. `persona-daemon`
-spawns engine v2 alongside engine v1; mind grants temporary migration
-channels; typed records migrate over the channels (not byte copies);
-when v2's health checks pass, the daemon retires v1 via graceful
-shutdown. Engine-level upgrade sidesteps redb's single-writer-per-file
-constraint that forbids concurrent same-redb writes — v2 owns its
-own redb files under `/var/lib/persona/<engine-id-v2>/`.
+Per-engine resource scoping (every component redb and socket keyed by
+engine id; see §1.5) leaves room for a future federation-level
+migration path: `persona-daemon` could spawn engine v2 alongside
+engine v1; mind would grant temporary migration channels; typed
+records would migrate over the channels (not byte copies); when v2's
+health checks pass, the daemon would retire v1 via graceful
+shutdown. Engine-level migration sidesteps redb's
+single-writer-per-file constraint — v2 would own its own redb files
+under `/var/lib/persona/<engine-id-v2>/`.
+
+This is the path for **federation-shaped** changes (topology,
+multi-component re-layout, cross-component schema realignment). It is
+**not** the path for ordinary component upgrades. Per intent records
+208/209/210 ordinary component version upgrades now run through §1.6.7:
+Persona drives a per-component version handover against the target
+component's own upgrade socket, leaving the engine identity unchanged.
+Engine-level migration remains documented as the substrate it always
+was; today's load-bearing upgrade discipline is §1.6.7.
+
+### 1.6.7 · Persona as root component-upgrade orchestrator
+
+Per intent records 208, 209, and 210, Persona is the **root**
+component-upgrade orchestrator. Component-upgrade orders arrive at
+Persona's **owner socket** (intent 210); Persona then drives the
+smart handover protocol against the target component's **private
+upgrade socket**. The active-version selector lives in Persona's
+manager event log, not in CriomOS-home filesystem symlinks (intent
+208 retired the per-component redeploy through home configuration).
+Persona lands BEFORE the first Spirit cutover (intent 209); Spirit
+v0.1.0 is retrofitted with the upgrade socket and v0.1.1 lands with
+the full handover protocol live, driven by Persona.
+
+Per intent records 215 and 216 the canonical short name of this
+component is **Persona** (just Persona). The repo is `persona`, the
+daemon binary is `persona-daemon`, the CLI binary is `persona`. The
+phrase "Persona Engine Manager Daemon" is not used as a noun.
+
+**The four-socket model.** Every upgrade `Target` (`src/upgrade.rs`)
+carries four socket paths plus a component name and current/next
+version labels:
+
+| Socket | Used by |
+|---|---|
+| `current_owner_socket_path` | Recorded for audit; not driven by Persona's manager today. |
+| `current_upgrade_socket_path` | Persona's `HandoverDriver` opens a client to this path and walks `AskHandoverMarker -> ReadyToHandover -> HandoverCompleted`. |
+| `next_owner_socket_path` | Recorded for audit; the next daemon's owner-authority surface for follow-on operations. |
+| `next_upgrade_socket_path` | Recorded for audit; the next daemon binds it when it comes up to answer subsequent handovers. |
+
+The handover protocol per `signal-version-handover` is driven
+against the **current** side. The current daemon's smart-handover
+code walks the commit-copy into the next daemon's redb at
+`ReadyToHandover`; Persona itself does not open a client connection
+to the next daemon's upgrade socket as part of the current-side
+drive.
+
+**Manager messages.** `EngineManager` (`src/manager.rs`) accepts four
+upgrade-related Kameo messages:
+
+| Message | Effect |
+|---|---|
+| `PrepareUpgrade { target }` | Quarantine-gates the target; appends `UpgradePrepared` to the event log; returns the first handover operation (`AskHandoverMarker(MarkerRequest)`). |
+| `CompleteUpgrade { target, marker }` | Validates the marker belongs to the target component; appends `ActiveVersionChanged` (source `HandoverMarker { commit_sequence }`); reducer updates the active-version snapshot. |
+| `DriveVersionHandover { target }` | Quarantine-gates; opens the `HandoverDriver`; walks marker/readiness/completion against the current upgrade socket; appends `ActiveVersionChanged`. |
+| `HandleOwnerVersionHandover { operation }` | Owner-socket entry point. Dispatches `AttemptHandover` -> `DriveVersionHandover`, `ForceFlip` -> direct `ActiveVersionChanged` append (source `ForceFlip { reason }`), `Rollback` -> direct `ActiveVersionChanged` append (source `Rollback { reason }`), `Quarantine` -> `VersionQuarantined` event-log append. |
+
+**Active-version snapshot.** `manager.active-version-snapshot` (per
+§1.7 manager-state discussion) is per-`(EngineId, ComponentName)`
+materialised projection of the event log. The reducer is
+authoritative for "which version of component X is live right now".
+A truncated or corrupted snapshot rebuilds from the event log on
+`ManagerStore::open`.
+
+**Quarantine gate.** Before every `prepare_upgrade` /
+`drive_version_handover`, the manager scans the event log for
+`VersionQuarantined` entries on the same component and refuses
+`Error::ComponentVersionQuarantined` if either the current or next
+version of the target is quarantined. `Quarantine` operations on the
+owner socket append the gate; future owner-socket operations against
+the gated version fail early before any wire I/O.
+
+```mermaid
+sequenceDiagram
+    actor psyche as psyche
+    participant owner as Persona owner socket
+    participant manager as EngineManager
+    participant store as ManagerStore + event log + reducers
+    participant driver as HandoverDriver
+    participant current as target current upgrade socket
+    psyche->>owner: AttemptHandover(Target)
+    owner->>manager: HandleOwnerVersionHandover
+    manager->>store: ReadEngineEvents (quarantine gate)
+    manager->>store: AppendEngineEvent(UpgradePrepared)
+    manager->>driver: drive_current_side(target)
+    driver->>current: AskHandoverMarker
+    current-->>driver: HandoverMarker
+    driver->>current: ReadyToHandover(ReadinessReport)
+    current-->>driver: HandoverAccepted
+    driver->>current: HandoverCompleted(CompletionReport)
+    current-->>driver: HandoverFinalized
+    driver-->>manager: DrivenHandover
+    manager->>store: AppendEngineEvent(ActiveVersionChanged)
+    store->>store: active-version reducer
+    manager-->>owner: HandoverSucceeded
+```
 
 ## 1.7 · Startup Strategy
 
@@ -1311,13 +1408,16 @@ The apex repo owns tests that prove cross-component shape:
 | engine manager prepares a component upgrade by emitting the first version-handover marker request | `nix build .#checks.x86_64-linux.persona-engine-manager-prepares-upgrade-with-version-handover-request` |
 | engine manager records the active component version only after handover completion | `nix build .#checks.x86_64-linux.persona-engine-manager-records-active-version-after-handover-completion` |
 | persona engine drives version handover through a component's private upgrade socket | `nix build .#checks.x86_64-linux.persona-engine-drives-version-handover-over-component-upgrade-socket` |
+| owner `AttemptHandover` authority drives the same private-socket handover path as the internal manager driver | `nix build .#checks.x86_64-linux.persona-engine-owner-attempt-drives-version-handover` |
 | persona engine refuses normal handover when either target version is quarantined by owner authority | `nix build .#checks.x86_64-linux.persona-engine-refuses-version-handover-with-quarantined-version` |
+| owner `AttemptHandover` returns a typed `Rejected(VersionQuarantined)` reply for quarantined versions instead of dropping the owner connection | `nix build .#checks.x86_64-linux.persona-engine-owner-attempt-rejects-quarantined-version` |
 | manager store close protocol releases its redb lock before shutdown completion | `nix build .#checks.x86_64-linux.persona-manager-store-close-protocol-releases-redb-lock-before-shutdown` |
 | manager startup detects orphans — `ComponentSpawned` without matching `ComponentReady` or `ComponentExited` — and appends `ComponentOrphaned` events | `nix build .#checks.x86_64-linux.persona-manager-startup-appends-orphaned-events-for-unfinished-spawn` |
 | event-log append and snapshot reduce land in one redb write transaction (no daemon crash can persist an event without its snapshot reduction) | `nix build .#checks.x86_64-linux.persona-manager-store-event-append-and-snapshot-reduce-share-one-transaction` |
 | direct process launcher observes natural child exit and appends `ComponentExited` to manager event log | `nix build .#checks.x86_64-linux.persona-component-launcher-observes-natural-child-exit` |
 | persona CLI mutation reaches manager.redb via daemon path | `nix build .#checks.x86_64-linux.persona-daemon-persists-cli-mutation-to-manager-store` |
 | persona-daemon serves owner version-handover authority on a separate owner socket | `nix build .#checks.x86_64-linux.persona-daemon-serves-owner-version-handover-socket` |
+| persona-daemon owner socket accepts `AttemptHandover`, drives the private upgrade socket, and persists the active selector | `nix build .#checks.x86_64-linux.persona-daemon-owner-attempt-drives-version-handover` |
 | persona test docs name live Nix witnesses rather than bare cargo review commands | `nix build .#checks.x86_64-linux.persona-engine-meta-testing-docs-are-nix-backed` |
 | sandbox runner is a Nix-owned app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-script-builds` |
 | sandbox runner supports each first harness name | `nix build .#checks.x86_64-linux.persona-engine-sandbox-supports-all-harnesses` |
