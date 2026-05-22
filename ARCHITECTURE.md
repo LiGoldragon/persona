@@ -465,22 +465,30 @@ daemon binary is `persona-daemon`, the CLI binary is `persona`. The
 phrase "Persona Engine Manager Daemon" is not used as a noun.
 
 **The four-socket model.** Every upgrade `Target` (`src/upgrade.rs`)
-carries four socket paths plus a component name and current/next
-version labels:
+carries four socket paths plus a component name and main/next version
+labels. The Rust field names still use `current_*` for the main
+version because the wire contract calls that side `current`; the
+architecture vocabulary is main/next.
 
 | Socket | Used by |
 |---|---|
-| `current_owner_socket_path` | Recorded for audit; not driven by Persona's manager today. |
-| `current_upgrade_socket_path` | Persona's `HandoverDriver` opens a client to this path and walks `AskHandoverMarker -> ReadyToHandover -> HandoverCompleted`. |
-| `next_owner_socket_path` | Recorded for audit; the next daemon's owner-authority surface for follow-on operations. |
-| `next_upgrade_socket_path` | Recorded for audit; the next daemon binds it when it comes up to answer subsequent handovers. |
+| `current_owner_socket_path` (main owner socket) | Recorded for audit; not driven by Persona's manager today. |
+| `current_upgrade_socket_path` (main private upgrade socket) | Persona's `HandoverDriver` opens a client to this path and walks `AskHandoverMarker -> ReadyToHandover -> HandoverCompleted`. |
+| `next_owner_socket_path` (next owner socket) | Recorded for audit; the next daemon's owner-authority surface for follow-on operations. |
+| `next_upgrade_socket_path` (next private upgrade socket) | Recorded for audit; the next daemon binds it when it comes up to answer subsequent handovers. |
 
 The handover protocol per `signal-version-handover` is driven
-against the **current** side. The current daemon's smart-handover
-code walks the commit-copy into the next daemon's redb at
+against the **main** side. The main daemon's smart-handover code
+walks the commit-copy into the next daemon's redb at
 `ReadyToHandover`; Persona itself does not open a client connection
-to the next daemon's upgrade socket as part of the current-side
-drive.
+to the next daemon's upgrade socket as part of the main-side drive.
+
+**Owner contract.** The administrative operations Persona receives on
+its owner socket — `AttemptHandover`, `ForceFlip`, `Rollback`, and
+`Quarantine` — are carried by the `owner-signal-version-handover`
+contract crate. The contract is signal-only: no daemon code, no
+storage. Persona's manager owns the dispatch from
+`HandleOwnerVersionHandover` into the operation handlers below.
 
 **Manager messages.** `EngineManager` (`src/manager.rs`) accepts four
 upgrade-related Kameo messages:
@@ -489,7 +497,7 @@ upgrade-related Kameo messages:
 |---|---|
 | `PrepareUpgrade { target }` | Quarantine-gates the target; appends `UpgradePrepared` to the event log; returns the first handover operation (`AskHandoverMarker(MarkerRequest)`). |
 | `CompleteUpgrade { target, marker }` | Validates the marker belongs to the target component; appends `ActiveVersionChanged` (source `HandoverMarker { commit_sequence }`); reducer updates the active-version snapshot. |
-| `DriveVersionHandover { target }` | Quarantine-gates; opens the `HandoverDriver`; walks marker/readiness/completion against the current upgrade socket; appends `ActiveVersionChanged`. |
+| `DriveVersionHandover { target }` | Quarantine-gates; opens the `HandoverDriver`; walks marker/readiness/completion against the main upgrade socket; appends `ActiveVersionChanged`. |
 | `HandleOwnerVersionHandover { operation }` | Owner-socket entry point. Dispatches `AttemptHandover` -> `DriveVersionHandover`, `ForceFlip` -> direct `ActiveVersionChanged` append (source `ForceFlip { reason }`), `Rollback` -> direct `ActiveVersionChanged` append (source `Rollback { reason }`), `Quarantine` -> `VersionQuarantined` event-log append. |
 
 **Active-version snapshot.** `manager.active-version-snapshot` (per
@@ -502,10 +510,19 @@ A truncated or corrupted snapshot rebuilds from the event log on
 **Quarantine gate.** Before every `prepare_upgrade` /
 `drive_version_handover`, the manager scans the event log for
 `VersionQuarantined` entries on the same component and refuses
-`Error::ComponentVersionQuarantined` if either the current or next
+`Error::ComponentVersionQuarantined` if either the main or next
 version of the target is quarantined. `Quarantine` operations on the
 owner socket append the gate; future owner-socket operations against
 the gated version fail early before any wire I/O.
+
+**Upstream pieces.** The handover protocol Persona drives depends on
+two upstream crates. First, the next daemon uses `VersionProjection`
+from `version-projection` to project records from main's schema into
+next's schema as it copies state. Second, the marker exchanged in
+`AskHandoverMarker` / `ReadyToHandover` carries `commit_sequence`,
+the durable per-database monotonic write counter in `sema-engine`.
+That sequence is the high-water mark that lets next replay deltas
+from N+1 without losing writes that landed during the copy window.
 
 ```mermaid
 sequenceDiagram
@@ -514,7 +531,7 @@ sequenceDiagram
     participant manager as EngineManager
     participant store as ManagerStore + event log + reducers
     participant driver as HandoverDriver
-    participant current as target current upgrade socket
+    participant current as target main upgrade socket
     psyche->>owner: AttemptHandover(Target)
     owner->>manager: HandleOwnerVersionHandover
     manager->>store: ReadEngineEvents (quarantine gate)
