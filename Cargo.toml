@@ -46,6 +46,8 @@ version-projection     = { git = "https://github.com/LiGoldragon/version-project
 
 [dev-dependencies]
 persona-spirit = { git = "https://github.com/LiGoldragon/persona-spirit.git", branch = "main" }
+signal-persona-spirit = { git = "https://github.com/LiGoldragon/signal-persona-spirit.git", branch = "main" }
+signal-sema = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "main" }
 
 # ─── Wire-test shim binaries (for nix-chained tests) ──────
 # These exercise signal-persona-message end-to-end through

@@ -13,7 +13,14 @@ use persona::upgrade::HandoverFrameCodec;
 use persona_spirit::{
     DaemonConfiguration as SpiritDaemonConfiguration, DaemonRuntime as SpiritDaemonRuntime,
     SocketMode as SpiritSocketMode, SocketPath as SpiritSocketPath, StorePath as SpiritStorePath,
+    ordinary as spirit_ordinary,
 };
+use signal_persona_spirit::{
+    Context, Entry, Kind, Observation, ObservationMode, Operation as SpiritOperation, Quote,
+    RecordAccepted, RecordIdentifier, RecordQuery, RecordSummary, RecordsObserved,
+    Reply as SpiritReply, Summary, Topic,
+};
+use signal_sema::Magnitude;
 use signal_version_handover::{
     Date, HandoverAcceptance, HandoverFinalization, HandoverMarker, Operation as HandoverOperation,
     Reply as HandoverReply, Time,
@@ -257,6 +264,41 @@ impl SpiritUpgradeSocketFixture {
     fn upgrade_socket_path(&self) -> &std::path::Path {
         self.upgrade_socket.as_path()
     }
+
+    fn ordinary_socket_path(&self) -> &std::path::Path {
+        self.ordinary_socket.as_path()
+    }
+
+    fn store_path(&self) -> &std::path::Path {
+        self.store.as_path()
+    }
+
+    fn client(&self) -> spirit_ordinary::SignalClient {
+        spirit_ordinary::SignalClient::new(self.ordinary_socket.clone())
+    }
+
+    fn copy_store_from(&self, source: &Self) {
+        std::fs::copy(source.store_path(), self.store_path()).expect("spirit store copy succeeds");
+    }
+}
+
+fn spirit_entry(summary: &str) -> Entry {
+    Entry {
+        topic: Topic::new("workspace"),
+        kind: Kind::Decision,
+        summary: Summary::new(summary),
+        context: Context::new("copied handover witness"),
+        certainty: Magnitude::Maximum,
+        quote: Quote::new("persona copied handover witness"),
+    }
+}
+
+fn observe_spirit_summaries() -> SpiritOperation {
+    SpiritOperation::Observe(Observation::Records(RecordQuery {
+        topic: None,
+        kind: None,
+        mode: ObservationMode::SummaryOnly,
+    }))
 }
 
 fn owner_version(label: &str, byte: u8) -> OwnerVersion {
@@ -605,6 +647,104 @@ async fn constraint_persona_daemon_owner_socket_drives_real_spirit_upgrade_socke
         .expect("next spirit upgrade socket thread joins")
         .expect("next spirit daemon served one upgrade frame");
     assert_eq!(next_served.len(), 1);
+
+    persona.stop_daemon();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_persona_daemon_hands_over_between_copied_spirit_databases() {
+    let current_spirit = SpiritUpgradeSocketFixture::new("copied-current-database");
+    let next_spirit = SpiritUpgradeSocketFixture::new("copied-next-database");
+    let current_configuration = current_spirit.configuration();
+    let current_ordinary_socket = current_spirit.ordinary_socket_path().to_path_buf();
+    let current_thread = std::thread::spawn(move || -> persona_spirit::Result<(usize, bool)> {
+        let mut daemon = SpiritDaemonRuntime::from_configuration(current_configuration).bind()?;
+        daemon.serve_one()?;
+        for _ in 0..3 {
+            daemon.serve_upgrade_one()?;
+        }
+        let ordinary_socket_exists_after_handover = current_ordinary_socket.exists();
+        daemon.shutdown()?;
+        Ok((3, ordinary_socket_exists_after_handover))
+    });
+    wait_for_socket(current_spirit.ordinary_socket_path()).await;
+
+    let record_reply = current_spirit
+        .client()
+        .submit(SpiritOperation::Record(spirit_entry(
+            "copied before persona handover",
+        )))
+        .expect("current spirit accepts pre-handover record");
+    assert_eq!(
+        record_reply,
+        SpiritReply::RecordAccepted(RecordAccepted::new(RecordIdentifier::new(1)))
+    );
+
+    next_spirit.copy_store_from(&current_spirit);
+    let next_configuration = next_spirit.configuration();
+    let next_thread = std::thread::spawn(move || -> persona_spirit::Result<(usize, usize)> {
+        let mut daemon = SpiritDaemonRuntime::from_configuration(next_configuration).bind()?;
+        daemon.serve_upgrade_one()?;
+        daemon.serve_one()?;
+        daemon.shutdown()?;
+        Ok((1, 1))
+    });
+    wait_for_socket(current_spirit.upgrade_socket_path()).await;
+    wait_for_socket(next_spirit.upgrade_socket_path()).await;
+
+    let mut persona = DaemonFixture::start();
+    let reply = persona
+        .owner_client()
+        .submit(OwnerOperation::AttemptHandover(
+            owner_attempt_handover_order_with_upgrade_sockets(
+                current_spirit.upgrade_socket_path(),
+                next_spirit.upgrade_socket_path(),
+            ),
+        ))
+        .await
+        .expect("persona drives handover between copied spirit databases");
+
+    match reply {
+        OwnerReply::HandoverSucceeded(success) => {
+            assert_eq!(success.component.as_str(), "persona-spirit");
+            assert_eq!(success.active_version.label.as_str(), "v0.1.1");
+            assert_eq!(success.commit_sequence, 1);
+        }
+        other => panic!("expected handover success reply, got {other:?}"),
+    }
+
+    let observed = next_spirit
+        .client()
+        .submit(observe_spirit_summaries())
+        .expect("next spirit serves copied state after handover");
+    assert_eq!(
+        observed,
+        SpiritReply::RecordsObserved(RecordsObserved {
+            records: vec![RecordSummary {
+                identifier: RecordIdentifier::new(1),
+                topic: Topic::new("workspace"),
+                kind: Kind::Decision,
+                summary: Summary::new("copied before persona handover"),
+                certainty: Magnitude::Maximum,
+            }],
+        })
+    );
+
+    let (current_upgrade_exchanges, current_public_socket_exists) = current_thread
+        .join()
+        .expect("current spirit thread joins")
+        .expect("current spirit daemon served handover");
+    assert_eq!(current_upgrade_exchanges, 3);
+    assert!(
+        !current_public_socket_exists,
+        "current ordinary socket is removed after handover completion"
+    );
+    let (next_upgrade_exchanges, next_public_exchanges) = next_thread
+        .join()
+        .expect("next spirit thread joins")
+        .expect("next spirit daemon served marker and copied-state query");
+    assert_eq!(next_upgrade_exchanges, 1);
+    assert_eq!(next_public_exchanges, 1);
 
     persona.stop_daemon();
 }
