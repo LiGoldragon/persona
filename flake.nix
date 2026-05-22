@@ -1618,6 +1618,15 @@
                   cargoTestExtraArgs = "--test unit constraint_component_unit_manager_dispatches_start_stop_restart_status -- --exact";
                 }
               );
+          persona-transient-unit-definition-projects-exec-start =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test unit constraint_transient_unit_definition_projects_exec_start_and_environment -- --exact";
+                }
+              );
           persona-engine-refuses-stale-next-handover-marker =
             context.craneLib.cargoTest
               (

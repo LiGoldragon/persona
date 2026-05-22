@@ -307,11 +307,17 @@ impl DirectProcessFixture {
     async fn read_child_process(&self) -> u32 {
         for _attempt in 0..40 {
             if let Ok(text) = std::fs::read_to_string(self.child_pid_file()) {
-                return text.trim().parse().expect("child pid is numeric");
+                let trimmed = text.trim();
+                if let Ok(process) = trimmed.parse() {
+                    return process;
+                }
+                if !trimmed.is_empty() {
+                    panic!("child pid is numeric: {trimmed:?}");
+                }
             }
             tokio::time::sleep(std::time::Duration::from_millis(25)).await;
         }
-        panic!("child pid file was not written");
+        panic!("child pid file was not written with a numeric pid");
     }
 
     async fn read_envelope_capture(&self) -> String {

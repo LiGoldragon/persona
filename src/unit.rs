@@ -11,7 +11,9 @@ use signal_persona_auth::EngineId;
 use thiserror::Error;
 use tokio::process::Command;
 use zbus::zvariant::OwnedObjectPath;
+use zbus::zvariant::Value;
 
+use crate::launch::ComponentCommand;
 use crate::upgrade::Version;
 
 pub type UnitFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, UnitFailure>> + Send + 'a>>;
@@ -139,6 +141,180 @@ impl std::fmt::Display for UnitAction {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnitRestartPolicy {
+    Disabled,
+    OnFailure,
+}
+
+impl UnitRestartPolicy {
+    fn as_systemd_value(self) -> &'static str {
+        match self {
+            Self::Disabled => "no",
+            Self::OnFailure => "on-failure",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComponentUnitDefinition {
+    unit: ComponentUnit,
+    command: ComponentCommand,
+    restart: UnitRestartPolicy,
+}
+
+impl ComponentUnitDefinition {
+    pub fn from_input(input: ComponentUnitDefinitionInput) -> Self {
+        Self {
+            unit: input.unit,
+            command: input.command,
+            restart: input.restart,
+        }
+    }
+
+    pub fn unit(&self) -> &ComponentUnit {
+        &self.unit
+    }
+
+    pub fn command(&self) -> &ComponentCommand {
+        &self.command
+    }
+
+    pub fn restart(&self) -> UnitRestartPolicy {
+        self.restart
+    }
+
+    pub fn transient_properties(&self) -> TransientUnitProperties {
+        TransientUnitProperties::from_definition(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComponentUnitDefinitionInput {
+    pub unit: ComponentUnit,
+    pub command: ComponentCommand,
+    pub restart: UnitRestartPolicy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComponentUnitCatalog {
+    definitions: Vec<ComponentUnitDefinition>,
+}
+
+impl ComponentUnitCatalog {
+    pub fn from_definitions(definitions: Vec<ComponentUnitDefinition>) -> Self {
+        Self { definitions }
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            definitions: Vec::new(),
+        }
+    }
+
+    pub fn definition_for(&self, unit: &ComponentUnit) -> Option<&ComponentUnitDefinition> {
+        self.definitions
+            .iter()
+            .find(|definition| definition.unit() == unit)
+    }
+}
+
+impl Default for ComponentUnitCatalog {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TransientUnitProperties {
+    description: String,
+    service_type: String,
+    restart: String,
+    exec_start: TransientExecStart,
+    environment: Vec<String>,
+}
+
+impl TransientUnitProperties {
+    fn from_definition(definition: &ComponentUnitDefinition) -> Self {
+        let unit = definition.unit();
+        Self {
+            description: format!(
+                "Persona component {} {} for engine {}",
+                unit.component().as_str(),
+                unit.version().as_str(),
+                unit.engine().as_str()
+            ),
+            service_type: "simple".to_string(),
+            restart: definition.restart().as_systemd_value().to_string(),
+            exec_start: TransientExecStart::from_command(definition.command()),
+            environment: definition
+                .command()
+                .environment()
+                .iter()
+                .map(|variable| {
+                    format!("{}={}", variable.name().as_str(), variable.value().as_str())
+                })
+                .collect(),
+        }
+    }
+
+    pub fn description(&self) -> &str {
+        self.description.as_str()
+    }
+
+    pub fn service_type(&self) -> &str {
+        self.service_type.as_str()
+    }
+
+    pub fn restart(&self) -> &str {
+        self.restart.as_str()
+    }
+
+    pub fn exec_start(&self) -> &TransientExecStart {
+        &self.exec_start
+    }
+
+    pub fn environment(&self) -> &[String] {
+        self.environment.as_slice()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TransientExecStart {
+    path: String,
+    arguments: Vec<String>,
+    unclean_exit_fails: bool,
+}
+
+impl TransientExecStart {
+    fn from_command(command: &ComponentCommand) -> Self {
+        let mut arguments = vec![command.executable_path().as_str().to_string()];
+        arguments.extend(
+            command
+                .arguments()
+                .iter()
+                .map(|argument| argument.as_str().to_string()),
+        );
+        Self {
+            path: command.executable_path().as_str().to_string(),
+            arguments,
+            unclean_exit_fails: true,
+        }
+    }
+
+    pub fn path(&self) -> &str {
+        self.path.as_str()
+    }
+
+    pub fn arguments(&self) -> &[String] {
+        self.arguments.as_slice()
+    }
+
+    pub fn unclean_exit_fails(&self) -> bool {
+        self.unclean_exit_fails
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnitReceipt {
     unit: ComponentUnit,
@@ -234,6 +410,9 @@ impl UnitStatusReport {
 
 #[derive(Debug, Error)]
 pub enum UnitFailure {
+    #[error("missing transient unit definition for {unit}")]
+    MissingDefinition { unit: UnitName },
+
     #[error("{action} systemd unit {unit}: {source}")]
     Command {
         action: UnitAction,
@@ -424,6 +603,146 @@ impl UnitController for SystemdUnitController {
                 unit,
                 UnitStatus::from_systemd_active_state(active_state),
             ))
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SystemdTransientUnitController {
+    bus: SystemdBus,
+    catalog: ComponentUnitCatalog,
+}
+
+impl SystemdTransientUnitController {
+    pub fn system(catalog: ComponentUnitCatalog) -> Self {
+        Self {
+            bus: SystemdBus::System,
+            catalog,
+        }
+    }
+
+    pub fn user(catalog: ComponentUnitCatalog) -> Self {
+        Self {
+            bus: SystemdBus::User,
+            catalog,
+        }
+    }
+
+    async fn connection(&self) -> std::result::Result<zbus::Connection, zbus::Error> {
+        match self.bus {
+            SystemdBus::System => zbus::Connection::system().await,
+            SystemdBus::User => zbus::Connection::session().await,
+        }
+    }
+
+    async fn call_existing_unit_action(
+        &self,
+        unit: ComponentUnit,
+        action: UnitAction,
+    ) -> Result<UnitReceipt, UnitFailure> {
+        let controller = SystemdUnitController { bus: self.bus };
+        controller.call_unit_action(unit, action).await
+    }
+
+    fn definition_for(
+        catalog: &ComponentUnitCatalog,
+        unit: &ComponentUnit,
+    ) -> Result<ComponentUnitDefinition, UnitFailure> {
+        catalog
+            .definition_for(unit)
+            .cloned()
+            .ok_or_else(|| UnitFailure::MissingDefinition {
+                unit: unit.name().clone(),
+            })
+    }
+
+    async fn start_transient_unit(
+        &self,
+        unit: ComponentUnit,
+        definition: ComponentUnitDefinition,
+    ) -> Result<UnitReceipt, UnitFailure> {
+        let connection = self.connection().await.map_err(|source| UnitFailure::Bus {
+            action: UnitAction::Start,
+            unit: unit.name().clone(),
+            source,
+        })?;
+        let proxy = zbus::Proxy::new(
+            &connection,
+            "org.freedesktop.systemd1",
+            "/org/freedesktop/systemd1",
+            "org.freedesktop.systemd1.Manager",
+        )
+        .await
+        .map_err(|source| UnitFailure::Bus {
+            action: UnitAction::Start,
+            unit: unit.name().clone(),
+            source,
+        })?;
+        let properties = definition.transient_properties();
+        let argument_references: Vec<&str> = properties
+            .exec_start()
+            .arguments()
+            .iter()
+            .map(String::as_str)
+            .collect();
+        let exec_start = vec![(
+            properties.exec_start().path(),
+            argument_references,
+            properties.exec_start().unclean_exit_fails(),
+        )];
+        let mut unit_properties: Vec<(&str, Value<'_>)> = vec![
+            ("Description", Value::new(properties.description())),
+            ("Type", Value::new(properties.service_type())),
+            ("Restart", Value::new(properties.restart())),
+            ("ExecStart", Value::new(exec_start)),
+        ];
+        if !properties.environment().is_empty() {
+            unit_properties.push(("Environment", Value::new(properties.environment())));
+        }
+        let auxiliary_units: Vec<(&str, Vec<(&str, Value<'_>)>)> = Vec::new();
+        let _job: OwnedObjectPath = proxy
+            .call(
+                "StartTransientUnit",
+                &(
+                    unit.name().as_str(),
+                    "replace",
+                    unit_properties,
+                    auxiliary_units,
+                ),
+            )
+            .await
+            .map_err(|source| UnitFailure::Bus {
+                action: UnitAction::Start,
+                unit: unit.name().clone(),
+                source,
+            })?;
+        Ok(UnitReceipt::started(unit))
+    }
+}
+
+impl UnitController for SystemdTransientUnitController {
+    fn start<'a>(&'a self, unit: ComponentUnit) -> UnitFuture<'a, UnitReceipt> {
+        Box::pin(async move {
+            let definition = Self::definition_for(&self.catalog, &unit)?;
+            self.start_transient_unit(unit, definition).await
+        })
+    }
+
+    fn stop<'a>(&'a self, unit: ComponentUnit) -> UnitFuture<'a, UnitReceipt> {
+        Box::pin(async move { self.call_existing_unit_action(unit, UnitAction::Stop).await })
+    }
+
+    fn restart<'a>(&'a self, unit: ComponentUnit) -> UnitFuture<'a, UnitReceipt> {
+        Box::pin(async move {
+            self.call_existing_unit_action(unit, UnitAction::Restart)
+                .await
+        })
+    }
+
+    fn status<'a>(&'a self, unit: ComponentUnit) -> UnitFuture<'a, UnitStatusReport> {
+        Box::pin(async move {
+            let controller = SystemdUnitController { bus: self.bus };
+            controller.status(unit).await
         })
     }
 }

@@ -515,6 +515,15 @@ systemd-D-Bus controller; integration tests inject a recording controller.
 it opens either private upgrade socket, so missing next-daemon state is caught
 before Persona asks the main daemon to enter handover readiness.
 
+For real transient units, `ComponentUnitDefinition` pairs a `ComponentUnit`
+with the resolved `ComponentCommand` and restart policy. This is the bridge
+from the Nix-owned component command catalog to systemd's `StartTransientUnit`
+properties: description, service type, restart policy, `ExecStart` path/argv,
+and environment. `SystemdTransientUnitController` uses that catalog-backed
+definition model for starts, while stop/restart/status continue to address the
+named unit through systemd's normal unit-control methods. Pure tests verify the
+projection without mutating host systemd.
+
 **Active-version snapshot.** `manager.active-version-snapshot` (per
 §1.7 manager-state discussion) is per-`(EngineId, ComponentName)`
 materialised projection of the event log. The reducer is
@@ -594,8 +603,9 @@ before a handover. The sandbox `EngineSupervisor` still starts direct child
 processes for integration tests; production component lifecycle goes through
 the unit-controller boundary. Daemons may use systemd readiness/watchdog
 notification once they run under systemd. The current Rust surface has a
-systemd-D-Bus controller, a systemctl command fallback, and injectable test
-controllers behind the same trait.
+systemd-D-Bus controller, a catalog-backed systemd transient-unit controller, a
+systemctl command fallback, and injectable test controllers behind the same
+trait.
 
 Component executables are supplied by the Nix-built stack. The default
 component command set comes from the `persona` flake closure or the
@@ -1170,6 +1180,10 @@ Migration rules:
   actor boundary for starting, stopping, restarting, and reading status for
   versioned component units, and tests use injectable recording controllers
   instead of invoking the host system manager.
+- Transient unit starts are derived from typed component definitions:
+  component+version unit identity, resolved executable path, argv, environment,
+  and restart policy. Tests prove the property model without depending on a
+  mutable systemd instance.
 - Component executables are Nix-built stack dependencies. Default resolution
   comes from the flake closure or NixOS module, not the ambient host
   installation.
@@ -1457,6 +1471,7 @@ The apex repo owns tests that prove cross-component shape:
 | persona engine starts the next component unit before probing handover sockets | `nix build .#checks.x86_64-linux.persona-engine-starts-next-component-unit-before-handover-socket-probe` |
 | component unit names use the component+version systemd template instance shape | `nix build .#checks.x86_64-linux.persona-component-unit-name-is-component-version-template-instance` |
 | component unit manager dispatches start, stop, restart, and status through the controller boundary | `nix build .#checks.x86_64-linux.persona-component-unit-manager-dispatches-control-actions` |
+| transient unit definitions project component commands into systemd start properties | `nix build .#checks.x86_64-linux.persona-transient-unit-definition-projects-exec-start` |
 | persona engine refuses handover when the next daemon's private upgrade marker is stale | `nix build .#checks.x86_64-linux.persona-engine-refuses-stale-next-handover-marker` |
 | persona engine asks the current daemon to recover if completion fails after readiness | `nix build .#checks.x86_64-linux.persona-engine-recovers-current-handover-after-completion-failure` |
 | owner `AttemptHandover` authority drives the same private-socket handover path as the internal manager driver | `nix build .#checks.x86_64-linux.persona-engine-owner-attempt-drives-version-handover` |
@@ -1657,7 +1672,7 @@ src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
 src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records
 src/engine_event.rs  typed engine-management event records
-src/unit.rs      component unit identity, unit-manager actor, and injectable manual/systemd unit controllers
+src/unit.rs      component unit identity, transient unit definitions, unit-manager actor, and injectable manual/systemd unit controllers
 src/direct_process.rs  direct child-process launcher actor
 src/launch/      launch configuration, resolved commands, command resolver actor
 src/supervisor.rs  Kameo EngineSupervisor actor that starts/stops prototype-supervised processes

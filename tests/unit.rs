@@ -1,8 +1,13 @@
 use std::sync::Arc;
 
+use persona::launch::{
+    CommandArgument, ComponentCommand, ComponentCommandInput, EnvironmentVariable,
+    EnvironmentVariableInput, EnvironmentVariableName, EnvironmentVariableValue, ExecutablePath,
+};
 use persona::unit::{
-    ComponentUnit, ComponentUnitManager, ReadUnitStatus, RestartUnit, StartUnit, StopUnit,
-    UnitAction, UnitController, UnitFuture, UnitReceipt, UnitStatus, UnitStatusReport,
+    ComponentUnit, ComponentUnitCatalog, ComponentUnitDefinition, ComponentUnitDefinitionInput,
+    ComponentUnitManager, ReadUnitStatus, RestartUnit, StartUnit, StopUnit, UnitAction,
+    UnitController, UnitFuture, UnitReceipt, UnitRestartPolicy, UnitStatus, UnitStatusReport,
 };
 use persona::upgrade::Version;
 use signal_persona::ComponentName;
@@ -64,6 +69,17 @@ fn spirit_unit() -> ComponentUnit {
     )
 }
 
+fn spirit_command() -> ComponentCommand {
+    ComponentCommand::from_input(ComponentCommandInput {
+        executable_path: ExecutablePath::new("/nix/store/persona-spirit/bin/persona-spirit-daemon"),
+        arguments: vec![CommandArgument::new("/run/persona/spirit-v0.1.1.nota")],
+        environment: vec![EnvironmentVariable::from_input(EnvironmentVariableInput {
+            name: EnvironmentVariableName::new("PERSONA_ENGINE_ID"),
+            value: EnvironmentVariableValue::new("default"),
+        })],
+    })
+}
+
 #[test]
 fn constraint_component_unit_name_is_component_version_template_instance() {
     let unit = spirit_unit();
@@ -111,4 +127,44 @@ async fn constraint_component_unit_manager_dispatches_start_stop_restart_status(
 
     manager.stop_gracefully().await.expect("unit manager stops");
     let _outcome = manager.wait_for_shutdown().await;
+}
+
+#[test]
+fn constraint_transient_unit_definition_projects_exec_start_and_environment() {
+    let unit = spirit_unit();
+    let definition = ComponentUnitDefinition::from_input(ComponentUnitDefinitionInput {
+        unit: unit.clone(),
+        command: spirit_command(),
+        restart: UnitRestartPolicy::Disabled,
+    });
+    let properties = definition.transient_properties();
+
+    assert_eq!(
+        properties.description(),
+        "Persona component persona-spirit v0.1.1 for engine default"
+    );
+    assert_eq!(properties.service_type(), "simple");
+    assert_eq!(properties.restart(), "no");
+    assert_eq!(
+        properties.exec_start().path(),
+        "/nix/store/persona-spirit/bin/persona-spirit-daemon"
+    );
+    assert_eq!(
+        properties.exec_start().arguments(),
+        &[
+            "/nix/store/persona-spirit/bin/persona-spirit-daemon".to_string(),
+            "/run/persona/spirit-v0.1.1.nota".to_string()
+        ]
+    );
+    assert!(properties.exec_start().unclean_exit_fails());
+    assert_eq!(
+        properties.environment(),
+        &["PERSONA_ENGINE_ID=default".to_string()]
+    );
+
+    let catalog = ComponentUnitCatalog::from_definitions(vec![definition]);
+    assert_eq!(
+        catalog.definition_for(&unit).map(|entry| entry.unit()),
+        Some(&unit)
+    );
 }
