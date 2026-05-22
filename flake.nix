@@ -1600,6 +1600,24 @@
                   cargoTestExtraArgs = "--test manager constraint_engine_manager_starts_next_component_unit_before_handover_socket_probe -- --exact";
                 }
               );
+          persona-component-unit-name-is-component-version-template-instance =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test unit constraint_component_unit_name_is_component_version_template_instance -- --exact";
+                }
+              );
+          persona-component-unit-manager-dispatches-control-actions =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test unit constraint_component_unit_manager_dispatches_start_stop_restart_status -- --exact";
+                }
+              );
           persona-engine-refuses-stale-next-handover-marker =
             context.craneLib.cargoTest
               (

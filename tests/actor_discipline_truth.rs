@@ -24,6 +24,7 @@ use persona::manager_store::ManagerStore;
 use persona::readiness::ComponentSocketReadiness;
 use persona::supervision_readiness::ComponentSupervisionReadiness;
 use persona::supervisor::EngineSupervisor;
+use persona::unit::ComponentUnitManager;
 
 #[test]
 fn public_actor_nouns_carry_data() {
@@ -34,6 +35,7 @@ fn public_actor_nouns_carry_data() {
     assert!(std::mem::size_of::<ComponentCommandResolver>() > 0);
     assert!(std::mem::size_of::<ComponentSocketReadiness>() > 0);
     assert!(std::mem::size_of::<ComponentSupervisionReadiness>() > 0);
+    assert!(std::mem::size_of::<ComponentUnitManager>() > 0);
 }
 
 #[test]

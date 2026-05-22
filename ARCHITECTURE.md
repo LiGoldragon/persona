@@ -504,14 +504,16 @@ upgrade-related Kameo messages:
 
 **Component unit control.** `src/unit.rs` owns the process-manager boundary
 for component daemons that are not direct children of the sandbox
-`EngineSupervisor`. A `ComponentUnit` is named by `(EngineId, ComponentName,
-Version)` and projects to a systemd-style unit name
-`persona-component@<engine>-<component>-<version>.service`. `EngineManager`
-holds a `UnitController`: production deployments can inject a systemd-backed
-controller, while tests inject a recording controller. `DriveVersionHandover`
-starts the next component unit before it opens either private upgrade socket,
-so missing next-daemon state is caught before Persona asks the main daemon to
-enter handover readiness.
+`EngineSupervisor`. A `ComponentUnit` carries `(EngineId, ComponentName,
+Version)` and projects component+version into the systemd template instance
+name `persona-component@<component>:<version>.service`; the engine remains
+typed state, not part of the template instance string. `ComponentUnitManager`
+is the data-bearing Kameo actor that owns the `UnitController` trait boundary
+for `start`, `stop`, `restart`, and `status`. Production can use the
+systemd-D-Bus controller; integration tests inject a recording controller.
+`DriveVersionHandover` starts the next component unit through this actor before
+it opens either private upgrade socket, so missing next-daemon state is caught
+before Persona asks the main daemon to enter handover readiness.
 
 **Active-version snapshot.** `manager.active-version-snapshot` (per
 §1.7 manager-state discussion) is per-`(EngineId, ComponentName)`
@@ -592,9 +594,8 @@ before a handover. The sandbox `EngineSupervisor` still starts direct child
 processes for integration tests; production component lifecycle goes through
 the unit-controller boundary. Daemons may use systemd readiness/watchdog
 notification once they run under systemd. The current Rust surface has a
-systemd command controller plus an injectable memory controller for tests; a
-direct D-Bus controller is an internal replacement behind the same trait if
-transient-unit manipulation becomes load-bearing.
+systemd-D-Bus controller, a systemctl command fallback, and injectable test
+controllers behind the same trait.
 
 Component executables are supplied by the Nix-built stack. The default
 component command set comes from the `persona` flake closure or the
@@ -1166,8 +1167,9 @@ Migration rules:
 - Development runners push socket paths to components through environment and
   argv, never by filesystem discovery.
 - Production startup is systemd/NixOS-shaped. Persona has a unit-controller
-  boundary for starting versioned component units, and tests use an injectable
-  memory controller instead of invoking the host system manager.
+  actor boundary for starting, stopping, restarting, and reading status for
+  versioned component units, and tests use injectable recording controllers
+  instead of invoking the host system manager.
 - Component executables are Nix-built stack dependencies. Default resolution
   comes from the flake closure or NixOS module, not the ambient host
   installation.
@@ -1272,10 +1274,9 @@ Migration rules:
 - A direct child-process backend must own process groups, readiness state,
   kill/reap behavior, restart tracing, and reverse-order shutdown before it is
   treated as production-worthy.
-- A systemd child-process backend, if added, is an implementation behind the
-  launcher/supervisor actor boundary. It uses EngineId-scoped transient units
-  and records unit names, properties, and lifecycle results in the manager
-  catalog.
+- A systemd child-process backend is an implementation behind the unit-manager
+  actor boundary. It uses component+version template instances and records
+  unit names, properties, and lifecycle results in the manager catalog.
 - Dedicated sandbox credential roots hidden by `ProtectHome=tmpfs` are exposed
   with `BindPaths=` or `LoadCredential=`, not by assuming `ReadWritePaths=`
   makes them visible.
@@ -1454,6 +1455,8 @@ The apex repo owns tests that prove cross-component shape:
 | engine manager records the active component version only after handover completion | `nix build .#checks.x86_64-linux.persona-engine-manager-records-active-version-after-handover-completion` |
 | persona engine drives version handover through a component's private upgrade socket | `nix build .#checks.x86_64-linux.persona-engine-drives-version-handover-over-component-upgrade-socket` |
 | persona engine starts the next component unit before probing handover sockets | `nix build .#checks.x86_64-linux.persona-engine-starts-next-component-unit-before-handover-socket-probe` |
+| component unit names use the component+version systemd template instance shape | `nix build .#checks.x86_64-linux.persona-component-unit-name-is-component-version-template-instance` |
+| component unit manager dispatches start, stop, restart, and status through the controller boundary | `nix build .#checks.x86_64-linux.persona-component-unit-manager-dispatches-control-actions` |
 | persona engine refuses handover when the next daemon's private upgrade marker is stale | `nix build .#checks.x86_64-linux.persona-engine-refuses-stale-next-handover-marker` |
 | persona engine asks the current daemon to recover if completion fails after readiness | `nix build .#checks.x86_64-linux.persona-engine-recovers-current-handover-after-completion-failure` |
 | owner `AttemptHandover` authority drives the same private-socket handover path as the internal manager driver | `nix build .#checks.x86_64-linux.persona-engine-owner-attempt-drives-version-handover` |
@@ -1654,7 +1657,7 @@ src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
 src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records
 src/engine_event.rs  typed engine-management event records
-src/unit.rs      component unit identity and injectable manual/systemd unit controllers
+src/unit.rs      component unit identity, unit-manager actor, and injectable manual/systemd unit controllers
 src/direct_process.rs  direct child-process launcher actor
 src/launch/      launch configuration, resolved commands, command resolver actor
 src/supervisor.rs  Kameo EngineSupervisor actor that starts/stops prototype-supervised processes

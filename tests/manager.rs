@@ -12,7 +12,7 @@ use persona::manager::{
 use persona::manager_store::{
     ManagerStore, ManagerStoreLocation, ReadActiveVersion, ReadEngineEvents,
 };
-use persona::unit::{ComponentUnit, UnitController, UnitReceipt, UnitStartFuture};
+use persona::unit::{ComponentUnit, UnitController, UnitFuture, UnitReceipt, UnitStatusReport};
 use persona::upgrade::{
     ActiveVersionChangeSource, HandoverFrameCodec, Target, TargetInput, Version,
 };
@@ -76,13 +76,30 @@ impl RecordingUnitController {
 }
 
 impl UnitController for RecordingUnitController {
-    fn start_unit<'a>(&'a self, unit: ComponentUnit) -> UnitStartFuture<'a> {
+    fn start<'a>(&'a self, unit: ComponentUnit) -> UnitFuture<'a, UnitReceipt> {
         Box::pin(async move {
             self.started
                 .lock()
                 .expect("recording unit controller lock")
                 .push(unit.clone());
             Ok(UnitReceipt::started(unit))
+        })
+    }
+
+    fn stop<'a>(&'a self, unit: ComponentUnit) -> UnitFuture<'a, UnitReceipt> {
+        Box::pin(async move { Ok(UnitReceipt::stopped(unit)) })
+    }
+
+    fn restart<'a>(&'a self, unit: ComponentUnit) -> UnitFuture<'a, UnitReceipt> {
+        Box::pin(async move { Ok(UnitReceipt::restarted(unit)) })
+    }
+
+    fn status<'a>(&'a self, unit: ComponentUnit) -> UnitFuture<'a, UnitStatusReport> {
+        Box::pin(async move {
+            Ok(UnitStatusReport::new(
+                unit,
+                persona::unit::UnitStatus::Active,
+            ))
         })
     }
 }
@@ -590,7 +607,7 @@ async fn constraint_engine_manager_starts_next_component_unit_before_handover_so
     assert_eq!(unit.version().as_str(), "v0.1.1");
     assert_eq!(
         unit.name().as_str(),
-        "persona-component@engine-start-next-unit-before-handover-persona-spirit-v0.1.1.service"
+        "persona-component@persona-spirit:v0.1.1.service"
     );
 
     let trace = manager

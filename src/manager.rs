@@ -25,7 +25,10 @@ use crate::manager_store::{
     PersistEngineRecord, ReadEngineEvents, ReadEngineRecord, ReadEngineStatusSnapshot,
 };
 use crate::state::EngineState;
-use crate::unit::{ComponentUnit, ManualUnitController, UnitController, UnitReceipt};
+use crate::unit::{
+    ComponentUnit, ComponentUnitManager, ManualUnitController, StartUnit, UnitController,
+    UnitReceipt,
+};
 use crate::upgrade::{
     ActiveVersionChanged, DrivenHandover, HandoverDriver, Prepared, PreparedEvent, Target,
     VersionQuarantined,
@@ -51,7 +54,7 @@ pub struct EngineManager {
     engine: EngineId,
     state: EngineState,
     store: Option<ActorRef<ManagerStore>>,
-    unit_controller: Arc<dyn UnitController>,
+    unit_manager: ActorRef<ComponentUnitManager>,
     events: Vec<ManagerEvent>,
 }
 
@@ -61,7 +64,9 @@ impl EngineManager {
             engine: EngineId::new("default"),
             state,
             store: None,
-            unit_controller: Arc::new(ManualUnitController),
+            unit_manager: ComponentUnitManager::start_with_controller(Arc::new(
+                ManualUnitController,
+            )),
             events: vec![ManagerEvent::Started],
         }
     }
@@ -71,7 +76,9 @@ impl EngineManager {
             engine,
             state,
             store: Some(store),
-            unit_controller: Arc::new(ManualUnitController),
+            unit_manager: ComponentUnitManager::start_with_controller(Arc::new(
+                ManualUnitController,
+            )),
             events: vec![ManagerEvent::Started],
         }
     }
@@ -86,7 +93,7 @@ impl EngineManager {
             engine,
             state,
             store: Some(store),
-            unit_controller,
+            unit_manager: ComponentUnitManager::start_with_controller(unit_controller),
             events: vec![ManagerEvent::Started],
         }
     }
@@ -294,7 +301,11 @@ impl EngineManager {
             target.component().clone(),
             target.next_version().clone(),
         );
-        let receipt = self.unit_controller.start_unit(unit).await?;
+        let receipt = match self.unit_manager.ask(StartUnit::new(unit)).await {
+            Ok(receipt) => receipt,
+            Err(kameo::error::SendError::HandlerError(failure)) => return Err(failure.into()),
+            Err(error) => return Err(Error::actor("start next component unit", error)),
+        };
         self.events.push(ManagerEvent::ComponentUnitStarted);
         Ok(receipt)
     }
@@ -426,6 +437,8 @@ impl Actor for EngineManager {
         _reason: kameo::error::ActorStopReason,
     ) -> std::result::Result<(), Self::Error> {
         self.events.push(ManagerEvent::Stopping);
+        let _shutdown = self.unit_manager.stop_gracefully().await;
+        let _outcome = self.unit_manager.wait_for_shutdown().await;
         Ok(())
     }
 }
