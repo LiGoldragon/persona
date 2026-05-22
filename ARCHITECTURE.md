@@ -475,13 +475,15 @@ architecture vocabulary is main/next.
 | `current_owner_socket_path` (main owner socket) | Recorded for audit; not driven by Persona's manager today. |
 | `current_upgrade_socket_path` (main private upgrade socket) | Persona's `HandoverDriver` opens a client to this path and walks `AskHandoverMarker -> ReadyToHandover -> HandoverCompleted`. |
 | `next_owner_socket_path` (next owner socket) | Recorded for audit; the next daemon's owner-authority surface for follow-on operations. |
-| `next_upgrade_socket_path` (next private upgrade socket) | Recorded for audit; the next daemon binds it when it comes up to answer subsequent handovers. |
+| `next_upgrade_socket_path` (next private upgrade socket) | Persona's `HandoverDriver` opens this path before readiness and requires the next daemon's marker to match the main high-water mark before it can flip the active selector. |
 
 The handover protocol per `signal-version-handover` is driven
-against the **main** side. The main daemon's smart-handover code
-walks the commit-copy into the next daemon's redb at
-`ReadyToHandover`; Persona itself does not open a client connection
-to the next daemon's upgrade socket as part of the main-side drive.
+against both adjacent versions. Persona first reads the main marker,
+then reads the next marker, and refuses the handover unless component,
+commit sequence, write counter, and last record identifier agree. Only
+then does Persona ask the main daemon to enter readiness and complete.
+This keeps Persona from persisting `v_next` as active when the next
+daemon is missing or has not copied/replayed the main high-water mark.
 
 **Owner contract.** The administrative operations Persona receives on
 its owner socket — `AttemptHandover`, `ForceFlip`, `Rollback`, and
@@ -497,7 +499,7 @@ upgrade-related Kameo messages:
 |---|---|
 | `PrepareUpgrade { target }` | Quarantine-gates the target; appends `UpgradePrepared` to the event log; returns the first handover operation (`AskHandoverMarker(MarkerRequest)`). |
 | `CompleteUpgrade { target, marker }` | Validates the marker belongs to the target component; appends `ActiveVersionChanged` (source `HandoverMarker { commit_sequence }`); reducer updates the active-version snapshot. |
-| `DriveVersionHandover { target }` | Quarantine-gates; opens the `HandoverDriver`; walks marker/readiness/completion against the main upgrade socket; appends `ActiveVersionChanged`. |
+| `DriveVersionHandover { target }` | Quarantine-gates; opens the `HandoverDriver`; verifies next marker parity, walks readiness/completion against the main upgrade socket, and appends `ActiveVersionChanged`. |
 | `HandleOwnerVersionHandover { operation }` | Owner-socket entry point. Dispatches `AttemptHandover` -> `DriveVersionHandover`, `ForceFlip` -> direct `ActiveVersionChanged` append (source `ForceFlip { reason }`), `Rollback` -> direct `ActiveVersionChanged` append (source `Rollback { reason }`), `Quarantine` -> `VersionQuarantined` event-log append. |
 
 **Active-version snapshot.** `manager.active-version-snapshot` (per
@@ -532,6 +534,7 @@ sequenceDiagram
     participant store as ManagerStore + event log + reducers
     participant driver as HandoverDriver
     participant current as target main upgrade socket
+    participant next as target next upgrade socket
     psyche->>owner: AttemptHandover(Target)
     owner->>manager: HandleOwnerVersionHandover
     manager->>store: ReadEngineEvents (quarantine gate)
@@ -539,6 +542,9 @@ sequenceDiagram
     manager->>driver: drive_current_side(target)
     driver->>current: AskHandoverMarker
     current-->>driver: HandoverMarker
+    driver->>next: AskHandoverMarker
+    next-->>driver: HandoverMarker
+    driver->>driver: require high-water mark parity
     driver->>current: ReadyToHandover(ReadinessReport)
     current-->>driver: HandoverAccepted
     driver->>current: HandoverCompleted(CompletionReport)
@@ -1425,6 +1431,7 @@ The apex repo owns tests that prove cross-component shape:
 | engine manager prepares a component upgrade by emitting the first version-handover marker request | `nix build .#checks.x86_64-linux.persona-engine-manager-prepares-upgrade-with-version-handover-request` |
 | engine manager records the active component version only after handover completion | `nix build .#checks.x86_64-linux.persona-engine-manager-records-active-version-after-handover-completion` |
 | persona engine drives version handover through a component's private upgrade socket | `nix build .#checks.x86_64-linux.persona-engine-drives-version-handover-over-component-upgrade-socket` |
+| persona engine refuses handover when the next daemon's private upgrade marker is stale | `nix build .#checks.x86_64-linux.persona-engine-refuses-stale-next-handover-marker` |
 | owner `AttemptHandover` authority drives the same private-socket handover path as the internal manager driver | `nix build .#checks.x86_64-linux.persona-engine-owner-attempt-drives-version-handover` |
 | persona engine refuses normal handover when either target version is quarantined by owner authority | `nix build .#checks.x86_64-linux.persona-engine-refuses-version-handover-with-quarantined-version` |
 | owner `AttemptHandover` returns a typed `Rejected(VersionQuarantined)` reply for quarantined versions instead of dropping the owner connection | `nix build .#checks.x86_64-linux.persona-engine-owner-attempt-rejects-quarantined-version` |

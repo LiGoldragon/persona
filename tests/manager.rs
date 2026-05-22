@@ -72,15 +72,18 @@ fn spirit_upgrade_target() -> Target {
     })
 }
 
-fn spirit_upgrade_target_with_current_upgrade_socket(path: &std::path::Path) -> Target {
+fn spirit_upgrade_target_with_upgrade_sockets(
+    current_path: &std::path::Path,
+    next_path: &std::path::Path,
+) -> Target {
     Target::from_input(TargetInput {
         component: ComponentName::new("persona-spirit"),
         current_version: Version::new("v0.1.0"),
         next_version: Version::new("v0.1.1"),
         current_owner_socket_path: WirePath::new("/run/persona/default/spirit/v0.1.0/owner.sock"),
-        current_upgrade_socket_path: WirePath::new(path.to_string_lossy().into_owned()),
+        current_upgrade_socket_path: WirePath::new(current_path.to_string_lossy().into_owned()),
         next_owner_socket_path: WirePath::new("/run/persona/default/spirit/v0.1.1/owner.sock"),
-        next_upgrade_socket_path: WirePath::new("/run/persona/default/spirit/v0.1.1/upgrade.sock"),
+        next_upgrade_socket_path: WirePath::new(next_path.to_string_lossy().into_owned()),
     })
 }
 
@@ -116,14 +119,20 @@ fn owner_version_endpoint(
 fn owner_attempt_handover_order_with_current_upgrade_socket(
     current_upgrade_socket_path: &std::path::Path,
 ) -> AttemptHandover {
+    owner_attempt_handover_order_with_upgrade_sockets(
+        current_upgrade_socket_path,
+        std::path::Path::new("/run/persona/default/spirit/v0.1.1/upgrade.sock"),
+    )
+}
+
+fn owner_attempt_handover_order_with_upgrade_sockets(
+    current_upgrade_socket_path: &std::path::Path,
+    next_upgrade_socket_path: &std::path::Path,
+) -> AttemptHandover {
     AttemptHandover {
         component: HandoverComponentName::new("persona-spirit"),
         current: owner_version_endpoint("v0.1.0", 1, current_upgrade_socket_path),
-        next: owner_version_endpoint(
-            "v0.1.1",
-            2,
-            std::path::Path::new("/run/persona/default/spirit/v0.1.1/upgrade.sock"),
-        ),
+        next: owner_version_endpoint("v0.1.1", 2, next_upgrade_socket_path),
     }
 }
 
@@ -195,6 +204,29 @@ async fn serve_current_handover_socket(
         operations.push(operation);
     }
     Ok(operations)
+}
+
+async fn serve_marker_handover_socket(
+    path: std::path::PathBuf,
+    marker: HandoverMarker,
+) -> persona::Result<Vec<HandoverOperation>> {
+    let listener = tokio::net::UnixListener::bind(path)?;
+    let codec = HandoverFrameCodec::default();
+    let (mut stream, _) = listener.accept().await?;
+    let frame = codec.read_frame(&mut stream).await?;
+    let received = codec.request_from_frame(frame)?;
+    let exchange = received.exchange();
+    let operation = received.into_operation();
+    let reply = match &operation {
+        HandoverOperation::AskHandoverMarker(request) => {
+            assert_eq!(request.component.as_str(), "persona-spirit");
+            HandoverReply::HandoverMarker(marker)
+        }
+        other => panic!("unexpected next handover operation in test server: {other:?}"),
+    };
+    let frame = codec.reply_frame(exchange, reply);
+    codec.write_frame(&mut stream, &frame).await?;
+    Ok(vec![operation])
 }
 
 async fn wait_for_socket(path: &std::path::Path) {
@@ -366,19 +398,25 @@ async fn constraint_engine_manager_records_active_version_after_handover_complet
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_persona_engine_drives_version_handover_over_component_upgrade_socket() {
     let fixture = StoreFixture::new("persona-manager-upgrade-socket-drive");
-    let socket = fixture.root.join("spirit-upgrade.sock");
+    let current_socket = fixture.root.join("spirit-current-upgrade.sock");
+    let next_socket = fixture.root.join("spirit-next-upgrade.sock");
     let marker = handover_marker(118);
     let server = tokio::spawn(serve_current_handover_socket(
-        socket.clone(),
+        current_socket.clone(),
         marker.clone(),
     ));
-    wait_for_socket(&socket).await;
+    let next_server = tokio::spawn(serve_marker_handover_socket(
+        next_socket.clone(),
+        marker.clone(),
+    ));
+    wait_for_socket(&current_socket).await;
+    wait_for_socket(&next_socket).await;
     let engine = EngineId::new("engine-upgrade-socket-drive");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
         .await
         .expect("manager starts with store");
-    let target = spirit_upgrade_target_with_current_upgrade_socket(&socket);
+    let target = spirit_upgrade_target_with_upgrade_sockets(&current_socket, &next_socket);
 
     let driven = manager
         .ask(DriveVersionHandover::new(target))
@@ -400,6 +438,14 @@ async fn constraint_persona_engine_drives_version_handover_over_component_upgrad
             HandoverOperation::ReadyToHandover(_),
             HandoverOperation::HandoverCompleted(_)
         ]
+    ));
+    let next_operations = next_server
+        .await
+        .expect("next handover marker socket server joins")
+        .expect("next handover marker socket server succeeds");
+    assert!(matches!(
+        next_operations.as_slice(),
+        [HandoverOperation::AskHandoverMarker(_)]
     ));
 
     let active = store
@@ -428,14 +474,93 @@ async fn constraint_persona_engine_drives_version_handover_over_component_upgrad
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_persona_engine_refuses_handover_when_next_marker_is_stale() {
+    let fixture = StoreFixture::new("persona-manager-next-marker-stale");
+    let current_socket = fixture.root.join("spirit-current-upgrade.sock");
+    let next_socket = fixture.root.join("spirit-next-upgrade.sock");
+    let current_marker = handover_marker(118);
+    let next_marker = handover_marker(117);
+    let current_server = tokio::spawn(serve_marker_handover_socket(
+        current_socket.clone(),
+        current_marker,
+    ));
+    let next_server = tokio::spawn(serve_marker_handover_socket(
+        next_socket.clone(),
+        next_marker,
+    ));
+    wait_for_socket(&current_socket).await;
+    wait_for_socket(&next_socket).await;
+    let engine = EngineId::new("engine-upgrade-next-marker-stale");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    let manager = EngineManager::start_with_store(engine.clone(), store.clone())
+        .await
+        .expect("manager starts with store");
+    let target = spirit_upgrade_target_with_upgrade_sockets(&current_socket, &next_socket);
+
+    let error = manager
+        .ask(DriveVersionHandover::new(target))
+        .await
+        .expect_err("stale next marker rejects handover before current enters readiness");
+
+    assert!(matches!(
+        error,
+        kameo::error::SendError::HandlerError(Error::NextHandoverMarkerMismatch {
+            field: "commit_sequence",
+            expected,
+            actual,
+        }) if expected == "118" && actual == "117"
+    ));
+
+    let current_operations = current_server
+        .await
+        .expect("current handover marker socket server joins")
+        .expect("current handover marker socket server succeeds");
+    assert!(matches!(
+        current_operations.as_slice(),
+        [HandoverOperation::AskHandoverMarker(_)]
+    ));
+    let next_operations = next_server
+        .await
+        .expect("next handover marker socket server joins")
+        .expect("next handover marker socket server succeeds");
+    assert!(matches!(
+        next_operations.as_slice(),
+        [HandoverOperation::AskHandoverMarker(_)]
+    ));
+
+    let active = store
+        .ask(ReadActiveVersion::new(
+            engine,
+            ComponentName::new("persona-spirit"),
+        ))
+        .await
+        .expect("active version snapshot read");
+    assert!(active.is_none());
+
+    EngineManager::stop(manager)
+        .await
+        .expect("manager stops cleanly");
+    ManagerStore::close_and_stop(store)
+        .await
+        .expect("manager store closes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_owner_attempt_handover_drives_component_upgrade_socket() {
     let fixture = StoreFixture::new("persona-manager-owner-attempt-handover");
-    let socket = fixture.root.join("spirit-upgrade.sock");
+    let current_socket = fixture.root.join("spirit-current-upgrade.sock");
+    let next_socket = fixture.root.join("spirit-next-upgrade.sock");
     let marker = handover_marker(144);
     let server = tokio::spawn(serve_current_handover_socket(
-        socket.clone(),
+        current_socket.clone(),
         marker.clone(),
     ));
+    let next_server = tokio::spawn(serve_marker_handover_socket(
+        next_socket.clone(),
+        marker.clone(),
+    ));
+    wait_for_socket(&current_socket).await;
+    wait_for_socket(&next_socket).await;
     let engine = EngineId::new("engine-owner-attempt-handover");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
@@ -445,7 +570,7 @@ async fn constraint_owner_attempt_handover_drives_component_upgrade_socket() {
     let reply = manager
         .ask(HandleOwnerVersionHandover::new(
             OwnerVersionOperation::AttemptHandover(
-                owner_attempt_handover_order_with_current_upgrade_socket(&socket),
+                owner_attempt_handover_order_with_upgrade_sockets(&current_socket, &next_socket),
             ),
         ))
         .await
@@ -471,6 +596,14 @@ async fn constraint_owner_attempt_handover_drives_component_upgrade_socket() {
             HandoverOperation::ReadyToHandover(_),
             HandoverOperation::HandoverCompleted(_)
         ]
+    ));
+    let next_operations = next_server
+        .await
+        .expect("next handover marker socket server joins")
+        .expect("next handover marker socket server succeeds");
+    assert!(matches!(
+        next_operations.as_slice(),
+        [HandoverOperation::AskHandoverMarker(_)]
     ));
 
     let active = store

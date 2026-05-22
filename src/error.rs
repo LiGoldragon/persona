@@ -69,6 +69,13 @@ pub enum Error {
     #[error("handover marker component mismatch: expected {expected}, got {actual}")]
     HandoverMarkerComponentMismatch { expected: String, actual: String },
 
+    #[error("next handover marker mismatch on {field}: expected {expected}, got {actual}")]
+    NextHandoverMarkerMismatch {
+        field: &'static str,
+        expected: String,
+        actual: String,
+    },
+
     #[error(
         "component version is quarantined: component={component}, version={version}, reason={reason:?}"
     )]

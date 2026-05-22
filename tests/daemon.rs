@@ -288,17 +288,14 @@ fn owner_version_endpoint(
     }
 }
 
-fn owner_attempt_handover_order_with_current_upgrade_socket(
+fn owner_attempt_handover_order_with_upgrade_sockets(
     current_upgrade_socket_path: &std::path::Path,
+    next_upgrade_socket_path: &std::path::Path,
 ) -> AttemptHandover {
     AttemptHandover {
         component: HandoverComponentName::new("persona-spirit"),
         current: owner_version_endpoint("v0.1.0", 1, current_upgrade_socket_path),
-        next: owner_version_endpoint(
-            "v0.1.1",
-            2,
-            std::path::Path::new("/run/persona/default/spirit/v0.1.1/upgrade.sock"),
-        ),
+        next: owner_version_endpoint("v0.1.1", 2, next_upgrade_socket_path),
     }
 }
 
@@ -352,6 +349,29 @@ async fn serve_current_handover_socket(
         operations.push(operation);
     }
     Ok(operations)
+}
+
+async fn serve_marker_handover_socket(
+    path: std::path::PathBuf,
+    marker: HandoverMarker,
+) -> persona::Result<Vec<HandoverOperation>> {
+    let listener = tokio::net::UnixListener::bind(path)?;
+    let codec = HandoverFrameCodec::default();
+    let (mut stream, _) = listener.accept().await?;
+    let frame = codec.read_frame(&mut stream).await?;
+    let received = codec.request_from_frame(frame)?;
+    let exchange = received.exchange();
+    let operation = received.into_operation();
+    let reply = match &operation {
+        HandoverOperation::AskHandoverMarker(request) => {
+            assert_eq!(request.component.as_str(), "persona-spirit");
+            HandoverReply::HandoverMarker(marker)
+        }
+        other => panic!("unexpected next handover operation in test server: {other:?}"),
+    };
+    let frame = codec.reply_frame(exchange, reply);
+    codec.write_frame(&mut stream, &frame).await?;
+    Ok(vec![operation])
 }
 
 async fn wait_for_socket(path: &std::path::Path) {
@@ -459,18 +479,27 @@ async fn constraint_persona_daemon_serves_owner_version_handover_socket() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_persona_daemon_owner_socket_drives_version_handover() {
     let mut fixture = DaemonFixture::start();
-    let upgrade_socket = fixture.root.join("spirit-upgrade.sock");
+    let current_upgrade_socket = fixture.root.join("spirit-current-upgrade.sock");
+    let next_upgrade_socket = fixture.root.join("spirit-next-upgrade.sock");
     let marker = handover_marker(233);
     let server = tokio::spawn(serve_current_handover_socket(
-        upgrade_socket.clone(),
+        current_upgrade_socket.clone(),
         marker.clone(),
     ));
-    wait_for_socket(&upgrade_socket).await;
+    let next_server = tokio::spawn(serve_marker_handover_socket(
+        next_upgrade_socket.clone(),
+        marker.clone(),
+    ));
+    wait_for_socket(&current_upgrade_socket).await;
+    wait_for_socket(&next_upgrade_socket).await;
 
     let reply = fixture
         .owner_client()
         .submit(OwnerOperation::AttemptHandover(
-            owner_attempt_handover_order_with_current_upgrade_socket(&upgrade_socket),
+            owner_attempt_handover_order_with_upgrade_sockets(
+                &current_upgrade_socket,
+                &next_upgrade_socket,
+            ),
         ))
         .await
         .expect("owner attempt handover request succeeds");
@@ -496,6 +525,14 @@ async fn constraint_persona_daemon_owner_socket_drives_version_handover() {
             HandoverOperation::HandoverCompleted(_)
         ]
     ));
+    let next_operations = next_server
+        .await
+        .expect("next handover marker socket server joins")
+        .expect("next handover marker socket server succeeds");
+    assert!(matches!(
+        next_operations.as_slice(),
+        [HandoverOperation::AskHandoverMarker(_)]
+    ));
 
     fixture.stop_daemon();
 
@@ -520,20 +557,31 @@ async fn constraint_persona_daemon_owner_socket_drives_version_handover() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_persona_daemon_owner_socket_drives_real_spirit_upgrade_socket() {
-    let spirit = SpiritUpgradeSocketFixture::new("real-upgrade-socket");
-    let spirit_configuration = spirit.configuration();
-    let spirit_thread = std::thread::spawn(move || {
-        SpiritDaemonRuntime::from_configuration(spirit_configuration)
+    let current_spirit = SpiritUpgradeSocketFixture::new("real-current-upgrade-socket");
+    let next_spirit = SpiritUpgradeSocketFixture::new("real-next-upgrade-socket");
+    let current_configuration = current_spirit.configuration();
+    let next_configuration = next_spirit.configuration();
+    let current_thread = std::thread::spawn(move || {
+        SpiritDaemonRuntime::from_configuration(current_configuration)
             .bind()?
             .serve_upgrade_count(3)
     });
-    wait_for_socket(spirit.upgrade_socket_path()).await;
+    let next_thread = std::thread::spawn(move || {
+        SpiritDaemonRuntime::from_configuration(next_configuration)
+            .bind()?
+            .serve_upgrade_count(1)
+    });
+    wait_for_socket(current_spirit.upgrade_socket_path()).await;
+    wait_for_socket(next_spirit.upgrade_socket_path()).await;
 
     let mut persona = DaemonFixture::start();
     let reply = persona
         .owner_client()
         .submit(OwnerOperation::AttemptHandover(
-            owner_attempt_handover_order_with_current_upgrade_socket(spirit.upgrade_socket_path()),
+            owner_attempt_handover_order_with_upgrade_sockets(
+                current_spirit.upgrade_socket_path(),
+                next_spirit.upgrade_socket_path(),
+            ),
         ))
         .await
         .expect("owner attempt handover request succeeds against real spirit daemon");
@@ -547,11 +595,16 @@ async fn constraint_persona_daemon_owner_socket_drives_real_spirit_upgrade_socke
         other => panic!("expected handover success reply, got {other:?}"),
     }
 
-    let served = spirit_thread
+    let served = current_thread
         .join()
-        .expect("spirit upgrade socket thread joins")
-        .expect("spirit daemon served three upgrade frames");
+        .expect("current spirit upgrade socket thread joins")
+        .expect("current spirit daemon served three upgrade frames");
     assert_eq!(served.len(), 3);
+    let next_served = next_thread
+        .join()
+        .expect("next spirit upgrade socket thread joins")
+        .expect("next spirit daemon served one upgrade frame");
+    assert_eq!(next_served.len(), 1);
 
     persona.stop_daemon();
 }

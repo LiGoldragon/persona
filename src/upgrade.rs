@@ -401,6 +401,7 @@ impl DrivenHandover {
 pub struct HandoverDriver {
     target: Target,
     current: HandoverClient,
+    next: HandoverClient,
 }
 
 impl HandoverDriver {
@@ -408,7 +409,14 @@ impl HandoverDriver {
         let current = HandoverClient::new(HandoverEndpoint::from_wire_path(
             target.current_upgrade_socket_path(),
         ));
-        Self { target, current }
+        let next = HandoverClient::new(HandoverEndpoint::from_wire_path(
+            target.next_upgrade_socket_path(),
+        ));
+        Self {
+            target,
+            current,
+            next,
+        }
     }
 
     pub async fn drive_current_side(&self) -> Result<DrivenHandover> {
@@ -419,6 +427,13 @@ impl HandoverDriver {
                 component: component.clone(),
             })
             .await?;
+        let next_marker = self
+            .next
+            .ask_marker(MarkerRequest {
+                component: component.clone(),
+            })
+            .await?;
+        Self::ensure_next_marker_matches(&marker, &next_marker)?;
         let acceptance = self
             .current
             .ready_to_handover(ReadinessReport {
@@ -434,6 +449,48 @@ impl HandoverDriver {
             })
             .await?;
         Ok(DrivenHandover::new(marker, acceptance, finalization))
+    }
+
+    fn ensure_next_marker_matches(source: &HandoverMarker, next: &HandoverMarker) -> Result<()> {
+        Self::ensure_marker_field(
+            "component",
+            source.component.as_str(),
+            next.component.as_str(),
+        )?;
+        Self::ensure_marker_field(
+            "commit_sequence",
+            source.commit_sequence.to_string(),
+            next.commit_sequence.to_string(),
+        )?;
+        Self::ensure_marker_field(
+            "write_counter",
+            source.write_counter.to_string(),
+            next.write_counter.to_string(),
+        )?;
+        Self::ensure_marker_field(
+            "last_record_identifier",
+            format!("{:?}", source.last_record_identifier),
+            format!("{:?}", next.last_record_identifier),
+        )?;
+        Ok(())
+    }
+
+    fn ensure_marker_field(
+        field: &'static str,
+        expected: impl Into<String>,
+        actual: impl Into<String>,
+    ) -> Result<()> {
+        let expected = expected.into();
+        let actual = actual.into();
+        if expected == actual {
+            Ok(())
+        } else {
+            Err(Error::NextHandoverMarkerMismatch {
+                field,
+                expected,
+                actual,
+            })
+        }
     }
 }
 
