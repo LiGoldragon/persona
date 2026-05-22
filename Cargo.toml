@@ -44,6 +44,9 @@ thiserror              = "2"
 tokio                  = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "process", "time"] }
 version-projection     = { git = "https://github.com/LiGoldragon/version-projection.git", branch = "main" }
 
+[dev-dependencies]
+persona-spirit = { git = "https://github.com/LiGoldragon/persona-spirit.git", branch = "main" }
+
 # ─── Wire-test shim binaries (for nix-chained tests) ──────
 # These exercise signal-persona-message end-to-end through
 # real bytes on stdout/stdin.

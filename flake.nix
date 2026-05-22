@@ -1756,6 +1756,13 @@
               cargoTestExtraArgs = "--test daemon constraint_persona_daemon_owner_socket_drives_version_handover -- --exact";
             }
           );
+          persona-daemon-owner-attempt-drives-real-spirit-upgrade-socket = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test daemon constraint_persona_daemon_owner_socket_drives_real_spirit_upgrade_socket -- --exact";
+            }
+          );
           persona-daemon-launches-prototype-supervised-components-through-engine-supervisor =
             context.craneLib.cargoTest
               (

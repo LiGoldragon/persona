@@ -10,6 +10,10 @@ use persona::engine::{EngineComponent, EngineTopology};
 use persona::engine_event::EngineEventBody;
 use persona::transport::{OwnerClient, OwnerEndpoint};
 use persona::upgrade::HandoverFrameCodec;
+use persona_spirit::{
+    DaemonConfiguration as SpiritDaemonConfiguration, DaemonRuntime as SpiritDaemonRuntime,
+    SocketMode as SpiritSocketMode, SocketPath as SpiritSocketPath, StorePath as SpiritStorePath,
+};
 use signal_version_handover::{
     Date, HandoverAcceptance, HandoverFinalization, HandoverMarker, Operation as HandoverOperation,
     Reply as HandoverReply, Time,
@@ -23,6 +27,14 @@ struct DaemonFixture {
     socket: PathBuf,
     manager_store: PathBuf,
     daemon: Child,
+}
+
+struct SpiritUpgradeSocketFixture {
+    root: PathBuf,
+    ordinary_socket: SpiritSocketPath,
+    owner_socket: SpiritSocketPath,
+    upgrade_socket: SpiritSocketPath,
+    store: SpiritStorePath,
 }
 
 impl DaemonFixture {
@@ -197,6 +209,56 @@ impl DaemonFixture {
     }
 }
 
+impl SpiritUpgradeSocketFixture {
+    fn new(name: &str) -> Self {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock after epoch")
+            .as_nanos();
+        let root = PathBuf::from("/tmp").join(format!(
+            "persona-spirit-{name}-{}-{unique}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("spirit upgrade fixture root created");
+        Self {
+            ordinary_socket: SpiritSocketPath::new(
+                root.join("spirit.sock").to_string_lossy().into_owned(),
+            ),
+            owner_socket: SpiritSocketPath::new(
+                root.join("spirit-owner.sock")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            upgrade_socket: SpiritSocketPath::new(
+                root.join("spirit-upgrade.sock")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            store: SpiritStorePath::new(
+                root.join("persona-spirit.redb")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            root,
+        }
+    }
+
+    fn configuration(&self) -> SpiritDaemonConfiguration {
+        SpiritDaemonConfiguration::new(
+            self.ordinary_socket.clone(),
+            self.owner_socket.clone(),
+            self.upgrade_socket.clone(),
+            self.store.clone(),
+            SpiritSocketMode::from_octal(0o600),
+        )
+    }
+
+    fn upgrade_socket_path(&self) -> &std::path::Path {
+        self.upgrade_socket.as_path()
+    }
+}
+
 fn owner_version(label: &str, byte: u8) -> OwnerVersion {
     OwnerVersion::new(VersionLabel::new(label), ContractVersion::new([byte; 32]))
 }
@@ -307,6 +369,12 @@ impl Drop for DaemonFixture {
         let _ = self.daemon.kill();
         let _ = self.daemon.wait();
         self.stop_component_process_groups();
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
+impl Drop for SpiritUpgradeSocketFixture {
+    fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.root);
     }
 }
@@ -448,6 +516,44 @@ async fn constraint_persona_daemon_owner_socket_drives_version_handover() {
 
     store.stop_gracefully().await.expect("manager store stops");
     let _shutdown_completion = store.wait_for_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_persona_daemon_owner_socket_drives_real_spirit_upgrade_socket() {
+    let spirit = SpiritUpgradeSocketFixture::new("real-upgrade-socket");
+    let spirit_configuration = spirit.configuration();
+    let spirit_thread = std::thread::spawn(move || {
+        SpiritDaemonRuntime::from_configuration(spirit_configuration)
+            .bind()?
+            .serve_upgrade_count(3)
+    });
+    wait_for_socket(spirit.upgrade_socket_path()).await;
+
+    let mut persona = DaemonFixture::start();
+    let reply = persona
+        .owner_client()
+        .submit(OwnerOperation::AttemptHandover(
+            owner_attempt_handover_order_with_current_upgrade_socket(spirit.upgrade_socket_path()),
+        ))
+        .await
+        .expect("owner attempt handover request succeeds against real spirit daemon");
+
+    match reply {
+        OwnerReply::HandoverSucceeded(success) => {
+            assert_eq!(success.component.as_str(), "persona-spirit");
+            assert_eq!(success.active_version.label.as_str(), "v0.1.1");
+            assert_eq!(success.commit_sequence, 0);
+        }
+        other => panic!("expected handover success reply, got {other:?}"),
+    }
+
+    let served = spirit_thread
+        .join()
+        .expect("spirit upgrade socket thread joins")
+        .expect("spirit daemon served three upgrade frames");
+    assert_eq!(served.len(), 3);
+
+    persona.stop_daemon();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

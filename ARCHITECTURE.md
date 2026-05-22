@@ -1435,6 +1435,7 @@ The apex repo owns tests that prove cross-component shape:
 | persona CLI mutation reaches manager.redb via daemon path | `nix build .#checks.x86_64-linux.persona-daemon-persists-cli-mutation-to-manager-store` |
 | persona-daemon serves owner version-handover authority on a separate owner socket | `nix build .#checks.x86_64-linux.persona-daemon-serves-owner-version-handover-socket` |
 | persona-daemon owner socket accepts `AttemptHandover`, drives the private upgrade socket, and persists the active selector | `nix build .#checks.x86_64-linux.persona-daemon-owner-attempt-drives-version-handover` |
+| persona-daemon owner socket drives a real `persona-spirit` private upgrade socket instead of only a fake handover fixture | `nix build .#checks.x86_64-linux.persona-daemon-owner-attempt-drives-real-spirit-upgrade-socket` |
 | persona test docs name live Nix witnesses rather than bare cargo review commands | `nix build .#checks.x86_64-linux.persona-engine-meta-testing-docs-are-nix-backed` |
 | sandbox runner is a Nix-owned app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-script-builds` |
 | sandbox runner supports each first harness name | `nix build .#checks.x86_64-linux.persona-engine-sandbox-supports-all-harnesses` |
