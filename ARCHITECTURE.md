@@ -502,6 +502,17 @@ upgrade-related Kameo messages:
 | `DriveVersionHandover { target }` | Quarantine-gates; opens the `HandoverDriver`; verifies next marker parity, walks readiness/completion against the main upgrade socket, attempts `RecoverFromFailure` if completion fails after readiness, and appends `ActiveVersionChanged` only after finalization. |
 | `HandleOwnerVersionHandover { operation }` | Owner-socket entry point. Dispatches `AttemptHandover` -> `DriveVersionHandover`, `ForceFlip` -> direct `ActiveVersionChanged` append (source `ForceFlip { reason }`), `Rollback` -> direct `ActiveVersionChanged` append (source `Rollback { reason }`), `Quarantine` -> `VersionQuarantined` event-log append. |
 
+**Component unit control.** `src/unit.rs` owns the process-manager boundary
+for component daemons that are not direct children of the sandbox
+`EngineSupervisor`. A `ComponentUnit` is named by `(EngineId, ComponentName,
+Version)` and projects to a systemd-style unit name
+`persona-component@<engine>-<component>-<version>.service`. `EngineManager`
+holds a `UnitController`: production deployments can inject a systemd-backed
+controller, while tests inject a recording controller. `DriveVersionHandover`
+starts the next component unit before it opens either private upgrade socket,
+so missing next-daemon state is caught before Persona asks the main daemon to
+enter handover readiness.
+
 **Active-version snapshot.** `manager.active-version-snapshot` (per
 §1.7 manager-state discussion) is per-`(EngineId, ComponentName)`
 materialised projection of the event log. The reducer is
@@ -575,12 +586,15 @@ host-level service installation is settled.
 
 Host deployment is systemd-shaped. The production `persona` daemon is the
 host-level manager and should be started by a NixOS module as a systemd
-service. Component daemons may become systemd units or manager-spawned child
-processes, but the manager is still the component that allocates per-engine
-state directories and pushes peer sockets to children. Daemons may use
-systemd readiness/watchdog notification once they run under systemd; direct
-systemd D-Bus control from Rust is only needed if the `persona` daemon later
-creates or manipulates transient units itself.
+service. Component daemons are represented to the manager as `ComponentUnit`
+values, so versioned side-by-side daemons can be started as systemd units
+before a handover. The sandbox `EngineSupervisor` still starts direct child
+processes for integration tests; production component lifecycle goes through
+the unit-controller boundary. Daemons may use systemd readiness/watchdog
+notification once they run under systemd. The current Rust surface has a
+systemd command controller plus an injectable memory controller for tests; a
+direct D-Bus controller is an internal replacement behind the same trait if
+transient-unit manipulation becomes load-bearing.
 
 Component executables are supplied by the Nix-built stack. The default
 component command set comes from the `persona` flake closure or the
@@ -1151,8 +1165,9 @@ Migration rules:
   host viewing.
 - Development runners push socket paths to components through environment and
   argv, never by filesystem discovery.
-- Production startup is systemd/NixOS-shaped; Rust systemd control is an
-  implementation detail, not the first required integration boundary.
+- Production startup is systemd/NixOS-shaped. Persona has a unit-controller
+  boundary for starting versioned component units, and tests use an injectable
+  memory controller instead of invoking the host system manager.
 - Component executables are Nix-built stack dependencies. Default resolution
   comes from the flake closure or NixOS module, not the ambient host
   installation.
@@ -1438,6 +1453,7 @@ The apex repo owns tests that prove cross-component shape:
 | engine manager prepares a component upgrade by emitting the first version-handover marker request | `nix build .#checks.x86_64-linux.persona-engine-manager-prepares-upgrade-with-version-handover-request` |
 | engine manager records the active component version only after handover completion | `nix build .#checks.x86_64-linux.persona-engine-manager-records-active-version-after-handover-completion` |
 | persona engine drives version handover through a component's private upgrade socket | `nix build .#checks.x86_64-linux.persona-engine-drives-version-handover-over-component-upgrade-socket` |
+| persona engine starts the next component unit before probing handover sockets | `nix build .#checks.x86_64-linux.persona-engine-starts-next-component-unit-before-handover-socket-probe` |
 | persona engine refuses handover when the next daemon's private upgrade marker is stale | `nix build .#checks.x86_64-linux.persona-engine-refuses-stale-next-handover-marker` |
 | persona engine asks the current daemon to recover if completion fails after readiness | `nix build .#checks.x86_64-linux.persona-engine-recovers-current-handover-after-completion-failure` |
 | owner `AttemptHandover` authority drives the same private-socket handover path as the internal manager driver | `nix build .#checks.x86_64-linux.persona-engine-owner-attempt-drives-version-handover` |
@@ -1638,6 +1654,7 @@ src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
 src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records
 src/engine_event.rs  typed engine-management event records
+src/unit.rs      component unit identity and injectable manual/systemd unit controllers
 src/direct_process.rs  direct child-process launcher actor
 src/launch/      launch configuration, resolved commands, command resolver actor
 src/supervisor.rs  Kameo EngineSupervisor actor that starts/stops prototype-supervised processes

@@ -12,6 +12,7 @@ use persona::manager::{
 use persona::manager_store::{
     ManagerStore, ManagerStoreLocation, ReadActiveVersion, ReadEngineEvents,
 };
+use persona::unit::{ComponentUnit, UnitController, UnitReceipt, UnitStartFuture};
 use persona::upgrade::{
     ActiveVersionChangeSource, HandoverFrameCodec, Target, TargetInput, Version,
 };
@@ -26,6 +27,7 @@ use signal_version_handover::{
     HandoverRejectionReason, Operation as HandoverOperation, RecoveryResult,
     Reply as HandoverReply, Time,
 };
+use std::sync::Arc;
 use version_projection::{ComponentName as HandoverComponentName, ContractVersion};
 
 struct StoreFixture {
@@ -56,6 +58,32 @@ impl StoreFixture {
 impl Drop for StoreFixture {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct RecordingUnitController {
+    started: Arc<std::sync::Mutex<Vec<ComponentUnit>>>,
+}
+
+impl RecordingUnitController {
+    fn started_units(&self) -> Vec<ComponentUnit> {
+        self.started
+            .lock()
+            .expect("recording unit controller lock")
+            .clone()
+    }
+}
+
+impl UnitController for RecordingUnitController {
+    fn start_unit<'a>(&'a self, unit: ComponentUnit) -> UnitStartFuture<'a> {
+        Box::pin(async move {
+            self.started
+                .lock()
+                .expect("recording unit controller lock")
+                .push(unit.clone());
+            Ok(UnitReceipt::started(unit))
+        })
     }
 }
 
@@ -515,6 +543,85 @@ async fn constraint_persona_engine_drives_version_handover_over_component_upgrad
     assert!(trace.contains(&ManagerEvent::UpgradePrepared));
     assert!(trace.contains(&ManagerEvent::ActiveVersionChanged));
     assert!(trace.contains(&ManagerEvent::VersionHandoverDriven));
+
+    EngineManager::stop(manager)
+        .await
+        .expect("manager stops cleanly");
+    ManagerStore::close_and_stop(store)
+        .await
+        .expect("manager store closes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_engine_manager_starts_next_component_unit_before_handover_socket_probe() {
+    let fixture = StoreFixture::new("persona-manager-start-next-unit-before-handover");
+    let engine = EngineId::new("engine-start-next-unit-before-handover");
+    let store = ManagerStore::start(fixture.location()).expect("manager store starts");
+    let unit_controller = RecordingUnitController::default();
+    let manager = EngineManager::start_with_store_and_unit_controller(
+        engine.clone(),
+        store.clone(),
+        Arc::new(unit_controller.clone()),
+    )
+    .await
+    .expect("manager starts with store");
+    let current_socket = fixture.root.join("missing-current-upgrade.sock");
+    let next_socket = fixture.root.join("missing-next-upgrade.sock");
+    let target = spirit_upgrade_target_with_upgrade_sockets(&current_socket, &next_socket);
+
+    let error = manager
+        .ask(DriveVersionHandover::new(target))
+        .await
+        .expect_err("missing handover socket fails after unit start");
+
+    assert!(matches!(
+        error,
+        kameo::error::SendError::HandlerError(Error::Io(_))
+    ));
+
+    let started_units = unit_controller.started_units();
+    assert_eq!(started_units.len(), 1);
+    let unit = &started_units[0];
+    assert_eq!(
+        unit.engine().as_str(),
+        "engine-start-next-unit-before-handover"
+    );
+    assert_eq!(unit.component().as_str(), "persona-spirit");
+    assert_eq!(unit.version().as_str(), "v0.1.1");
+    assert_eq!(
+        unit.name().as_str(),
+        "persona-component@engine-start-next-unit-before-handover-persona-spirit-v0.1.1.service"
+    );
+
+    let trace = manager
+        .ask(ReadTrace::expecting_at_least(3))
+        .await
+        .expect("trace read through actor");
+    assert!(trace.contains(&ManagerEvent::UpgradePrepared));
+    assert!(trace.contains(&ManagerEvent::ComponentUnitStarted));
+    assert!(!trace.contains(&ManagerEvent::ActiveVersionChanged));
+
+    let active = store
+        .ask(ReadActiveVersion::new(
+            engine.clone(),
+            ComponentName::new("persona-spirit"),
+        ))
+        .await
+        .expect("active version snapshot read");
+    assert!(active.is_none());
+
+    let events = store
+        .ask(ReadEngineEvents::new(engine))
+        .await
+        .expect("engine events read");
+    assert!(matches!(
+        events.as_slice(),
+        [event] if matches!(
+            event.body(),
+            EngineEventBody::UpgradePrepared(prepared)
+                if prepared.component().as_str() == "persona-spirit"
+        )
+    ));
 
     EngineManager::stop(manager)
         .await

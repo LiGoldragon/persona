@@ -63,6 +63,9 @@ pub enum Error {
     #[error("component command resolution: {0}")]
     CommandResolution(#[from] crate::launch::CommandResolutionFailure),
 
+    #[error("component unit control: {0}")]
+    ComponentUnit(#[from] crate::unit::UnitFailure),
+
     #[error("component upgrade orchestration requires a manager store")]
     UpgradeRequiresManagerStore,
 

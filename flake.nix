@@ -1591,6 +1591,15 @@
                   cargoTestExtraArgs = "--test manager constraint_persona_engine_drives_version_handover_over_component_upgrade_socket -- --exact";
                 }
               );
+          persona-engine-starts-next-component-unit-before-handover-socket-probe =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test manager constraint_engine_manager_starts_next_component_unit_before_handover_socket_probe -- --exact";
+                }
+              );
           persona-engine-refuses-stale-next-handover-marker =
             context.craneLib.cargoTest
               (

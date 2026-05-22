@@ -14,6 +14,7 @@ use signal_persona::{
 };
 use signal_persona_auth::EngineId;
 use signal_version_handover::HandoverMarker;
+use std::sync::Arc;
 
 use crate::engine_event::{
     EngineEventBody, EngineEventDraft, EngineEventDraftInput, EngineEventSource,
@@ -24,6 +25,7 @@ use crate::manager_store::{
     PersistEngineRecord, ReadEngineEvents, ReadEngineRecord, ReadEngineStatusSnapshot,
 };
 use crate::state::EngineState;
+use crate::unit::{ComponentUnit, ManualUnitController, UnitController, UnitReceipt};
 use crate::upgrade::{
     ActiveVersionChanged, DrivenHandover, HandoverDriver, Prepared, PreparedEvent, Target,
     VersionQuarantined,
@@ -40,6 +42,7 @@ pub enum ManagerEvent {
     VersionHandoverDriven,
     VersionAuthorityApplied,
     VersionQuarantined,
+    ComponentUnitStarted,
     Stopping,
 }
 
@@ -48,6 +51,7 @@ pub struct EngineManager {
     engine: EngineId,
     state: EngineState,
     store: Option<ActorRef<ManagerStore>>,
+    unit_controller: Arc<dyn UnitController>,
     events: Vec<ManagerEvent>,
 }
 
@@ -57,6 +61,7 @@ impl EngineManager {
             engine: EngineId::new("default"),
             state,
             store: None,
+            unit_controller: Arc::new(ManualUnitController),
             events: vec![ManagerEvent::Started],
         }
     }
@@ -66,6 +71,22 @@ impl EngineManager {
             engine,
             state,
             store: Some(store),
+            unit_controller: Arc::new(ManualUnitController),
+            events: vec![ManagerEvent::Started],
+        }
+    }
+
+    pub fn with_store_and_unit_controller(
+        engine: EngineId,
+        state: EngineState,
+        store: ActorRef<ManagerStore>,
+        unit_controller: Arc<dyn UnitController>,
+    ) -> Self {
+        Self {
+            engine,
+            state,
+            store: Some(store),
+            unit_controller,
             events: vec![ManagerEvent::Started],
         }
     }
@@ -80,8 +101,22 @@ impl EngineManager {
         engine: EngineId,
         store: ActorRef<ManagerStore>,
     ) -> Result<ActorRef<Self>> {
+        Self::start_with_store_and_unit_controller(engine, store, Arc::new(ManualUnitController))
+            .await
+    }
+
+    pub async fn start_with_store_and_unit_controller(
+        engine: EngineId,
+        store: ActorRef<ManagerStore>,
+        unit_controller: Arc<dyn UnitController>,
+    ) -> Result<ActorRef<Self>> {
         let state = Self::initial_state_from_store(&engine, &store).await?;
-        let reference = Self::spawn(Self::with_store(engine, state, store));
+        let reference = Self::spawn(Self::with_store_and_unit_controller(
+            engine,
+            state,
+            store,
+            unit_controller,
+        ));
         reference.wait_for_startup().await;
         reference
             .ask(SynchronizeManagerState)
@@ -243,6 +278,7 @@ impl EngineManager {
 
     async fn drive_version_handover(&mut self, target: Target) -> Result<DrivenHandover> {
         self.prepare_upgrade(target.clone()).await?;
+        self.start_next_component_unit(&target).await?;
         let driven = HandoverDriver::from_target(target.clone())
             .drive_current_side()
             .await?;
@@ -250,6 +286,17 @@ impl EngineManager {
             .await?;
         self.events.push(ManagerEvent::VersionHandoverDriven);
         Ok(driven)
+    }
+
+    async fn start_next_component_unit(&mut self, target: &Target) -> Result<UnitReceipt> {
+        let unit = ComponentUnit::new(
+            self.engine.clone(),
+            target.component().clone(),
+            target.next_version().clone(),
+        );
+        let receipt = self.unit_controller.start_unit(unit).await?;
+        self.events.push(ManagerEvent::ComponentUnitStarted);
+        Ok(receipt)
     }
 
     async fn ensure_target_not_quarantined(&self, target: &Target) -> Result<()> {
