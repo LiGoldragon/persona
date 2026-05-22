@@ -375,7 +375,7 @@ dependencies = [
 [[package]]
 name = "persona-spirit"
 version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/persona-spirit.git?branch=main#f1e2223b9bb0a72a24ae468f56f1a650c1575b13"
+source = "git+https://github.com/LiGoldragon/persona-spirit.git?branch=main#46e3798251d9f34f68ead5ca8c4d29c71e91c535"
 dependencies = [
  "kameo 0.20.0 (git+https://github.com/LiGoldragon/kameo?branch=persona-lifecycle-terminal-outcome)",
  "nota-codec",
@@ -503,7 +503,7 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 [[package]]
 name = "sema"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/sema.git#eba7122b2a7b70894b24cd18d5acdcd0dbd455f4"
+source = "git+https://github.com/LiGoldragon/sema.git#4ea561bc53f6aa38fb71a7570665d57191fce0ea"
 dependencies = [
  "redb",
  "rkyv",
@@ -769,7 +769,7 @@ dependencies = [
 [[package]]
 name = "signal-sema"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-sema.git?branch=main#22b036a095857b42a81556666e093f03bf4533a1"
+source = "git+https://github.com/LiGoldragon/signal-sema.git?branch=main#e83fd008d2128bd15f1a7d2c7bd41f10da2de500"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -779,7 +779,7 @@ dependencies = [
 [[package]]
 name = "signal-version-handover"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-version-handover.git?branch=main#f2dfe3b48261bdf933dc24a8980dac2b39f3e319"
+source = "git+https://github.com/LiGoldragon/signal-version-handover.git?branch=main#eb80f58849a04c3ffc63d3dba9ef5b5443e2f519"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -955,7 +955,7 @@ dependencies = [
 [[package]]
 name = "version-projection"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/version-projection.git?branch=main#69bd2dd01e457f86ce48f7e9347b2ea6fb6d3620"
+source = "git+https://github.com/LiGoldragon/version-projection.git?branch=main#b5adda0c716b10296edfb94424f0853aa16e84fb"
 dependencies = [
  "nota-codec",
  "rkyv",
