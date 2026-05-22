@@ -515,6 +515,12 @@ systemd-D-Bus controller; integration tests inject a recording controller.
 it opens either private upgrade socket, so missing next-daemon state is caught
 before Persona asks the main daemon to enter handover readiness.
 
+`PersonaDaemon` carries the same `UnitController` injection into the
+daemon/owner-socket path. The daemon does not bypass the manager-level unit
+boundary: an owner `AttemptHandover` received over the owner socket reaches
+`EngineManager`, starts the next component unit through the injected
+controller, then drives the component handover sockets.
+
 For real transient units, `ComponentUnitDefinition` pairs a `ComponentUnit`
 with the resolved `ComponentCommand` and restart policy. This is the bridge
 from the Nix-owned component command catalog to systemd's `StartTransientUnit`
@@ -1484,6 +1490,7 @@ The apex repo owns tests that prove cross-component shape:
 | persona CLI mutation reaches manager.redb via daemon path | `nix build .#checks.x86_64-linux.persona-daemon-persists-cli-mutation-to-manager-store` |
 | persona-daemon serves owner version-handover authority on a separate owner socket | `nix build .#checks.x86_64-linux.persona-daemon-serves-owner-version-handover-socket` |
 | persona-daemon owner socket accepts `AttemptHandover`, drives the private upgrade socket, and persists the active selector | `nix build .#checks.x86_64-linux.persona-daemon-owner-attempt-drives-version-handover` |
+| persona-daemon owner handover uses the injected component unit controller before socket handover | `nix build .#checks.x86_64-linux.persona-daemon-owner-handover-uses-injected-unit-controller` |
 | persona-daemon owner socket drives a real `persona-spirit` private upgrade socket instead of only a fake handover fixture | `nix build .#checks.x86_64-linux.persona-daemon-owner-attempt-drives-real-spirit-upgrade-socket` |
 | persona-daemon can hand over from a current Spirit database copy to a next Spirit daemon and leave the copied state readable on the next ordinary socket | `nix build .#checks.x86_64-linux.persona-daemon-hands-over-between-copied-spirit-databases` |
 | persona test docs name live Nix witnesses rather than bare cargo review commands | `nix build .#checks.x86_64-linux.persona-engine-meta-testing-docs-are-nix-backed` |

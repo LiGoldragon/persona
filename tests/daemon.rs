@@ -1,6 +1,7 @@
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
 
 use owner_signal_version_handover::{
     AttemptHandover, Operation as OwnerOperation, Quarantine, QuarantineReason,
@@ -8,7 +9,8 @@ use owner_signal_version_handover::{
 };
 use persona::engine::{EngineComponent, EngineTopology};
 use persona::engine_event::EngineEventBody;
-use persona::transport::{OwnerClient, OwnerEndpoint};
+use persona::transport::{OwnerClient, OwnerEndpoint, PersonaDaemon, PersonaEndpoint};
+use persona::unit::{ComponentUnit, UnitAction, UnitController, UnitFuture, UnitReceipt};
 use persona::upgrade::HandoverFrameCodec;
 use persona_spirit::{
     DaemonConfiguration as SpiritDaemonConfiguration, DaemonRuntime as SpiritDaemonRuntime,
@@ -42,6 +44,60 @@ struct SpiritUpgradeSocketFixture {
     owner_socket: SpiritSocketPath,
     upgrade_socket: SpiritSocketPath,
     store: SpiritStorePath,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RecordedUnitAction {
+    action: UnitAction,
+    unit: ComponentUnit,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RecordingUnitController {
+    actions: Arc<Mutex<Vec<RecordedUnitAction>>>,
+}
+
+impl RecordingUnitController {
+    fn record(&self, unit: ComponentUnit, action: UnitAction) -> UnitReceipt {
+        self.actions
+            .lock()
+            .expect("unit action log lock")
+            .push(RecordedUnitAction {
+                action,
+                unit: unit.clone(),
+            });
+        UnitReceipt::from_action(unit, action)
+    }
+
+    fn actions(&self) -> Vec<RecordedUnitAction> {
+        self.actions.lock().expect("unit action log lock").clone()
+    }
+}
+
+impl UnitController for RecordingUnitController {
+    fn start<'a>(&'a self, unit: ComponentUnit) -> UnitFuture<'a, UnitReceipt> {
+        Box::pin(async move { Ok(self.record(unit, UnitAction::Start)) })
+    }
+
+    fn stop<'a>(&'a self, unit: ComponentUnit) -> UnitFuture<'a, UnitReceipt> {
+        Box::pin(async move { Ok(self.record(unit, UnitAction::Stop)) })
+    }
+
+    fn restart<'a>(&'a self, unit: ComponentUnit) -> UnitFuture<'a, UnitReceipt> {
+        Box::pin(async move { Ok(self.record(unit, UnitAction::Restart)) })
+    }
+
+    fn status<'a>(
+        &'a self,
+        unit: ComponentUnit,
+    ) -> UnitFuture<'a, persona::unit::UnitStatusReport> {
+        Box::pin(async move {
+            Ok(persona::unit::UnitStatusReport::new(
+                unit,
+                persona::unit::UnitStatus::Active,
+            ))
+        })
+    }
 }
 
 impl DaemonFixture {
@@ -595,6 +651,80 @@ async fn constraint_persona_daemon_owner_socket_drives_version_handover() {
 
     store.stop_gracefully().await.expect("manager store stops");
     let _shutdown_completion = store.wait_for_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_persona_daemon_owner_handover_uses_injected_unit_controller() {
+    let root = DaemonFixture::unique_root();
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("test root created");
+    let socket = root.join("persona.sock");
+    let owner_socket = root.join("persona-owner.sock");
+    let manager_store = root.join("manager.redb");
+    let controller = RecordingUnitController::default();
+    let daemon = PersonaDaemon::with_manager_store_and_owner_endpoint(
+        PersonaEndpoint::from_path(&socket),
+        OwnerEndpoint::from_path(&owner_socket),
+        persona::manager_store::ManagerStoreLocation::new(&manager_store),
+    )
+    .with_unit_controller(Arc::new(controller.clone()));
+    let daemon_task = tokio::spawn(async move { daemon.serve().await });
+    wait_for_socket(&socket).await;
+    wait_for_socket(&owner_socket).await;
+
+    let current_upgrade_socket = root.join("spirit-current-upgrade.sock");
+    let next_upgrade_socket = root.join("spirit-next-upgrade.sock");
+    let marker = handover_marker(377);
+    let current_server = tokio::spawn(serve_current_handover_socket(
+        current_upgrade_socket.clone(),
+        marker.clone(),
+    ));
+    let next_server = tokio::spawn(serve_marker_handover_socket(
+        next_upgrade_socket.clone(),
+        marker.clone(),
+    ));
+    wait_for_socket(&current_upgrade_socket).await;
+    wait_for_socket(&next_upgrade_socket).await;
+
+    let reply = OwnerClient::new(OwnerEndpoint::from_path(&owner_socket))
+        .submit(OwnerOperation::AttemptHandover(
+            owner_attempt_handover_order_with_upgrade_sockets(
+                &current_upgrade_socket,
+                &next_upgrade_socket,
+            ),
+        ))
+        .await
+        .expect("owner handover reaches in-process daemon");
+    match reply {
+        OwnerReply::HandoverSucceeded(success) => {
+            assert_eq!(success.active_version.label.as_str(), "v0.1.1");
+            assert_eq!(success.commit_sequence, 377);
+        }
+        other => panic!("expected handover success reply, got {other:?}"),
+    }
+
+    let current_operations = current_server
+        .await
+        .expect("current handover server joins")
+        .expect("current handover server succeeds");
+    assert_eq!(current_operations.len(), 3);
+    let next_operations = next_server
+        .await
+        .expect("next handover server joins")
+        .expect("next handover server succeeds");
+    assert_eq!(next_operations.len(), 1);
+
+    let actions = controller.actions();
+    assert_eq!(actions.len(), 1);
+    assert_eq!(actions[0].action, UnitAction::Start);
+    assert_eq!(
+        actions[0].unit.name().as_str(),
+        "persona-component@persona-spirit:v0.1.1.service"
+    );
+
+    daemon_task.abort();
+    let _ = daemon_task.await;
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

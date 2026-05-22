@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use std::os::unix::fs::FileTypeExt;
 
@@ -22,6 +23,7 @@ use crate::launch::{ComponentCommandCatalog, EngineLaunchConfiguration};
 use crate::manager::{EngineManager, HandleEngineRequest, HandleOwnerVersionHandover};
 use crate::manager_store::{ManagerStore, ManagerStoreLocation};
 use crate::supervisor::{EngineSupervisor, EngineSupervisorInput, StartPrototypeSupervision};
+use crate::unit::{ManualUnitController, UnitController};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaEndpoint {
@@ -438,6 +440,7 @@ pub struct PersonaDaemon {
     owner_endpoint: OwnerEndpoint,
     manager_store: ManagerStoreLocation,
     launch_plan: Option<PersonaLaunchPlan>,
+    unit_controller: Arc<dyn UnitController>,
     codec: PersonaFrameCodec,
     owner_codec: OwnerFrameCodec,
 }
@@ -467,6 +470,7 @@ impl PersonaDaemon {
             owner_endpoint,
             manager_store,
             launch_plan: None,
+            unit_controller: Arc::new(ManualUnitController),
             codec: PersonaFrameCodec::default(),
             owner_codec: OwnerFrameCodec::default(),
         }
@@ -477,14 +481,23 @@ impl PersonaDaemon {
         self
     }
 
+    pub fn with_unit_controller(mut self, unit_controller: Arc<dyn UnitController>) -> Self {
+        self.unit_controller = unit_controller;
+        self
+    }
+
     pub async fn serve(self) -> Result<()> {
         self.endpoint.unlink_existing_socket()?;
         self.owner_endpoint.unlink_existing_socket()?;
         let listener = UnixListener::bind(self.endpoint.as_path())?;
         let owner_listener = UnixListener::bind(self.owner_endpoint.as_path())?;
         let store = ManagerStore::start(self.manager_store.clone())?;
-        let manager =
-            EngineManager::start_with_store(EngineId::new("default"), store.clone()).await?;
+        let manager = EngineManager::start_with_store_and_unit_controller(
+            EngineId::new("default"),
+            store.clone(),
+            self.unit_controller.clone(),
+        )
+        .await?;
         let supervisor = self.start_supervisor(store).await?;
         let owner_task =
             Self::spawn_owner_server(owner_listener, manager.clone(), self.owner_codec);

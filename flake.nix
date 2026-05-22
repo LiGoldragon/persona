@@ -1810,6 +1810,13 @@
               cargoTestExtraArgs = "--test daemon constraint_persona_daemon_owner_socket_drives_version_handover -- --exact";
             }
           );
+          persona-daemon-owner-handover-uses-injected-unit-controller = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test daemon constraint_persona_daemon_owner_handover_uses_injected_unit_controller -- --exact";
+            }
+          );
           persona-daemon-owner-attempt-drives-real-spirit-upgrade-socket = context.craneLib.cargoTest (
             context.commonArgs
             // {
