@@ -1576,6 +1576,7 @@ The apex repo owns tests that prove cross-component shape:
 | persona-daemon owner handover uses the injected component unit controller before socket handover | `nix build .#checks.x86_64-linux.persona-daemon-owner-handover-uses-injected-unit-controller` |
 | persona-daemon owner socket drives a real `persona-spirit` private upgrade socket instead of only a fake handover fixture | `nix build .#checks.x86_64-linux.persona-daemon-owner-attempt-drives-real-spirit-upgrade-socket` |
 | persona-daemon owner socket drives two real `persona-spirit-daemon` binaries through a copied-database handover and persists the selector flip | `nix build .#checks.x86_64-linux.persona-daemon-handover-uses-real-spirit-daemon-binaries` |
+| persona-daemon asks a real current `persona-spirit-daemon` to recover after completion failure and keeps `v0.1.0` active | `nix build .#checks.x86_64-linux.persona-daemon-recovers-real-spirit-after-completion-failure` |
 | persona-daemon can hand over from a current Spirit database copy to a next Spirit daemon and leave the copied state readable on the next ordinary socket | `nix build .#checks.x86_64-linux.persona-daemon-hands-over-between-copied-spirit-databases` |
 | persona test docs name live Nix witnesses rather than bare cargo review commands | `nix build .#checks.x86_64-linux.persona-engine-meta-testing-docs-are-nix-backed` |
 | sandbox runner is a Nix-owned app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-script-builds` |

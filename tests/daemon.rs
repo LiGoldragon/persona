@@ -6,14 +6,15 @@ use std::time::Duration;
 
 use nota_codec::{Encoder, NotaEncode};
 use owner_signal_version_handover::{
-    AttemptHandover, Operation as OwnerOperation, Quarantine, QuarantineReason,
-    Reply as OwnerReply, SocketPath, Version as OwnerVersion, VersionEndpoint, VersionLabel,
+    AttemptHandover, ForceFlip, ForceReason, Operation as OwnerOperation, Quarantine,
+    QuarantineReason, RejectionReason, Reply as OwnerReply, SocketPath, Version as OwnerVersion,
+    VersionEndpoint, VersionLabel,
 };
 use persona::engine::{EngineComponent, EngineTopology};
 use persona::engine_event::EngineEventBody;
 use persona::transport::{OwnerClient, OwnerEndpoint, PersonaDaemon, PersonaEndpoint};
 use persona::unit::{ComponentUnit, UnitAction, UnitController, UnitFuture, UnitReceipt};
-use persona::upgrade::HandoverFrameCodec;
+use persona::upgrade::{HandoverClient, HandoverEndpoint, HandoverFrameCodec};
 use persona_spirit::{
     DaemonConfiguration as SpiritDaemonConfiguration, DaemonRuntime as SpiritDaemonRuntime,
     SocketMode as SpiritSocketMode, SocketPath as SpiritSocketPath, StorePath as SpiritStorePath,
@@ -26,8 +27,8 @@ use signal_persona_spirit::{
 };
 use signal_sema::Magnitude;
 use signal_version_handover::{
-    Date, HandoverAcceptance, HandoverFinalization, HandoverMarker, Operation as HandoverOperation,
-    Reply as HandoverReply, Time,
+    Date, HandoverAcceptance, HandoverFinalization, HandoverMarker, HandoverRejectionReason,
+    Operation as HandoverOperation, RecoveryRequest, Reply as HandoverReply, Time,
 };
 use version_projection::{ComponentName as HandoverComponentName, ContractVersion};
 
@@ -478,6 +479,15 @@ fn owner_quarantine_order() -> Quarantine {
     }
 }
 
+fn owner_force_current_order() -> ForceFlip {
+    ForceFlip {
+        component: HandoverComponentName::new("persona-spirit"),
+        current_version: owner_version("v0.1.0", 1),
+        target_version: owner_version("v0.1.0", 1),
+        reason: ForceReason::OperatorOverride,
+    }
+}
+
 async fn serve_current_handover_socket(
     path: std::path::PathBuf,
     marker: HandoverMarker,
@@ -543,6 +553,64 @@ async fn serve_marker_handover_socket(
     let frame = codec.reply_frame(exchange, reply);
     codec.write_frame(&mut stream, &frame).await?;
     Ok(vec![operation])
+}
+
+async fn serve_recovering_current_proxy(
+    proxy_path: std::path::PathBuf,
+    real_path: std::path::PathBuf,
+) -> persona::Result<Vec<HandoverOperation>> {
+    let listener = tokio::net::UnixListener::bind(proxy_path)?;
+    let codec = HandoverFrameCodec::default();
+    let real = HandoverClient::new(HandoverEndpoint::from_path(real_path));
+    let mut operations = Vec::new();
+
+    for _ in 0..4 {
+        let (mut stream, _) = listener.accept().await?;
+        let frame = codec.read_frame(&mut stream).await?;
+        let received = codec.request_from_frame(frame)?;
+        let exchange = received.exchange();
+        let operation = received.into_operation();
+        let reply = real.submit(operation.clone()).await?;
+
+        match (&operation, &reply) {
+            (
+                HandoverOperation::ReadyToHandover(report),
+                HandoverReply::HandoverAccepted(acceptance),
+            ) => {
+                let recovery = real
+                    .submit(HandoverOperation::RecoverFromFailure(RecoveryRequest {
+                        component: report.component.clone(),
+                        failure_identifier: acceptance.accepted_marker.commit_sequence,
+                    }))
+                    .await?;
+                match recovery {
+                    HandoverReply::RecoveryCompleted(result) => {
+                        assert!(result.recovered);
+                    }
+                    other => panic!("expected proxy recovery completion, got {other:?}"),
+                }
+            }
+            (
+                HandoverOperation::HandoverCompleted(_),
+                HandoverReply::HandoverRejected(rejection),
+            ) => {
+                assert_eq!(rejection.reason, HandoverRejectionReason::NotReady);
+            }
+            (
+                HandoverOperation::RecoverFromFailure(_),
+                HandoverReply::RecoveryCompleted(result),
+            ) => {
+                assert!(result.recovered);
+            }
+            _ => {}
+        }
+
+        let frame = codec.reply_frame(exchange, reply);
+        codec.write_frame(&mut stream, &frame).await?;
+        operations.push(operation);
+    }
+
+    Ok(operations)
 }
 
 async fn wait_for_socket(path: &std::path::Path) {
@@ -1085,6 +1153,169 @@ async fn constraint_persona_daemon_handover_uses_real_spirit_daemon_binaries() {
             )
         }),
         "ActiveVersionChanged event not recorded in manager store"
+    );
+
+    store.stop_gracefully().await.expect("manager store stops");
+    let _shutdown_completion = store.wait_for_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_persona_daemon_recovers_real_spirit_after_completion_failure() {
+    let Some(spirit_daemon_binary) = external_spirit_daemon_binary() else {
+        eprintln!(
+            "skipping real Spirit daemon recovery witness; PERSONA_SPIRIT_DAEMON_BIN is not set"
+        );
+        return;
+    };
+
+    let current_spirit = SpiritUpgradeSocketFixture::new("external-current-recovery");
+    let next_spirit = SpiritUpgradeSocketFixture::new("external-next-recovery");
+    let current_configuration = current_spirit.configuration();
+    let mut current_daemon =
+        ExternalSpiritDaemon::spawn(&spirit_daemon_binary, &current_configuration);
+    wait_for_external_spirit_socket(&mut current_daemon, current_spirit.ordinary_socket_path())
+        .await;
+    wait_for_external_spirit_socket(&mut current_daemon, current_spirit.upgrade_socket_path())
+        .await;
+
+    let record_reply = current_spirit
+        .client()
+        .submit(SpiritOperation::Record(spirit_entry(
+            "real binary before failed persona handover",
+        )))
+        .expect("current external spirit daemon accepts pre-handover record");
+    assert_eq!(
+        record_reply,
+        SpiritReply::RecordAccepted(RecordAccepted::new(RecordIdentifier::new(1)))
+    );
+
+    next_spirit.copy_store_from(&current_spirit);
+    let next_configuration = next_spirit.configuration();
+    let mut next_daemon = ExternalSpiritDaemon::spawn(&spirit_daemon_binary, &next_configuration);
+    wait_for_external_spirit_socket(&mut next_daemon, next_spirit.ordinary_socket_path()).await;
+    wait_for_external_spirit_socket(&mut next_daemon, next_spirit.upgrade_socket_path()).await;
+
+    let mut persona = DaemonFixture::start();
+    let forced = persona
+        .owner_client()
+        .submit(OwnerOperation::ForceFlip(owner_force_current_order()))
+        .await
+        .expect("owner force flip pins the current active version before failed handover");
+    match forced {
+        OwnerReply::FlipForced(reply) => {
+            assert_eq!(reply.component.as_str(), "persona-spirit");
+            assert_eq!(reply.active_version.label.as_str(), "v0.1.0");
+        }
+        other => panic!("expected force flip reply, got {other:?}"),
+    }
+
+    let current_proxy_socket = persona.root.join("spirit-current-recovery-proxy.sock");
+    let current_proxy = tokio::spawn(serve_recovering_current_proxy(
+        current_proxy_socket.clone(),
+        current_spirit.upgrade_socket_path().to_path_buf(),
+    ));
+    wait_for_socket(&current_proxy_socket).await;
+
+    let reply = persona
+        .owner_client()
+        .submit(OwnerOperation::AttemptHandover(
+            owner_attempt_handover_order_with_upgrade_sockets(
+                &current_proxy_socket,
+                next_spirit.upgrade_socket_path(),
+            ),
+        ))
+        .await
+        .expect("persona owner handover returns typed failure after real Spirit recovery");
+    match reply {
+        OwnerReply::Rejected(rejected) => {
+            assert_eq!(rejected.component.as_str(), "persona-spirit");
+            assert_eq!(rejected.reason, RejectionReason::HandoverRejected);
+        }
+        other => panic!("expected handover rejection reply, got {other:?}"),
+    }
+
+    let operations = current_proxy
+        .await
+        .expect("current Spirit recovery proxy joins")
+        .expect("current Spirit recovery proxy succeeds");
+    assert!(matches!(
+        operations.as_slice(),
+        [
+            HandoverOperation::AskHandoverMarker(_),
+            HandoverOperation::ReadyToHandover(_),
+            HandoverOperation::HandoverCompleted(_),
+            HandoverOperation::RecoverFromFailure(_),
+        ]
+    ));
+
+    let recovered_record = current_spirit
+        .client()
+        .submit(SpiritOperation::Record(spirit_entry(
+            "write after failed persona handover recovery",
+        )))
+        .expect("current external spirit daemon resumes ordinary writes after recovery");
+    assert_eq!(
+        recovered_record,
+        SpiritReply::RecordAccepted(RecordAccepted::new(RecordIdentifier::new(2)))
+    );
+
+    let observed = current_spirit
+        .client()
+        .submit(observe_spirit_summaries())
+        .expect("current external spirit daemon serves recovered copied state");
+    assert_eq!(
+        observed,
+        SpiritReply::RecordsObserved(RecordsObserved {
+            records: vec![
+                RecordSummary {
+                    identifier: RecordIdentifier::new(1),
+                    topic: Topic::new("workspace"),
+                    kind: Kind::Decision,
+                    summary: Summary::new("real binary before failed persona handover"),
+                    certainty: Magnitude::Maximum,
+                },
+                RecordSummary {
+                    identifier: RecordIdentifier::new(2),
+                    topic: Topic::new("workspace"),
+                    kind: Kind::Decision,
+                    summary: Summary::new("write after failed persona handover recovery"),
+                    certainty: Magnitude::Maximum,
+                },
+            ],
+        })
+    );
+
+    persona.stop_daemon();
+    let store = persona::manager_store::ManagerStore::start(
+        persona::manager_store::ManagerStoreLocation::new(&persona.manager_store),
+    )
+    .expect("manager store starts for inspection");
+    let active = store
+        .ask(persona::manager_store::ReadActiveVersion::new(
+            signal_persona_auth::EngineId::new("default"),
+            signal_persona::ComponentName::new("persona-spirit"),
+        ))
+        .await
+        .expect("active version read")
+        .expect("force-flipped active version persisted");
+    assert_eq!(active.active_version().as_str(), "v0.1.0");
+    assert_eq!(active.commit_sequence(), None);
+
+    let events = store
+        .ask(persona::manager_store::ReadEngineEvents::new(
+            signal_persona_auth::EngineId::new("default"),
+        ))
+        .await
+        .expect("engine events read");
+    assert!(
+        !events.iter().any(|event| {
+            matches!(
+                event.body(),
+                EngineEventBody::ActiveVersionChanged(change)
+                    if change.active_version().as_str() == "v0.1.1"
+            )
+        }),
+        "failed handover must not persist an ActiveVersionChanged event for v0.1.1"
     );
 
     store.stop_gracefully().await.expect("manager store stops");

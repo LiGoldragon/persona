@@ -1844,6 +1844,16 @@
               cargoTestExtraArgs = "--test daemon constraint_persona_daemon_handover_uses_real_spirit_daemon_binaries -- --exact";
             }
           );
+          persona-daemon-recovers-real-spirit-after-completion-failure =
+            context.craneLib.cargoTest (
+              context.commonArgs
+              // {
+                inherit (context) cargoArtifacts;
+                PERSONA_REQUIRE_EXTERNAL_SPIRIT_DAEMON = "1";
+                PERSONA_SPIRIT_DAEMON_BIN = "${inputs.persona-spirit.packages.${system}.persona-spirit-daemon}/bin/persona-spirit-daemon";
+                cargoTestExtraArgs = "--test daemon constraint_persona_daemon_recovers_real_spirit_after_completion_failure -- --exact";
+              }
+            );
           persona-handoff-router-binds-socket-boundaries = context.craneLib.cargoTest (
             context.commonArgs
             // {
