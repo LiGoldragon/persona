@@ -87,6 +87,12 @@ pub enum Error {
         version: String,
         reason: owner_signal_version_handover::QuarantineReason,
     },
+
+    #[error("active version is missing: engine={engine}, component={component}")]
+    ActiveVersionMissing { engine: String, component: String },
+
+    #[error("component handoff receiver is unavailable: component={component}, version={version}")]
+    HandoffReceiverUnavailable { component: String, version: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

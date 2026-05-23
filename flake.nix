@@ -1831,6 +1831,22 @@
               cargoTestExtraArgs = "--test daemon constraint_persona_daemon_hands_over_between_copied_spirit_databases -- --exact";
             }
           );
+          persona-handoff-router-binds-socket-boundaries = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              cargoTestExtraArgs = "--test handoff constraint_persona_handoff_router_binds_public_and_control_sockets_with_boundary_modes -- --exact";
+            }
+          );
+          persona-handoff-router-selects-active-version-per-connection =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  cargoTestExtraArgs = "--test handoff constraint_persona_handoff_router_selects_active_version_per_public_connection -- --exact";
+                }
+              );
           persona-daemon-launches-prototype-supervised-components-through-engine-supervisor =
             context.craneLib.cargoTest
               (

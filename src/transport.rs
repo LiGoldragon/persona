@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use std::os::unix::fs::FileTypeExt;
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::net::UnixStream as StandardUnixStream;
 
 use kameo::actor::ActorRef;
 use owner_signal_version_handover::{
@@ -16,14 +18,37 @@ use signal_persona::engine::{Frame, FrameBody, Operation as EngineRequest, Reply
 use signal_persona_auth::EngineId;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
+use unix_ancillary::UnixStreamExt;
 
-use crate::engine::{EngineTopology, PersonaDaemonPaths};
+use crate::engine::{ComponentLayout, EngineComponent, EngineTopology, PersonaDaemonPaths};
 use crate::error::{Error, Result};
 use crate::launch::{ComponentCommandCatalog, EngineLaunchConfiguration};
 use crate::manager::{EngineManager, HandleEngineRequest, HandleOwnerVersionHandover};
-use crate::manager_store::{ManagerStore, ManagerStoreLocation};
+use crate::manager_store::{ManagerStore, ManagerStoreLocation, ReadActiveVersion};
 use crate::supervisor::{EngineSupervisor, EngineSupervisorInput, StartPrototypeSupervision};
 use crate::unit::{ManualUnitController, UnitController};
+use crate::upgrade::Version;
+
+fn unlink_existing_socket_path(path: &Path) -> Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_socket() => {
+            std::fs::remove_file(path)?;
+            Ok(())
+        }
+        Ok(_) => Err(Error::SocketPathOccupied {
+            path: path.to_path_buf(),
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn prepare_socket_parent(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaEndpoint {
@@ -112,6 +137,196 @@ impl OwnerEndpoint {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(error) => Err(error.into()),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComponentHandoffEndpoint {
+    component: EngineComponent,
+    public_socket_path: PathBuf,
+    control_socket_path: PathBuf,
+}
+
+impl ComponentHandoffEndpoint {
+    pub fn new(
+        component: EngineComponent,
+        public_socket_path: impl Into<PathBuf>,
+        control_socket_path: impl Into<PathBuf>,
+    ) -> Self {
+        Self {
+            component,
+            public_socket_path: public_socket_path.into(),
+            control_socket_path: control_socket_path.into(),
+        }
+    }
+
+    pub fn from_layout(layout: &ComponentLayout, control_root: impl AsRef<Path>) -> Self {
+        Self::new(
+            layout.component(),
+            layout.domain_socket().path().to_path_buf(),
+            control_root
+                .as_ref()
+                .join(format!("{}.sock", layout.instance_name().as_str())),
+        )
+    }
+
+    pub fn component(&self) -> EngineComponent {
+        self.component
+    }
+
+    pub fn public_socket_path(&self) -> &Path {
+        self.public_socket_path.as_path()
+    }
+
+    pub fn control_socket_path(&self) -> &Path {
+        self.control_socket_path.as_path()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ManagerStoreActiveVersionReader {
+    engine: EngineId,
+    component: EngineComponent,
+    store: ActorRef<ManagerStore>,
+}
+
+impl ManagerStoreActiveVersionReader {
+    pub fn new(
+        engine: EngineId,
+        component: EngineComponent,
+        store: ActorRef<ManagerStore>,
+    ) -> Self {
+        Self {
+            engine,
+            component,
+            store,
+        }
+    }
+
+    pub async fn read_active_version(&self) -> Result<Version> {
+        let active = self
+            .store
+            .ask(ReadActiveVersion::new(
+                self.engine.clone(),
+                self.component.component_name(),
+            ))
+            .await
+            .map_err(|error| Error::actor("read active component version", error))?;
+        active
+            .map(|version| version.active_version().clone())
+            .ok_or_else(|| Error::ActiveVersionMissing {
+                engine: self.engine.as_str().to_owned(),
+                component: self.component.as_component_name().to_owned(),
+            })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ComponentHandoffRouteKey {
+    component: EngineComponent,
+    version: Version,
+}
+
+impl ComponentHandoffRouteKey {
+    fn new(component: EngineComponent, version: Version) -> Self {
+        Self { component, version }
+    }
+}
+
+#[derive(Debug, Default)]
+struct ComponentHandoffRegistry {
+    receivers: HashMap<ComponentHandoffRouteKey, StandardUnixStream>,
+}
+
+impl ComponentHandoffRegistry {
+    fn register(
+        &mut self,
+        component: EngineComponent,
+        version: Version,
+        receiver: StandardUnixStream,
+    ) {
+        self.receivers
+            .insert(ComponentHandoffRouteKey::new(component, version), receiver);
+    }
+
+    fn receiver_for(
+        &self,
+        component: EngineComponent,
+        version: &Version,
+    ) -> Result<StandardUnixStream> {
+        self.receivers
+            .get(&ComponentHandoffRouteKey::new(component, version.clone()))
+            .ok_or_else(|| Error::HandoffReceiverUnavailable {
+                component: component.as_component_name().to_owned(),
+                version: version.as_str().to_owned(),
+            })?
+            .try_clone()
+            .map_err(Error::from)
+    }
+}
+
+#[derive(Debug)]
+pub struct ComponentHandoffRouter {
+    endpoint: ComponentHandoffEndpoint,
+    public_listener: UnixListener,
+    control_listener: UnixListener,
+    registry: ComponentHandoffRegistry,
+}
+
+impl ComponentHandoffRouter {
+    pub fn bind(endpoint: ComponentHandoffEndpoint) -> Result<Self> {
+        prepare_socket_parent(endpoint.public_socket_path())?;
+        prepare_socket_parent(endpoint.control_socket_path())?;
+        unlink_existing_socket_path(endpoint.public_socket_path())?;
+        unlink_existing_socket_path(endpoint.control_socket_path())?;
+        let public_listener = UnixListener::bind(endpoint.public_socket_path())?;
+        let control_listener = UnixListener::bind(endpoint.control_socket_path())?;
+        std::fs::set_permissions(
+            endpoint.public_socket_path(),
+            std::fs::Permissions::from_mode(endpoint.component().socket_mode().as_octal()),
+        )?;
+        std::fs::set_permissions(
+            endpoint.control_socket_path(),
+            std::fs::Permissions::from_mode(0o600),
+        )?;
+        Ok(Self {
+            endpoint,
+            public_listener,
+            control_listener,
+            registry: ComponentHandoffRegistry::default(),
+        })
+    }
+
+    pub fn endpoint(&self) -> &ComponentHandoffEndpoint {
+        &self.endpoint
+    }
+
+    pub async fn accept_receiver_for_version(&mut self, version: Version) -> Result<()> {
+        let (stream, _address) = self.control_listener.accept().await?;
+        let stream = stream.into_std()?;
+        stream.set_nonblocking(false)?;
+        self.registry
+            .register(self.endpoint.component(), version, stream);
+        Ok(())
+    }
+
+    pub async fn handoff_one(&mut self, active_version: &Version) -> Result<()> {
+        let (stream, _address) = self.public_listener.accept().await?;
+        let stream = stream.into_std()?;
+        stream.set_nonblocking(false)?;
+        let receiver = self
+            .registry
+            .receiver_for(self.endpoint.component(), active_version)?;
+        receiver.send_fds(b"persona-public-client", &[&stream])?;
+        Ok(())
+    }
+
+    pub async fn handoff_one_from_manager_store(
+        &mut self,
+        reader: &ManagerStoreActiveVersionReader,
+    ) -> Result<()> {
+        let active_version = reader.read_active_version().await?;
+        self.handoff_one(&active_version).await
     }
 }
 

@@ -560,6 +560,31 @@ authoritative for "which version of component X is live right now".
 A truncated or corrupted snapshot rebuilds from the event log on
 `ManagerStore::open`.
 
+**Design D public-socket handoff.** Persona owns the stable public
+socket for each routed component and a private control socket for the
+component's versioned daemon connections. The component daemon connects
+to Persona's control socket on startup and waits for public client
+descriptors. Persona accepts a client on the public socket, reads the
+current active-version snapshot for that component for that exact
+handoff, then sends the accepted client descriptor to the active
+version over the control connection with `SCM_RIGHTS`. Persona does not
+parse or proxy the component's domain frame bytes in this path; the
+public client speaks directly to the component after descriptor handoff.
+
+The first implementation surface lives in `src/transport.rs`:
+
+| Type | Role |
+|---|---|
+| `ComponentHandoffEndpoint` | Names one component's Persona-owned public socket and private control socket. |
+| `ComponentHandoffRouter` | Binds the two sockets, registers per-version receiver connections, and sends each accepted public client descriptor to the selected version. |
+| `ManagerStoreActiveVersionReader` | Reads `manager.active-version-snapshot` through `ManagerStore` so runtime handoff loops can select the active version per accepted client. |
+
+This is intentionally descriptor-level routing, not a Signal-frame
+router. Selector flips are just steady-state route changes: the next
+accepted client uses the active version read for that handoff. Older
+connections already handed to the previous daemon continue on their
+existing descriptors until they finish.
+
 **Quarantine gate.** Before every `prepare_upgrade` /
 `drive_version_handover`, the manager scans the event log for
 `VersionQuarantined` entries on the same component and refuses
