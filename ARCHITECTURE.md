@@ -1139,7 +1139,7 @@ Key pieces:
 
 - `PromptPattern` typed record registered by `persona-terminal` with
   `terminal-cell` at session-create time, identified by
-  `PromptPatternId`. Variants: `LiteralSuffix(bytes)`,
+  `PromptPatternIdentifier`. Variants: `LiteralSuffix(bytes)`,
   `RegexSuffix(pattern_bytes)`. `terminal-cell` runs literal/regex
   byte matches; it doesn't know what harness it's hosting.
 - `AcquireInputGate { reason, prompt_pattern_uid }` returns

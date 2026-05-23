@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use nota_codec::NotaEnum;
 use signal_persona_origin::{
-    ComponentName as SignalComponentName, EngineIdentifier, OwnerIdentity, UnixUserId,
+    ComponentName as SignalComponentName, EngineIdentifier, OwnerIdentity, UnixUserIdentifier,
 };
 
 use crate::Result;
@@ -120,7 +120,7 @@ impl PersonaDaemonPaths {
     }
 
     fn current_owner_identity() -> OwnerIdentity {
-        OwnerIdentity::UnixUser(UnixUserId::new(unsafe { libc::geteuid() }))
+        OwnerIdentity::UnixUser(UnixUserIdentifier::new(unsafe { libc::geteuid() }))
     }
 }
 

@@ -37,7 +37,7 @@ use nota_codec::{Encoder, NotaEncode};
 use signal_core::RequestPayload;
 use signal_persona_message::{Frame, FrameBody, MessageRequest};
 use signal_persona_origin::{
-    ComponentName, ConnectionClass, MessageOrigin, NetworkPeer, UnixUserId,
+    ComponentName, ConnectionClass, MessageOrigin, NetworkPeer, UnixUserIdentifier,
 };
 
 struct Expectations {
@@ -86,9 +86,9 @@ fn parse_origin(spec: &str) -> MessageOrigin {
             return MessageOrigin::External(ConnectionClass::Owner);
         }
         if let Some(uid) = rest.strip_prefix("non-owner-user:") {
-            return MessageOrigin::External(ConnectionClass::NonOwnerUser(UnixUserId::new(
-                uid.parse::<u32>().expect("uid u32"),
-            )));
+            return MessageOrigin::External(ConnectionClass::NonOwnerUser(
+                UnixUserIdentifier::new(uid.parse::<u32>().expect("uid u32")),
+            ));
         }
         if let Some(peer) = rest.strip_prefix("network:") {
             return MessageOrigin::External(ConnectionClass::Network(NetworkPeer::new(peer)));

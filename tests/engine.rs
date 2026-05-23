@@ -15,7 +15,7 @@ use persona::launch::{
     EnvironmentVariableName, EnvironmentVariableValue, ExecutablePath,
     ReadCommandResolutionAttemptCount, ResolveComponentCommands, ResolvedComponentCommands,
 };
-use signal_persona_origin::{EngineIdentifier, OwnerIdentity, UnixUserId};
+use signal_persona_origin::{EngineIdentifier, OwnerIdentity, UnixUserIdentifier};
 
 struct TemporaryEngineRoot {
     root: PathBuf,
@@ -385,7 +385,7 @@ fn constraint_orchestrate_component_uses_internal_socket_modes() {
 async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     let root = TemporaryEngineRoot::new("spawn-envelope");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
-    let owner_identity = OwnerIdentity::UnixUser(UnixUserId::new(4242));
+    let owner_identity = OwnerIdentity::UnixUser(UnixUserIdentifier::new(4242));
     let layout = paths.engine_layout_with_owner(
         EngineIdentifier::new("engine-gamma"),
         owner_identity.clone(),

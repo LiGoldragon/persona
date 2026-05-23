@@ -75,9 +75,9 @@ mod spirit_daemon_configuration {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ChildProcessId(u32);
+pub struct ChildProcessIdentifier(u32);
 
-impl ChildProcessId {
+impl ChildProcessIdentifier {
     pub const fn new(value: u32) -> Self {
         Self(value)
     }
@@ -91,14 +91,14 @@ impl ChildProcessId {
 pub struct LaunchedComponent {
     component_instance: ComponentInstanceName,
     component: EngineComponent,
-    process: ChildProcessId,
+    process: ChildProcessIdentifier,
 }
 
 impl LaunchedComponent {
     pub(crate) fn new_instance(
         component_instance: ComponentInstanceName,
         component: EngineComponent,
-        process: ChildProcessId,
+        process: ChildProcessIdentifier,
     ) -> Self {
         Self {
             component_instance,
@@ -115,7 +115,7 @@ impl LaunchedComponent {
         self.component
     }
 
-    pub fn process(&self) -> ChildProcessId {
+    pub fn process(&self) -> ChildProcessIdentifier {
         self.process
     }
 }
@@ -197,7 +197,7 @@ type StopHandoff = Arc<Mutex<Option<oneshot::Sender<StopComponentReceipt>>>>;
 struct RunningChild {
     component_instance: ComponentInstanceName,
     component: EngineComponent,
-    process: ChildProcessId,
+    process: ChildProcessIdentifier,
     /// Watcher task that owns the `tokio::process::Child` and awaits its
     /// exit. Aborted on launcher drop so an unsupervised teardown still
     /// reaps watchers.
@@ -268,7 +268,7 @@ impl DirectProcessLauncher {
             operation: "spawn component process",
             source,
         })?;
-        let Some(process) = child.id().map(ChildProcessId::new) else {
+        let Some(process) = child.id().map(ChildProcessIdentifier::new) else {
             let _ = child.start_kill();
             return Err(DirectProcessFailure::ChildPidMissing { component });
         };
@@ -410,7 +410,7 @@ impl DirectProcessLauncher {
     async fn await_stop_receipt(
         &self,
         component_instance: ComponentInstanceName,
-        process: ChildProcessId,
+        process: ChildProcessIdentifier,
         _handoff: StopHandoff,
         receiver: oneshot::Receiver<StopComponentReceipt>,
     ) -> Result<StopComponentReceipt, DirectProcessFailure> {
@@ -999,7 +999,7 @@ impl DirectProcessLauncher {
     }
 
     fn terminate_process_group(
-        process: ChildProcessId,
+        process: ChildProcessIdentifier,
         signal: i32,
     ) -> Result<(), DirectProcessFailure> {
         let process_group = process.into_u32() as i32;
@@ -1131,14 +1131,14 @@ impl ThreeHarnessRouterBootstrap {
 pub struct LaunchComponentReceipt {
     component_instance: ComponentInstanceName,
     component: EngineComponent,
-    process: ChildProcessId,
+    process: ChildProcessIdentifier,
 }
 
 impl LaunchComponentReceipt {
     fn new_instance(
         component_instance: ComponentInstanceName,
         component: EngineComponent,
-        process: ChildProcessId,
+        process: ChildProcessIdentifier,
     ) -> Self {
         Self {
             component_instance,
@@ -1155,7 +1155,7 @@ impl LaunchComponentReceipt {
         self.component
     }
 
-    pub fn process(&self) -> ChildProcessId {
+    pub fn process(&self) -> ChildProcessIdentifier {
         self.process
     }
 }
@@ -1192,14 +1192,14 @@ impl StopComponentProcess {
 pub struct StopComponentReceipt {
     component_instance: ComponentInstanceName,
     component: EngineComponent,
-    process: ChildProcessId,
+    process: ChildProcessIdentifier,
 }
 
 impl StopComponentReceipt {
     fn new_instance(
         component_instance: ComponentInstanceName,
         component: EngineComponent,
-        process: ChildProcessId,
+        process: ChildProcessIdentifier,
     ) -> Self {
         Self {
             component_instance,
@@ -1216,7 +1216,7 @@ impl StopComponentReceipt {
         self.component
     }
 
-    pub fn process(&self) -> ChildProcessId {
+    pub fn process(&self) -> ChildProcessIdentifier {
         self.process
     }
 }
@@ -1256,7 +1256,7 @@ impl Message<ReadLauncherSnapshot> for DirectProcessLauncher {
 pub struct ChildProcessExited {
     component_instance: ComponentInstanceName,
     component: EngineComponent,
-    process: ChildProcessId,
+    process: ChildProcessIdentifier,
     exit_code: Option<i32>,
 }
 
@@ -1269,7 +1269,7 @@ impl ChildProcessExited {
         self.component
     }
 
-    pub fn process(&self) -> ChildProcessId {
+    pub fn process(&self) -> ChildProcessIdentifier {
         self.process
     }
 
