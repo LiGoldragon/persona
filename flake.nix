@@ -24,6 +24,10 @@
     persona-orchestrate.inputs.fenix.follows = "fenix";
     persona-orchestrate.inputs.crane.follows = "crane";
     persona-router.url = "github:LiGoldragon/persona-router";
+    persona-spirit.url = "github:LiGoldragon/persona-spirit";
+    persona-spirit.inputs.nixpkgs.follows = "nixpkgs";
+    persona-spirit.inputs.fenix.follows = "fenix";
+    persona-spirit.inputs.crane.follows = "crane";
     signal-persona.url = "github:LiGoldragon/signal-persona";
     signal-persona-mind.url = "github:LiGoldragon/signal-persona-mind";
     signal-persona-orchestrate.url = "github:LiGoldragon/signal-persona-orchestrate";
@@ -1831,6 +1835,15 @@
               cargoTestExtraArgs = "--test daemon constraint_persona_daemon_hands_over_between_copied_spirit_databases -- --exact";
             }
           );
+          persona-daemon-handover-uses-real-spirit-daemon-binaries = context.craneLib.cargoTest (
+            context.commonArgs
+            // {
+              inherit (context) cargoArtifacts;
+              PERSONA_REQUIRE_EXTERNAL_SPIRIT_DAEMON = "1";
+              PERSONA_SPIRIT_DAEMON_BIN = "${inputs.persona-spirit.packages.${system}.persona-spirit-daemon}/bin/persona-spirit-daemon";
+              cargoTestExtraArgs = "--test daemon constraint_persona_daemon_handover_uses_real_spirit_daemon_binaries -- --exact";
+            }
+          );
           persona-handoff-router-binds-socket-boundaries = context.craneLib.cargoTest (
             context.commonArgs
             // {
@@ -1970,7 +1983,7 @@
                   grep -Fq "(default " "$work/run/default/$component.envelope"
                   grep -Fq "$component.sock" "$work/run/default/$component.envelope"
                   grep -Fq "$component.supervision.sock" "$work/run/default/$component.envelope"
-                  grep -Fq "\"$work/persona.sock\"" "$work/run/default/$component.envelope"
+                  grep -Fq "[$work/persona.sock]" "$work/run/default/$component.envelope"
                 done
 
                 grep -Fx "actual=${

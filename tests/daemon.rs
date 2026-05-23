@@ -1,8 +1,10 @@
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
+use nota_codec::{Encoder, NotaEncode};
 use owner_signal_version_handover::{
     AttemptHandover, Operation as OwnerOperation, Quarantine, QuarantineReason,
     Reply as OwnerReply, SocketPath, Version as OwnerVersion, VersionEndpoint, VersionLabel,
@@ -44,6 +46,10 @@ struct SpiritUpgradeSocketFixture {
     owner_socket: SpiritSocketPath,
     upgrade_socket: SpiritSocketPath,
     store: SpiritStorePath,
+}
+
+struct ExternalSpiritDaemon {
+    child: Child,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -338,6 +344,73 @@ impl SpiritUpgradeSocketFixture {
     }
 }
 
+impl ExternalSpiritDaemon {
+    fn spawn(binary: &std::path::Path, configuration: &SpiritDaemonConfiguration) -> Self {
+        let mut encoder = Encoder::new();
+        configuration
+            .encode(&mut encoder)
+            .expect("spirit daemon configuration encodes");
+        let configuration_text = encoder.into_string();
+        let child = Command::new(binary)
+            .arg(configuration_text)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap_or_else(|error| {
+                panic!(
+                    "spawn external persona-spirit-daemon {}: {error}",
+                    binary.display()
+                )
+            });
+        Self { child }
+    }
+
+    fn assert_running(&mut self, socket: &std::path::Path) {
+        if let Some(status) = self
+            .child
+            .try_wait()
+            .expect("query external spirit daemon status")
+        {
+            panic!(
+                "external persona-spirit-daemon exited before {} appeared: status={status}, output={}",
+                socket.display(),
+                self.output()
+            );
+        }
+    }
+
+    fn output(&mut self) -> String {
+        let mut output = String::new();
+        if let Some(mut stdout) = self.child.stdout.take() {
+            let mut text = String::new();
+            let _ = stdout.read_to_string(&mut text);
+            if !text.is_empty() {
+                output.push_str("stdout=");
+                output.push_str(&text);
+            }
+        }
+        if let Some(mut stderr) = self.child.stderr.take() {
+            let mut text = String::new();
+            let _ = stderr.read_to_string(&mut text);
+            if !text.is_empty() {
+                if !output.is_empty() {
+                    output.push(' ');
+                }
+                output.push_str("stderr=");
+                output.push_str(&text);
+            }
+        }
+        output
+    }
+}
+
+impl Drop for ExternalSpiritDaemon {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
 fn spirit_entry(summary: &str) -> Entry {
     Entry {
         topic: Topic::new("workspace"),
@@ -480,6 +553,33 @@ async fn wait_for_socket(path: &std::path::Path) {
         tokio::time::sleep(std::time::Duration::from_millis(25)).await;
     }
     panic!("socket did not appear: {}", path.display());
+}
+
+async fn wait_for_external_spirit_socket(
+    daemon: &mut ExternalSpiritDaemon,
+    path: &std::path::Path,
+) {
+    for _attempt in 0..80 {
+        if path.exists() {
+            return;
+        }
+        daemon.assert_running(path);
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    daemon.assert_running(path);
+    panic!("external spirit socket did not appear: {}", path.display());
+}
+
+fn external_spirit_daemon_binary() -> Option<PathBuf> {
+    match std::env::var_os("PERSONA_SPIRIT_DAEMON_BIN") {
+        Some(path) => Some(PathBuf::from(path)),
+        None if std::env::var_os("PERSONA_REQUIRE_EXTERNAL_SPIRIT_DAEMON").is_some() => {
+            panic!(
+                "PERSONA_SPIRIT_DAEMON_BIN must be set for the real Spirit daemon binary witness"
+            )
+        }
+        None => None,
+    }
 }
 
 impl Drop for DaemonFixture {
@@ -877,6 +977,118 @@ async fn constraint_persona_daemon_hands_over_between_copied_spirit_databases() 
     assert_eq!(next_public_exchanges, 1);
 
     persona.stop_daemon();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_persona_daemon_handover_uses_real_spirit_daemon_binaries() {
+    let Some(spirit_daemon_binary) = external_spirit_daemon_binary() else {
+        eprintln!(
+            "skipping real Spirit daemon binary witness; PERSONA_SPIRIT_DAEMON_BIN is not set"
+        );
+        return;
+    };
+
+    let current_spirit = SpiritUpgradeSocketFixture::new("external-current-database");
+    let next_spirit = SpiritUpgradeSocketFixture::new("external-next-database");
+    let current_configuration = current_spirit.configuration();
+    let mut current_daemon =
+        ExternalSpiritDaemon::spawn(&spirit_daemon_binary, &current_configuration);
+    wait_for_external_spirit_socket(&mut current_daemon, current_spirit.ordinary_socket_path())
+        .await;
+    wait_for_external_spirit_socket(&mut current_daemon, current_spirit.upgrade_socket_path())
+        .await;
+
+    let record_reply = current_spirit
+        .client()
+        .submit(SpiritOperation::Record(spirit_entry(
+            "real binary before persona handover",
+        )))
+        .expect("current external spirit daemon accepts pre-handover record");
+    assert_eq!(
+        record_reply,
+        SpiritReply::RecordAccepted(RecordAccepted::new(RecordIdentifier::new(1)))
+    );
+
+    next_spirit.copy_store_from(&current_spirit);
+    let next_configuration = next_spirit.configuration();
+    let mut next_daemon = ExternalSpiritDaemon::spawn(&spirit_daemon_binary, &next_configuration);
+    wait_for_external_spirit_socket(&mut next_daemon, next_spirit.ordinary_socket_path()).await;
+    wait_for_external_spirit_socket(&mut next_daemon, next_spirit.upgrade_socket_path()).await;
+
+    let mut persona = DaemonFixture::start();
+    let reply = persona
+        .owner_client()
+        .submit(OwnerOperation::AttemptHandover(
+            owner_attempt_handover_order_with_upgrade_sockets(
+                current_spirit.upgrade_socket_path(),
+                next_spirit.upgrade_socket_path(),
+            ),
+        ))
+        .await
+        .expect("persona drives handover between external spirit daemon binaries");
+
+    match reply {
+        OwnerReply::HandoverSucceeded(success) => {
+            assert_eq!(success.component.as_str(), "persona-spirit");
+            assert_eq!(success.active_version.label.as_str(), "v0.1.1");
+            assert_eq!(success.commit_sequence, 1);
+        }
+        other => panic!("expected handover success reply, got {other:?}"),
+    }
+
+    let observed = next_spirit
+        .client()
+        .submit(observe_spirit_summaries())
+        .expect("next external spirit daemon serves copied state after handover");
+    assert_eq!(
+        observed,
+        SpiritReply::RecordsObserved(RecordsObserved {
+            records: vec![RecordSummary {
+                identifier: RecordIdentifier::new(1),
+                topic: Topic::new("workspace"),
+                kind: Kind::Decision,
+                summary: Summary::new("real binary before persona handover"),
+                certainty: Magnitude::Maximum,
+            }],
+        })
+    );
+
+    persona.stop_daemon();
+    let store = persona::manager_store::ManagerStore::start(
+        persona::manager_store::ManagerStoreLocation::new(&persona.manager_store),
+    )
+    .expect("manager store starts for inspection");
+    let active = store
+        .ask(persona::manager_store::ReadActiveVersion::new(
+            signal_persona_auth::EngineId::new("default"),
+            signal_persona::ComponentName::new("persona-spirit"),
+        ))
+        .await
+        .expect("active version read")
+        .expect("active version persisted");
+    assert_eq!(active.active_version().as_str(), "v0.1.1");
+    assert_eq!(active.commit_sequence(), Some(1));
+
+    let events = store
+        .ask(persona::manager_store::ReadEngineEvents::new(
+            signal_persona_auth::EngineId::new("default"),
+        ))
+        .await
+        .expect("engine events read");
+    assert!(
+        events.iter().any(|event| {
+            matches!(
+                event.body(),
+                EngineEventBody::ActiveVersionChanged(change)
+                    if change.active_version().as_str() == "v0.1.1"
+                        && change.commit_sequence() == Some(1)
+            )
+        }),
+        "ActiveVersionChanged event not recorded in manager store"
+    );
+
+    store.stop_gracefully().await.expect("manager store stops");
+    let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
