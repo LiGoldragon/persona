@@ -18,9 +18,10 @@ usage() {
   cat <<'EOF'
 usage: persona-engine-sandbox-terminal-cell-smoke --sandbox-dir DIR [--harness pi|pi-tools|pi-message-router|pi-managed-harness|fixture]
 
-Starts terminal-cell-daemon at DIR/run/cell.sock, runs one child harness inside
-the PTY, drives it through terminal-cell clients, and leaves inspectable
-artifacts under DIR/artifacts.
+Starts terminal-cell-daemon at DIR/run/cell.control.sock and
+DIR/run/cell.data.sock, runs one child harness inside the PTY, drives it
+through terminal-cell clients, and leaves inspectable artifacts under
+DIR/artifacts.
 EOF
 }
 
@@ -76,7 +77,8 @@ state_dir="$sandbox_dir/state/terminal-cell"
 run_dir="$sandbox_dir/run"
 work_dir="$sandbox_dir/work"
 artifact_dir="$sandbox_dir/artifacts"
-cell_socket="$run_dir/cell.sock"
+cell_control_socket="$run_dir/cell.control.sock"
+cell_data_socket="$run_dir/cell.data.sock"
 daemon_ready="$artifact_dir/terminal-cell-daemon.ready"
 daemon_stdout="$artifact_dir/terminal-cell-daemon.stdout"
 daemon_stderr="$artifact_dir/terminal-cell-daemon.stderr"
@@ -99,15 +101,15 @@ engine_daemon_stderr="$artifact_dir/persona-daemon.stderr"
 engine_daemon_pid=""
 
 mkdir -p "$state_dir" "$run_dir" "$work_dir" "$artifact_dir"
-rm -f "$cell_socket" "$daemon_ready"
+rm -f "$cell_control_socket" "$cell_data_socket" "$daemon_ready"
 mkfifo "$daemon_ready"
 
 daemon_pid=""
 
 cleanup() {
   status="$?"
-  if [ -S "$cell_socket" ]; then
-    "$TERMINAL_CELL_CAPTURE" --socket "$cell_socket" >"$transcript_file" 2>/dev/null || true
+  if [ -S "$cell_control_socket" ]; then
+    "$TERMINAL_CELL_CAPTURE" --control-socket "$cell_control_socket" >"$transcript_file" 2>/dev/null || true
   fi
   if [ -n "$daemon_pid" ]; then
     kill -- "-$daemon_pid" 2>/dev/null || kill "$daemon_pid" 2>/dev/null || true
@@ -470,7 +472,8 @@ write_harness_environment
 } >"$prompt_file"
 
 setsid "$TERMINAL_CELL_DAEMON" \
-  --socket "$cell_socket" \
+  --control-socket "$cell_control_socket" \
+  --data-socket "$cell_data_socket" \
   -- "$PERSONA_BASH" -lc 'cd "$1" || exit; shift; exec "$@"' terminal-cell-smoke "$work_dir" "${child_command[@]}" \
   >"$daemon_ready" 2>"$daemon_stderr" &
 daemon_pid="$!"
@@ -481,13 +484,13 @@ if ! ready_line="$(timeout 20s head -n 1 "$daemon_ready")"; then
 fi
 printf '%s\n' "$ready_line" >"$daemon_stdout"
 
-timeout 90s "$TERMINAL_CELL_WAIT" --socket "$cell_socket" --text "$ready_text"
-"$TERMINAL_CELL_VIEW" --socket "$cell_socket" --once >"$view_once_file"
+timeout 90s "$TERMINAL_CELL_WAIT" --control-socket "$cell_control_socket" --text "$ready_text"
+"$TERMINAL_CELL_VIEW" --control-socket "$cell_control_socket" --data-socket "$cell_data_socket" --once >"$view_once_file"
 TERMINAL_CELL_VIEW="$TERMINAL_CELL_VIEW" \
   "$PERSONA_ENGINE_SANDBOX_ATTACH" --dry-run --sandbox-dir "$sandbox_dir" >"$attach_stdout"
-"$TERMINAL_CELL_SEND" --socket "$cell_socket" --line "$prompt_text"
-timeout 420s "$TERMINAL_CELL_WAIT" --socket "$cell_socket" --text "$marker_text"
-"$TERMINAL_CELL_CAPTURE" --socket "$cell_socket" >"$transcript_file"
+"$TERMINAL_CELL_SEND" --control-socket "$cell_control_socket" --line "$prompt_text"
+timeout 420s "$TERMINAL_CELL_WAIT" --control-socket "$cell_control_socket" --text "$marker_text"
+"$TERMINAL_CELL_CAPTURE" --control-socket "$cell_control_socket" >"$transcript_file"
 
 if [ "$harness" = "pi-tools" ]; then
   test -f "$message_command_file"
@@ -552,10 +555,12 @@ fi
 
 {
   printf '%s\n' '(TerminalCellSockets'
-  printf '  (CellSocket "%s")\n' "$cell_socket"
+  printf '  (ControlSocket "%s")\n' "$cell_control_socket"
+  printf '  (DataSocket "%s")\n' "$cell_data_socket"
   printf ')\n'
 } >"$socket_file"
 
 printf 'persona-engine-sandbox-terminal-cell-smoke passed\n'
-printf 'socket=%s\n' "$cell_socket"
+printf 'control-socket=%s\n' "$cell_control_socket"
+printf 'data-socket=%s\n' "$cell_data_socket"
 printf 'transcript=%s\n' "$transcript_file"

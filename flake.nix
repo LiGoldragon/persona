@@ -1373,6 +1373,15 @@
                 test -x ${self.packages.${system}.terminal-cell}/bin/terminal-cell-wait
                 test -x ${self.packages.${system}.terminal-cell}/bin/terminal-cell-capture
                 test -x ${self.packages.${system}.terminal-cell}/bin/terminal-cell-view
+                if ${context.pkgs.gnugrep}/bin/grep -Fq '"$TERMINAL_CELL_WAIT" --socket' ${
+                  ./scripts/persona-engine-sandbox-terminal-cell-smoke
+                }; then
+                  printf '%s\n' 'terminal-cell smoke still calls terminal-cell-wait with stale --socket'
+                  exit 1
+                fi
+                ${context.pkgs.gnugrep}/bin/grep -Fq '"$TERMINAL_CELL_WAIT" --control-socket "$cell_control_socket" --text' ${
+                  ./scripts/persona-engine-sandbox-terminal-cell-smoke
+                }
                 touch $out
               '';
           persona-engine-sandbox-attach-plans-host-ghostty =
