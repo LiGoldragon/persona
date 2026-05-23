@@ -737,11 +737,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1779528677,
-        "narHash": "sha256-nz4XkiuNyhaakf38OHAKqNyTtITpLuiuICbZvsHrS5c=",
+        "lastModified": 1779537968,
+        "narHash": "sha256-XHj3kmYSWXYaGIg8sR+QmO/5yLT1cGaaM3RA7561fgI=",
         "ref": "refs/heads/main",
-        "rev": "85f6e9bcfad56f0823a2a0fe0bd5db104099b69f",
-        "revCount": 60,
+        "rev": "d396ad357cf7dfcd9cfcce26993c0e9119f5a93d",
+        "revCount": 62,
         "type": "git",
         "url": "https://github.com/LiGoldragon/persona-spirit.git"
       },
