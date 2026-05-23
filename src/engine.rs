@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use nota_codec::NotaEnum;
-use signal_persona_auth::{
-    ComponentName as SignalComponentName, EngineId, OwnerIdentity, UnixUserId,
+use signal_persona_origin::{
+    ComponentName as SignalComponentName, EngineIdentifier, OwnerIdentity, UnixUserId,
 };
 
 use crate::Result;
@@ -34,13 +34,13 @@ impl PersonaDaemonPaths {
         self.run_root.join("persona.sock")
     }
 
-    pub fn engine_layout(&self, engine: EngineId) -> EngineLayout {
+    pub fn engine_layout(&self, engine: EngineIdentifier) -> EngineLayout {
         self.engine_layout_with_owner(engine, Self::current_owner_identity())
     }
 
     pub fn engine_layout_with_owner(
         &self,
-        engine: EngineId,
+        engine: EngineIdentifier,
         owner_identity: OwnerIdentity,
     ) -> EngineLayout {
         self.engine_layout_with_manager_socket_and_owner(
@@ -53,7 +53,7 @@ impl PersonaDaemonPaths {
 
     pub fn engine_layout_with_manager_socket(
         &self,
-        engine: EngineId,
+        engine: EngineIdentifier,
         manager_socket: impl Into<PathBuf>,
     ) -> EngineLayout {
         self.engine_layout_with_manager_socket_and_owner(
@@ -66,7 +66,7 @@ impl PersonaDaemonPaths {
 
     pub fn engine_layout_with_topology(
         &self,
-        engine: EngineId,
+        engine: EngineIdentifier,
         topology: EngineTopology,
     ) -> EngineLayout {
         self.engine_layout_with_manager_socket_and_owner(
@@ -79,7 +79,7 @@ impl PersonaDaemonPaths {
 
     pub fn engine_layout_with_manager_socket_and_topology(
         &self,
-        engine: EngineId,
+        engine: EngineIdentifier,
         manager_socket: impl Into<PathBuf>,
         topology: EngineTopology,
     ) -> EngineLayout {
@@ -93,7 +93,7 @@ impl PersonaDaemonPaths {
 
     pub fn engine_layout_with_manager_socket_and_owner(
         &self,
-        engine: EngineId,
+        engine: EngineIdentifier,
         manager_socket: impl Into<PathBuf>,
         topology: EngineTopology,
         owner_identity: OwnerIdentity,
@@ -126,7 +126,7 @@ impl PersonaDaemonPaths {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineLayout {
-    engine: EngineId,
+    engine: EngineIdentifier,
     owner_identity: OwnerIdentity,
     state_dir: PathBuf,
     run_dir: PathBuf,
@@ -136,7 +136,7 @@ pub struct EngineLayout {
 }
 
 impl EngineLayout {
-    pub fn engine(&self) -> &EngineId {
+    pub fn engine(&self) -> &EngineIdentifier {
         &self.engine
     }
 
@@ -705,7 +705,7 @@ impl SocketMode {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComponentSpawnEnvelope {
-    engine: EngineId,
+    engine: EngineIdentifier,
     owner_identity: OwnerIdentity,
     component_instance: ComponentInstanceName,
     component: EngineComponent,
@@ -722,7 +722,7 @@ pub struct ComponentSpawnEnvelope {
 }
 
 impl ComponentSpawnEnvelope {
-    pub fn engine(&self) -> &EngineId {
+    pub fn engine(&self) -> &EngineIdentifier {
         &self.engine
     }
 
@@ -780,7 +780,7 @@ impl ComponentSpawnEnvelope {
 
     pub fn signal_spawn_envelope(&self) -> signal_persona::SpawnEnvelope {
         signal_persona::SpawnEnvelope {
-            engine_id: self.engine.clone(),
+            engine_identifier: self.engine.clone(),
             component_kind: self.component.component_kind(),
             component_name: self.component.signal_name(),
             owner_identity: self.owner_identity.clone(),

@@ -31,7 +31,7 @@ signal-frame           = { git = "https://github.com/LiGoldragon/signal-frame.gi
 signal-version-handover = { git = "https://github.com/LiGoldragon/signal-version-handover.git", branch = "main" }
 signal-core            = { git = "https://github.com/LiGoldragon/signal-core.git" }
 signal-persona          = { git = "https://github.com/LiGoldragon/signal-persona.git" }
-signal-persona-auth     = { git = "https://github.com/LiGoldragon/signal-persona-auth.git" }
+signal-persona-origin     = { git = "https://github.com/LiGoldragon/signal-persona-origin.git" }
 signal-persona-harness    = { git = "https://github.com/LiGoldragon/signal-persona-harness.git" }
 signal-persona-introspect = { git = "https://github.com/LiGoldragon/signal-persona-introspect.git" }
 signal-persona-mind       = { git = "https://github.com/LiGoldragon/signal-persona-mind.git" }

@@ -12,7 +12,7 @@ use signal_persona::{
     EngineCatalog, EngineCatalogEntry, LaunchRejection, LaunchRejectionReason, Query,
     RetirementRejection, RetirementRejectionReason,
 };
-use signal_persona_auth::EngineId;
+use signal_persona_origin::EngineIdentifier;
 use signal_version_handover::HandoverMarker;
 use std::sync::Arc;
 
@@ -51,7 +51,7 @@ pub enum ManagerEvent {
 
 #[derive(Debug)]
 pub struct EngineManager {
-    engine: EngineId,
+    engine: EngineIdentifier,
     state: EngineState,
     store: Option<ActorRef<ManagerStore>>,
     unit_manager: ActorRef<ComponentUnitManager>,
@@ -61,7 +61,7 @@ pub struct EngineManager {
 impl EngineManager {
     pub fn new(state: EngineState) -> Self {
         Self {
-            engine: EngineId::new("default"),
+            engine: EngineIdentifier::new("default"),
             state,
             store: None,
             unit_manager: ComponentUnitManager::start_with_controller(Arc::new(
@@ -71,7 +71,11 @@ impl EngineManager {
         }
     }
 
-    pub fn with_store(engine: EngineId, state: EngineState, store: ActorRef<ManagerStore>) -> Self {
+    pub fn with_store(
+        engine: EngineIdentifier,
+        state: EngineState,
+        store: ActorRef<ManagerStore>,
+    ) -> Self {
         Self {
             engine,
             state,
@@ -84,7 +88,7 @@ impl EngineManager {
     }
 
     pub fn with_store_and_unit_controller(
-        engine: EngineId,
+        engine: EngineIdentifier,
         state: EngineState,
         store: ActorRef<ManagerStore>,
         unit_controller: Arc<dyn UnitController>,
@@ -105,7 +109,7 @@ impl EngineManager {
     }
 
     pub async fn start_with_store(
-        engine: EngineId,
+        engine: EngineIdentifier,
         store: ActorRef<ManagerStore>,
     ) -> Result<ActorRef<Self>> {
         Self::start_with_store_and_unit_controller(engine, store, Arc::new(ManualUnitController))
@@ -113,7 +117,7 @@ impl EngineManager {
     }
 
     pub async fn start_with_store_and_unit_controller(
-        engine: EngineId,
+        engine: EngineIdentifier,
         store: ActorRef<ManagerStore>,
         unit_controller: Arc<dyn UnitController>,
     ) -> Result<ActorRef<Self>> {
@@ -133,7 +137,7 @@ impl EngineManager {
     }
 
     async fn initial_state_from_store(
-        engine: &EngineId,
+        engine: &EngineIdentifier,
         store: &ActorRef<ManagerStore>,
     ) -> Result<EngineState> {
         // Detect orphan arcs from the prior daemon run and append typed

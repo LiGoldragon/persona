@@ -336,13 +336,13 @@ Origin is provenance, not authority. Two closed enums type the boundary:
 ```
 ConnectionClass (minted from SO_PEERCRED at accept):
     Owner | NonOwnerUser(Uid) | System(SystemPrincipal)
-  | OtherPersona { engine_id, host } | Network(NetworkSource)
+  | OtherPersona { engine_identifier, host } | Network(NetworkSource)
 
 MessageOrigin (stamped on each accepted message):
     Internal(ComponentName) | External(ConnectionClass)
 ```
 
-These live in the `signal-persona-auth` contract crate (the kernel
+These live in the `signal-persona-origin` contract crate (the kernel
 extracted from `signal-persona` once cross-domain demand fired). Every
 domain contract (`signal-persona-message`, `signal-persona-mind`,
 `signal-persona-system`, `signal-persona-harness`,
@@ -440,7 +440,7 @@ filesystem ownership and modes.
 ### 1.6.5 · Cross-engine routes collapse into channels
 
 An `EngineRoute` is a `Channel` whose `source` is
-`External(OtherPersona { engine_id })`. The multi-engine work uses the
+`External(OtherPersona { engine_identifier })`. The multi-engine work uses the
 same choreography contract: engine B's mind adjudicates incoming
 traffic from engine A the same way it adjudicates external owner
 submissions. Cross-engine implementation today is **minimal-mode** —
@@ -527,7 +527,7 @@ upgrade-related Kameo messages:
 
 **Component unit control.** `src/unit.rs` owns the process-manager boundary
 for component daemons that are not direct children of the sandbox
-`EngineSupervisor`. A `ComponentUnit` carries `(EngineId, ComponentName,
+`EngineSupervisor`. A `ComponentUnit` carries `(EngineIdentifier, ComponentName,
 Version)` and projects component+version into the systemd template instance
 name `persona-component@<component>:<version>.service`; the engine remains
 typed state, not part of the template instance string. `ComponentUnitManager`
@@ -554,7 +554,7 @@ named unit through systemd's normal unit-control methods. Pure tests verify the
 projection without mutating host systemd.
 
 **Active-version snapshot.** `manager.active-version-snapshot` (per
-§1.7 manager-state discussion) is per-`(EngineId, ComponentName)`
+§1.7 manager-state discussion) is per-`(EngineIdentifier, ComponentName)`
 materialised projection of the event log. The reducer is
 authoritative for "which version of component X is live right now".
 A truncated or corrupted snapshot rebuilds from the event log on
@@ -732,7 +732,7 @@ test. Omitted components use the Nix-provided default.
   embedded envelope to the per-component file. This record is
   operator's lane; it is not on the wire.
 - **`signal-persona::SpawnEnvelope`** — the **child-readable typed
-  wire form**. Carries engine_id, component_kind, component_name,
+  wire form**. Carries engine_identifier, component_kind, component_name,
   owner_identity, state_dir, domain_socket_path, domain_socket_mode,
   engine_management_socket_path, engine_management_socket_mode,
   peer_sockets, manager_socket, and engine_management_protocol_version.
@@ -763,15 +763,15 @@ health, and active component versions. Three snapshot tables —
 `manager.active-version-snapshot` — are **materialised projections** over the
 event log, maintained by reducers:
 
-- **Engine-lifecycle reducer** — per `(EngineId, ComponentName)`, materialises
+- **Engine-lifecycle reducer** — per `(EngineIdentifier, ComponentName)`, materialises
   `ComponentProcessState` (closed enum: `Launched → Ready → Stopping → Exited`,
   with a future `SocketBound` slot reserved between `Launched` and `Ready` for
   the push-based readiness contract). Snapshot table:
   `engine-lifecycle-snapshot`.
-- **Engine-status reducer** — per `(EngineId, ComponentName)`, materialises
+- **Engine-status reducer** — per `(EngineIdentifier, ComponentName)`, materialises
   `ComponentHealth` (closed enum: `Starting | Running | Degraded | Stopped |
   Failed`). Snapshot table: `engine-status-snapshot`.
-- **Active-version reducer** — per `(EngineId, ComponentName)`, materialises
+- **Active-version reducer** — per `(EngineIdentifier, ComponentName)`, materialises
   the component version selected by a completed upgrade handover, together with
   its schema hash and handover commit sequence. Snapshot table:
   `manager.active-version-snapshot`.
@@ -840,7 +840,7 @@ child unobserved; the supervision tree replaces the watcher and resumes
 the wait.
 
 **Orphan detection on manager restart**: on `EngineManager::start_with_store`,
-the manager replays the event log and finds any `(EngineId, ComponentName)`
+the manager replays the event log and finds any `(EngineIdentifier, ComponentName)`
 pair with `ComponentSpawned` but no matching `ComponentReady` *and* no
 matching `ComponentExited`. Such a pair names a child the prior daemon
 launched but never observed reaching readiness and never observed exiting —
@@ -857,7 +857,7 @@ groups, readiness state, restart state, stop order, and lifecycle events.
 Request decoding and the `EngineManager` mailbox do not run blocking process
 management directly. If systemd features become load-bearing for component
 children, the same launcher boundary may gain a systemd transient-unit backend
-with EngineId-scoped unit names, explicit unit properties, cgroup cleanup,
+with EngineIdentifier-scoped unit names, explicit unit properties, cgroup cleanup,
 resource accounting, credentials, sandboxing, journald visibility, and
 readiness/watchdog integration.
 
@@ -972,7 +972,7 @@ mutations persist by sending typed messages to that actor.
 The first engine-management slice is also present. When the daemon receives an
 explicit launch plan from environment, it starts the data-bearing
 `EngineSupervisor` actor, resolves prototype-supervised component commands through
-`ComponentCommandResolver`, prepares EngineId-scoped state/run directories,
+`ComponentCommandResolver`, prepares EngineIdentifier-scoped state/run directories,
 creates spawn envelopes, launches every prototype-supervised component process through
 `DirectProcessLauncher`, and records typed `ComponentSpawned` events in
 `manager.redb`. The default manager-only mode remains available for tests and
@@ -1039,7 +1039,7 @@ channel-specific request/reply payloads.
 `signal-persona` is the contract for talking to Persona. A client uses it
 to ask Persona for engine status, component health, engine-visible
 projections, and engine-management actions.
-It is also the home for engine catalog and lifecycle records: `EngineId`,
+It is also the home for engine catalog and lifecycle records: `EngineIdentifier`,
 component desired state, component health, socket layout, spawn envelopes, and
 shutdown/restart requests. Authorization/provenance vocabulary belongs in the
 auth/route contract layer when it is needed; `signal-persona` should not grow a
@@ -1367,7 +1367,7 @@ Migration rules:
 - The child-exit watcher task is supervised. Its panic does not leave a
   child process unobserved.
 - Manager startup replays the event log to detect orphan components — pairs
-  of `(EngineId, ComponentName)` with `ComponentSpawned` but no matching
+  of `(EngineIdentifier, ComponentName)` with `ComponentSpawned` but no matching
   `ComponentReady` *and* no matching `ComponentExited` — and appends one
   `EngineEventBody::ComponentOrphaned` event per orphan before serving its
   first request.
@@ -1520,7 +1520,7 @@ Migration rules:
   persona-shaped.
 - Local engine trust comes from filesystem ACL on `persona`-owned sockets,
   not from in-band crypto proofs.
-- `ConnectionClass` and `MessageOrigin` live in the `signal-persona-auth`
+- `ConnectionClass` and `MessageOrigin` live in the `signal-persona-origin`
   contract crate, depended on by every domain contract; they describe
   origin/provenance, not authority.
 - Authority comes from channel state, not from message origin.
@@ -1543,7 +1543,7 @@ The apex repo owns tests that prove cross-component shape:
 | router does not own terminal transport | router dependency graph excludes `persona-terminal` and `terminal-cell`. |
 | component databases are separate | router/mind/harness open distinct redb files. |
 | NOTA is the only text syntax | no CLI-only parser accepts non-NOTA command records. |
-| engine resources are scoped | generated state/socket paths include `EngineId`. |
+| engine resources are scoped | generated state/socket paths include `EngineIdentifier`. |
 | in-band auth proof is not accepted as authority | request decoding and component handlers ignore agent-supplied proof/class fields for local authority. |
 | persona CLI is daemon client | CLI accepts exactly one NOTA request and prints one NOTA reply. |
 | persona-daemon preserves unrelated files | daemon startup refuses a non-socket endpoint path instead of deleting it. |
@@ -1763,7 +1763,7 @@ scripts/persona-dev-stack-chain  three-harness message/router/harness/terminal c
 scripts/persona-daemon-three-harness-chain-smoke  manager-started three-harness route witness
 src/main.rs      thin CLI client for persona-daemon
 src/bin/persona_daemon.rs  long-lived daemon entry
-src/engine.rs    EngineId-scoped layout, socket policy, spawn envelope records
+src/engine.rs    EngineIdentifier-scoped layout, socket policy, spawn envelope records
 src/engine_event.rs  typed engine-management event records
 src/unit.rs      component unit identity, transient unit definitions, unit-manager actor, and injectable manual/systemd unit controllers
 src/direct_process.rs  direct child-process launcher actor

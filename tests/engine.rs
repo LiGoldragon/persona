@@ -15,7 +15,7 @@ use persona::launch::{
     EnvironmentVariableName, EnvironmentVariableValue, ExecutablePath,
     ReadCommandResolutionAttemptCount, ResolveComponentCommands, ResolvedComponentCommands,
 };
-use signal_persona_auth::{EngineId, OwnerIdentity, UnixUserId};
+use signal_persona_origin::{EngineIdentifier, OwnerIdentity, UnixUserId};
 
 struct TemporaryEngineRoot {
     root: PathBuf,
@@ -169,7 +169,7 @@ impl Drop for TemporaryEngineRoot {
 fn constraint_engine_layout_uses_engine_id_scoped_paths() {
     let root = TemporaryEngineRoot::new("layout");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
-    let layout = paths.engine_layout(EngineId::new("engine-alpha"));
+    let layout = paths.engine_layout(EngineIdentifier::new("engine-alpha"));
 
     assert!(TemporaryEngineRoot::contains(
         layout.state_dir(),
@@ -217,7 +217,7 @@ fn constraint_engine_layout_can_select_message_router_topology() {
     let root = TemporaryEngineRoot::new("message-router-layout");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
     let layout = paths.engine_layout_with_topology(
-        EngineId::new("engine-message-router"),
+        EngineIdentifier::new("engine-message-router"),
         EngineTopology::MessageRouter,
     );
 
@@ -232,7 +232,7 @@ fn constraint_engine_layout_can_select_mind_orchestrate_topology() {
     let root = TemporaryEngineRoot::new("mind-orchestrate-layout");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
     let layout = paths.engine_layout_with_topology(
-        EngineId::new("engine-mind-orchestrate"),
+        EngineIdentifier::new("engine-mind-orchestrate"),
         EngineTopology::MindOrchestrate,
     );
 
@@ -247,7 +247,7 @@ fn constraint_three_harness_chain_topology_allocates_distinct_instances() {
     let root = TemporaryEngineRoot::new("three-harness-chain-layout");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
     let layout = paths.engine_layout_with_topology(
-        EngineId::new("engine-three-harness-chain"),
+        EngineIdentifier::new("engine-three-harness-chain"),
         EngineTopology::ThreeHarnessChain,
     );
 
@@ -317,7 +317,7 @@ fn constraint_prototype_supervision_includes_introspect_but_delivery_does_not() 
 fn constraint_engine_layout_assigns_socket_modes_by_component_boundary() {
     let root = TemporaryEngineRoot::new("socket-mode");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
-    let layout = paths.engine_layout(EngineId::new("engine-beta"));
+    let layout = paths.engine_layout(EngineIdentifier::new("engine-beta"));
 
     for component in [
         EngineComponent::Mind,
@@ -362,7 +362,7 @@ fn constraint_orchestrate_component_uses_internal_socket_modes() {
     let root = TemporaryEngineRoot::new("orchestrate-socket-mode");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
     let layout = paths.engine_layout_with_topology(
-        EngineId::new("engine-mind-orchestrate"),
+        EngineIdentifier::new("engine-mind-orchestrate"),
         EngineTopology::MindOrchestrate,
     );
     let orchestrate = layout
@@ -386,8 +386,10 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     let root = TemporaryEngineRoot::new("spawn-envelope");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
     let owner_identity = OwnerIdentity::UnixUser(UnixUserId::new(4242));
-    let layout =
-        paths.engine_layout_with_owner(EngineId::new("engine-gamma"), owner_identity.clone());
+    let layout = paths.engine_layout_with_owner(
+        EngineIdentifier::new("engine-gamma"),
+        owner_identity.clone(),
+    );
     let resolved_commands = TemporaryEngineRoot::resolved_commands().await;
     let envelope = layout
         .spawn_envelope(EngineComponent::Router, &resolved_commands)
@@ -440,14 +442,14 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     );
 
     let signal_envelope = envelope.signal_spawn_envelope();
-    assert_eq!(signal_envelope.engine_id.as_str(), "engine-gamma");
+    assert_eq!(signal_envelope.engine_identifier.as_str(), "engine-gamma");
     assert_eq!(
         signal_envelope.component_kind,
         signal_persona::ComponentKind::Router
     );
     assert_eq!(
         signal_envelope.component_name,
-        signal_persona_auth::ComponentName::Router
+        signal_persona_origin::ComponentName::Router
     );
     assert_eq!(signal_envelope.owner_identity, owner_identity);
     assert!(
@@ -491,7 +493,7 @@ async fn constraint_mind_orchestrate_topology_spawn_envelope_has_one_peer_socket
     let root = TemporaryEngineRoot::new("mind-orchestrate-envelope");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
     let layout = paths.engine_layout_with_topology(
-        EngineId::new("engine-mind-orchestrate"),
+        EngineIdentifier::new("engine-mind-orchestrate"),
         EngineTopology::MindOrchestrate,
     );
     let resolved_commands = TemporaryEngineRoot::resolver_result(
@@ -528,7 +530,7 @@ async fn constraint_mind_orchestrate_topology_spawn_envelope_has_one_peer_socket
     );
     assert_eq!(
         signal_envelope.component_name,
-        signal_persona_auth::ComponentName::Orchestrate
+        signal_persona_origin::ComponentName::Orchestrate
     );
 }
 
@@ -537,7 +539,7 @@ async fn constraint_message_router_topology_spawn_envelope_has_one_peer_socket()
     let root = TemporaryEngineRoot::new("message-router-envelope");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
     let layout = paths.engine_layout_with_topology(
-        EngineId::new("engine-message-router"),
+        EngineIdentifier::new("engine-message-router"),
         EngineTopology::MessageRouter,
     );
     let resolved_commands = TemporaryEngineRoot::resolver_result(
@@ -564,7 +566,7 @@ async fn constraint_three_harness_chain_spawn_envelope_pairs_harness_with_named_
     let root = TemporaryEngineRoot::new("three-harness-chain-envelope");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
     let layout = paths.engine_layout_with_topology(
-        EngineId::new("engine-three-harness-chain"),
+        EngineIdentifier::new("engine-three-harness-chain"),
         EngineTopology::ThreeHarnessChain,
     );
     let resolved_commands = TemporaryEngineRoot::resolver_result(
@@ -600,7 +602,7 @@ async fn constraint_three_harness_chain_spawn_envelope_pairs_harness_with_named_
 async fn constraint_spawn_envelope_carries_resolved_component_command() {
     let root = TemporaryEngineRoot::new("spawn-envelope-command");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
-    let layout = paths.engine_layout(EngineId::new("engine-gamma"));
+    let layout = paths.engine_layout(EngineIdentifier::new("engine-gamma"));
     let override_command = TemporaryEngineRoot::routed_command_with_environment();
     let resolved_commands = TemporaryEngineRoot::resolver_result(
         TemporaryEngineRoot::command_catalog(),
@@ -637,7 +639,7 @@ async fn constraint_spawn_envelope_carries_resolved_component_command() {
 fn constraint_engine_layout_prepares_only_engine_scoped_directories() {
     let root = TemporaryEngineRoot::new("prepare");
     let paths = PersonaDaemonPaths::new(root.state_root(), root.run_root());
-    let layout = paths.engine_layout(EngineId::new("engine-delta"));
+    let layout = paths.engine_layout(EngineIdentifier::new("engine-delta"));
     let prepared = layout
         .prepare_directories()
         .expect("engine directories are prepared");

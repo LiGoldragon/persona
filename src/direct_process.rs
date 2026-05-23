@@ -9,7 +9,7 @@ use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use nota_codec::{Encoder, NotaEncode};
-use signal_persona_auth::EngineId;
+use signal_persona_origin::EngineIdentifier;
 use signal_persona_router::{
     Actor as RouterBootstrapActor, ActorIdentifier as RouterBootstrapActorIdentifier,
     EndpointKind as RouterBootstrapEndpointKind,
@@ -221,12 +221,12 @@ pub struct DirectProcessLauncher {
 
 #[derive(Debug, Clone)]
 pub struct ExitNotifier {
-    engine: EngineId,
+    engine: EngineIdentifier,
     store: ActorRef<ManagerStore>,
 }
 
 impl ExitNotifier {
-    pub fn new(engine: EngineId, store: ActorRef<ManagerStore>) -> Self {
+    pub fn new(engine: EngineIdentifier, store: ActorRef<ManagerStore>) -> Self {
         Self { engine, store }
     }
 }
@@ -580,9 +580,11 @@ impl DirectProcessLauncher {
             .iter()
             .filter(|peer| peer.component() == EngineComponent::Harness)
             .map(|peer| signal_persona_message::ComponentMessageIngress {
-                origin: signal_persona_auth::InternalComponentInstanceOrigin::new(
-                    signal_persona_auth::ComponentName::Harness,
-                    signal_persona_auth::ComponentInstanceName::new(peer.instance_name().as_str()),
+                origin: signal_persona_origin::InternalComponentInstanceOrigin::new(
+                    signal_persona_origin::ComponentName::Harness,
+                    signal_persona_origin::ComponentInstanceName::new(
+                        peer.instance_name().as_str(),
+                    ),
                 ),
                 socket_path: signal_persona::WirePath::new(
                     Self::component_message_ingress_socket_path(envelope, peer.instance_name())

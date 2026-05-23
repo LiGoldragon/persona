@@ -35,8 +35,10 @@ use std::io::{Read, Write};
 
 use nota_codec::{Encoder, NotaEncode};
 use signal_core::RequestPayload;
-use signal_persona_auth::{ComponentName, ConnectionClass, MessageOrigin, NetworkPeer, UnixUserId};
 use signal_persona_message::{Frame, FrameBody, MessageRequest};
+use signal_persona_origin::{
+    ComponentName, ConnectionClass, MessageOrigin, NetworkPeer, UnixUserId,
+};
 
 struct Expectations {
     recipient: String,

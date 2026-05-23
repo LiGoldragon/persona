@@ -23,9 +23,9 @@ use persona::manager::{EngineManager, HandleEngineRequest};
 use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadEngineEvents};
 use signal_persona::engine::{Operation as EngineRequest, Reply as EngineReply};
 use signal_persona::{EngineStatusScope, Query};
-use signal_persona_auth::EngineId;
 use signal_persona_harness::{HarnessDaemonConfiguration, HarnessKind};
 use signal_persona_message::MessageDaemonConfiguration;
+use signal_persona_origin::EngineIdentifier;
 use signal_persona_router::{
     EndpointKind, RouterBootstrapDocument, RouterBootstrapOperation, RouterDaemonConfiguration,
 };
@@ -197,7 +197,7 @@ impl DirectProcessFixture {
 
     async fn envelope(&self, component: EngineComponent) -> ComponentSpawnEnvelope {
         let paths = PersonaDaemonPaths::new(self.state_root(), self.run_root());
-        let layout = paths.engine_layout(EngineId::new("engine-direct-process"));
+        let layout = paths.engine_layout(EngineIdentifier::new("engine-direct-process"));
         layout
             .prepare_directories()
             .expect("engine directories prepared");
@@ -212,7 +212,7 @@ impl DirectProcessFixture {
         command: ComponentCommand,
     ) -> ComponentSpawnEnvelope {
         let paths = PersonaDaemonPaths::new(self.state_root(), self.run_root());
-        let layout = paths.engine_layout(EngineId::new("engine-direct-process"));
+        let layout = paths.engine_layout(EngineIdentifier::new("engine-direct-process"));
         layout
             .prepare_directories()
             .expect("engine directories prepared");
@@ -348,7 +348,7 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
     let paths = PersonaDaemonPaths::new(fixture.state_root(), fixture.run_root());
     let layout = paths.engine_layout_with_topology(
-        EngineId::new("engine-three-harness-router-bootstrap"),
+        EngineIdentifier::new("engine-three-harness-router-bootstrap"),
         EngineTopology::ThreeHarnessChain,
     );
     layout
@@ -430,7 +430,7 @@ async fn constraint_three_harness_chain_message_launch_writes_component_ingress_
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
     let paths = PersonaDaemonPaths::new(fixture.state_root(), fixture.run_root());
     let layout = paths.engine_layout_with_topology(
-        EngineId::new("engine-three-harness-message-ingress"),
+        EngineIdentifier::new("engine-three-harness-message-ingress"),
         EngineTopology::ThreeHarnessChain,
     );
     layout
@@ -464,7 +464,7 @@ async fn constraint_three_harness_chain_message_launch_writes_component_ingress_
             .unwrap_or_else(|| panic!("missing component ingress for {name}"));
         assert_eq!(
             ingress.origin.component(),
-            signal_persona_auth::ComponentName::Harness
+            signal_persona_origin::ComponentName::Harness
         );
         assert!(
             ingress
@@ -490,7 +490,7 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
     let paths = PersonaDaemonPaths::new(fixture.state_root(), fixture.run_root());
     let layout = paths.engine_layout_with_topology(
-        EngineId::new("engine-three-harness-instance-configurations"),
+        EngineIdentifier::new("engine-three-harness-instance-configurations"),
         EngineTopology::ThreeHarnessChain,
     );
     layout
@@ -551,7 +551,7 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
             .unwrap_or_else(|| panic!("message ingress exists for {agent_name}"));
         assert_eq!(
             ingress.origin.component(),
-            signal_persona_auth::ComponentName::Harness
+            signal_persona_origin::ComponentName::Harness
         );
         assert!(
             ingress
@@ -834,14 +834,17 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
     let mut decoder = Decoder::new(&envelope_text);
     let signal_envelope =
         signal_persona::SpawnEnvelope::decode(&mut decoder).expect("spawn envelope decodes");
-    assert_eq!(signal_envelope.engine_id.as_str(), "engine-direct-process");
+    assert_eq!(
+        signal_envelope.engine_identifier.as_str(),
+        "engine-direct-process"
+    );
     assert_eq!(
         signal_envelope.component_kind,
         signal_persona::ComponentKind::Mind
     );
     assert_eq!(
         signal_envelope.component_name,
-        signal_persona_auth::ComponentName::Mind
+        signal_persona_origin::ComponentName::Mind
     );
     assert_eq!(signal_envelope.owner_identity, owner_identity);
     assert!(
@@ -884,7 +887,7 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_component_launcher_observes_natural_child_exit_and_appends_event() {
     let fixture = DirectProcessFixture::new("natural-exit");
-    let engine = EngineId::new("engine-direct-process");
+    let engine = EngineIdentifier::new("engine-direct-process");
     let manager_store_path = fixture.root.join("manager.redb");
     let store = ManagerStore::start(ManagerStoreLocation::new(&manager_store_path))
         .expect("manager store starts");

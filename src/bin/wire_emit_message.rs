@@ -27,10 +27,12 @@ use std::io::Write;
 
 use signal_core::{ExchangeIdentifier, ExchangeLane, LaneSequence, Request, SessionEpoch};
 use signal_persona::TimestampNanos;
-use signal_persona_auth::{ComponentName, ConnectionClass, MessageOrigin, NetworkPeer, UnixUserId};
 use signal_persona_message::{
     Frame, FrameBody, InboxQuery, MessageBody, MessageKind, MessageRecipient, MessageRequest,
     MessageSubmission, StampedMessageSubmission,
+};
+use signal_persona_origin::{
+    ComponentName, ConnectionClass, MessageOrigin, NetworkPeer, UnixUserId,
 };
 
 #[derive(Debug)]

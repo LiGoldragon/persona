@@ -7,7 +7,7 @@ use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use signal_persona::ComponentName;
-use signal_persona_auth::EngineId;
+use signal_persona_origin::EngineIdentifier;
 use thiserror::Error;
 use tokio::process::Command;
 use zbus::zvariant::OwnedObjectPath;
@@ -57,14 +57,14 @@ impl Actor for ComponentUnitManager {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComponentUnit {
-    engine: EngineId,
+    engine: EngineIdentifier,
     component: ComponentName,
     version: Version,
     name: UnitName,
 }
 
 impl ComponentUnit {
-    pub fn new(engine: EngineId, component: ComponentName, version: Version) -> Self {
+    pub fn new(engine: EngineIdentifier, component: ComponentName, version: Version) -> Self {
         let name = UnitName::for_component(&component, &version);
         Self {
             engine,
@@ -74,7 +74,7 @@ impl ComponentUnit {
         }
     }
 
-    pub fn engine(&self) -> &EngineId {
+    pub fn engine(&self) -> &EngineIdentifier {
         &self.engine
     }
 

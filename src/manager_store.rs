@@ -5,7 +5,7 @@ use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use sema::{Schema, SchemaVersion, Sema, Table};
 use signal_persona::{ComponentHealth, ComponentName, EngineStatus};
-use signal_persona_auth::EngineId;
+use signal_persona_origin::EngineIdentifier;
 
 use crate::Result;
 use crate::engine_event::{
@@ -58,16 +58,16 @@ impl ManagerStoreLocation {
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct StoredEngineRecord {
-    engine: EngineId,
+    engine: EngineIdentifier,
     status: EngineStatus,
 }
 
 impl StoredEngineRecord {
-    pub fn new(engine: EngineId, status: EngineStatus) -> Self {
+    pub fn new(engine: EngineIdentifier, status: EngineStatus) -> Self {
         Self { engine, status }
     }
 
-    pub fn engine(&self) -> &EngineId {
+    pub fn engine(&self) -> &EngineIdentifier {
         &self.engine
     }
 
@@ -99,7 +99,7 @@ pub enum ComponentProcessState {
 }
 
 /// Snapshot row stored in `manager.engine-lifecycle-snapshot`, keyed by
-/// `engine_id::component_name`. The reducer overwrites the row on each
+/// `engine_identifier::component_name`. The reducer overwrites the row on each
 /// transition; readers project the latest state into `EngineStatus`.
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentLifecycleSnapshotRow {
@@ -125,7 +125,7 @@ impl ComponentLifecycleSnapshotRow {
 }
 
 /// Snapshot row stored in `manager.engine-status-snapshot`, keyed by
-/// `engine_id::component_name`. Carries the same closed-enum
+/// `engine_identifier::component_name`. Carries the same closed-enum
 /// `ComponentHealth` that `signal_persona::EngineStatus` reports to CLI
 /// status queries, with no extra ARCH-aspirational variants.
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -148,13 +148,13 @@ impl ComponentStatusSnapshotRow {
     }
 }
 
-/// Composite key `engine_id::component_name` used by both snapshot tables.
-/// The `::` separator is unambiguous: `EngineId` and `ComponentName`
+/// Composite key `engine_identifier::component_name` used by both snapshot tables.
+/// The `::` separator is unambiguous: `EngineIdentifier` and `ComponentName`
 /// values do not contain it in any current shape.
 pub struct SnapshotKey(String);
 
 impl SnapshotKey {
-    pub fn new(engine: &EngineId, component: &ComponentName) -> Self {
+    pub fn new(engine: &EngineIdentifier, component: &ComponentName) -> Self {
         Self(format!("{}::{}", engine.as_str(), component.as_str()))
     }
 
@@ -162,7 +162,7 @@ impl SnapshotKey {
         self.0.as_str()
     }
 
-    fn engine_prefix(engine: &EngineId) -> String {
+    fn engine_prefix(engine: &EngineIdentifier) -> String {
         format!("{}::", engine.as_str())
     }
 }
@@ -194,7 +194,7 @@ impl ManagerTables {
         })?)
     }
 
-    fn engine_record(&self, engine: &EngineId) -> Result<Option<StoredEngineRecord>> {
+    fn engine_record(&self, engine: &EngineIdentifier) -> Result<Option<StoredEngineRecord>> {
         Ok(self
             .database
             .read(|transaction| ENGINE_RECORDS.get(transaction, engine.as_str()))?)
@@ -211,7 +211,7 @@ impl ManagerTables {
         })?)
     }
 
-    fn engine_events(&self, engine: &EngineId) -> Result<Vec<EngineEvent>> {
+    fn engine_events(&self, engine: &EngineIdentifier) -> Result<Vec<EngineEvent>> {
         Ok(self.database.read(|transaction| {
             let events = ENGINE_EVENTS
                 .iter(transaction)?
@@ -249,7 +249,7 @@ impl ManagerTables {
 
     fn engine_lifecycle_snapshot(
         &self,
-        engine: &EngineId,
+        engine: &EngineIdentifier,
     ) -> Result<Vec<ComponentLifecycleSnapshotRow>> {
         let prefix = SnapshotKey::engine_prefix(engine);
         Ok(self.database.read(|transaction| {
@@ -263,7 +263,10 @@ impl ManagerTables {
         })?)
     }
 
-    fn engine_status_snapshot(&self, engine: &EngineId) -> Result<Vec<ComponentStatusSnapshotRow>> {
+    fn engine_status_snapshot(
+        &self,
+        engine: &EngineIdentifier,
+    ) -> Result<Vec<ComponentStatusSnapshotRow>> {
         let prefix = SnapshotKey::engine_prefix(engine);
         Ok(self.database.read(|transaction| {
             let rows = ENGINE_STATUS_SNAPSHOT
@@ -278,7 +281,7 @@ impl ManagerTables {
 
     fn active_version(
         &self,
-        engine: &EngineId,
+        engine: &EngineIdentifier,
         component: &ComponentName,
     ) -> Result<Option<ActiveVersion>> {
         let key = SnapshotKey::new(engine, component);
@@ -413,7 +416,7 @@ impl ManagerTables {
 
     fn write_component_state(
         transaction: &redb::WriteTransaction,
-        engine: &EngineId,
+        engine: &EngineIdentifier,
         component: ComponentName,
         process_state: ComponentProcessState,
         health: ComponentHealth,
@@ -485,7 +488,7 @@ impl ManagerStore {
         Ok(ManagerStoreReceipt::new(record.engine, self.write_count))
     }
 
-    fn read_engine_record(&self, engine: &EngineId) -> Result<Option<StoredEngineRecord>> {
+    fn read_engine_record(&self, engine: &EngineIdentifier) -> Result<Option<StoredEngineRecord>> {
         self.tables()?.engine_record(engine)
     }
 
@@ -498,27 +501,27 @@ impl ManagerStore {
         Ok(EngineEventReceipt::new(sequence, self.write_count))
     }
 
-    fn read_engine_events(&self, engine: &EngineId) -> Result<Vec<EngineEvent>> {
+    fn read_engine_events(&self, engine: &EngineIdentifier) -> Result<Vec<EngineEvent>> {
         self.tables()?.engine_events(engine)
     }
 
     fn read_engine_lifecycle_snapshot(
         &self,
-        engine: &EngineId,
+        engine: &EngineIdentifier,
     ) -> Result<Vec<ComponentLifecycleSnapshotRow>> {
         self.tables()?.engine_lifecycle_snapshot(engine)
     }
 
     fn read_engine_status_snapshot(
         &self,
-        engine: &EngineId,
+        engine: &EngineIdentifier,
     ) -> Result<Vec<ComponentStatusSnapshotRow>> {
         self.tables()?.engine_status_snapshot(engine)
     }
 
     fn read_active_version(
         &self,
-        engine: &EngineId,
+        engine: &EngineIdentifier,
         component: &ComponentName,
     ) -> Result<Option<ActiveVersion>> {
         self.tables()?.active_version(engine, component)
@@ -568,13 +571,13 @@ impl ManagerStore {
     /// `(engine, component)` pair whose most-recent lifecycle-arc event
     /// is `ComponentSpawned` — the prior daemon recorded the spawn but
     /// no terminator. Events are visited in sequence order so the most
-    /// recent lifecycle event determines arc state. `EngineId` does not
+    /// recent lifecycle event determines arc state. `EngineIdentifier` does not
     /// implement `Hash`, so the working map keys on owned strings.
     fn orphan_candidates(events: &[EngineEvent]) -> Vec<OrphanCandidate> {
         use std::collections::BTreeMap;
         #[derive(Clone)]
         struct ArcState {
-            engine: EngineId,
+            engine: EngineIdentifier,
             component: ComponentName,
             spawned_sequence: EngineEventSequence,
             in_flight: bool,
@@ -663,7 +666,7 @@ impl ManagerStore {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct OrphanCandidate {
-    engine: EngineId,
+    engine: EngineIdentifier,
     component: ComponentName,
     spawned_sequence: EngineEventSequence,
 }
@@ -698,7 +701,7 @@ pub struct PersistEngineRecord {
 }
 
 impl PersistEngineRecord {
-    pub fn new(engine: EngineId, status: EngineStatus) -> Self {
+    pub fn new(engine: EngineIdentifier, status: EngineStatus) -> Self {
         Self {
             record: StoredEngineRecord::new(engine, status),
         }
@@ -707,19 +710,19 @@ impl PersistEngineRecord {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManagerStoreReceipt {
-    engine: EngineId,
+    engine: EngineIdentifier,
     write_count: u64,
 }
 
 impl ManagerStoreReceipt {
-    fn new(engine: EngineId, write_count: u64) -> Self {
+    fn new(engine: EngineIdentifier, write_count: u64) -> Self {
         Self {
             engine,
             write_count,
         }
     }
 
-    pub fn engine(&self) -> &EngineId {
+    pub fn engine(&self) -> &EngineIdentifier {
         &self.engine
     }
 
@@ -786,11 +789,11 @@ impl Message<AppendEngineEvent> for ManagerStore {
 }
 
 pub struct ReadEngineRecord {
-    engine: EngineId,
+    engine: EngineIdentifier,
 }
 
 impl ReadEngineRecord {
-    pub fn new(engine: EngineId) -> Self {
+    pub fn new(engine: EngineIdentifier) -> Self {
         Self { engine }
     }
 }
@@ -808,11 +811,11 @@ impl Message<ReadEngineRecord> for ManagerStore {
 }
 
 pub struct ReadEngineEvents {
-    engine: EngineId,
+    engine: EngineIdentifier,
 }
 
 impl ReadEngineEvents {
-    pub fn new(engine: EngineId) -> Self {
+    pub fn new(engine: EngineIdentifier) -> Self {
         Self { engine }
     }
 }
@@ -859,11 +862,11 @@ impl Message<CloseManagerStore> for ManagerStore {
 }
 
 pub struct ReadEngineLifecycleSnapshot {
-    engine: EngineId,
+    engine: EngineIdentifier,
 }
 
 impl ReadEngineLifecycleSnapshot {
-    pub fn new(engine: EngineId) -> Self {
+    pub fn new(engine: EngineIdentifier) -> Self {
         Self { engine }
     }
 }
@@ -881,11 +884,11 @@ impl Message<ReadEngineLifecycleSnapshot> for ManagerStore {
 }
 
 pub struct ReadEngineStatusSnapshot {
-    engine: EngineId,
+    engine: EngineIdentifier,
 }
 
 impl ReadEngineStatusSnapshot {
-    pub fn new(engine: EngineId) -> Self {
+    pub fn new(engine: EngineIdentifier) -> Self {
         Self { engine }
     }
 }
@@ -903,12 +906,12 @@ impl Message<ReadEngineStatusSnapshot> for ManagerStore {
 }
 
 pub struct ReadActiveVersion {
-    engine: EngineId,
+    engine: EngineIdentifier,
     component: ComponentName,
 }
 
 impl ReadActiveVersion {
-    pub fn new(engine: EngineId, component: ComponentName) -> Self {
+    pub fn new(engine: EngineIdentifier, component: ComponentName) -> Self {
         Self { engine, component }
     }
 }

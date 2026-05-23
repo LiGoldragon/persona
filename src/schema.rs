@@ -1,7 +1,7 @@
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode, NotaEnum, NotaRecord};
 use owner_signal_version_handover::{ForceReason, QuarantineReason, RollbackReason};
 use signal_persona as contract;
-use signal_persona_auth::EngineId;
+use signal_persona_origin::EngineIdentifier;
 
 pub use crate::engine_event::{EngineEventBodyKind, EngineEventSourceKind};
 pub use contract::{
@@ -19,7 +19,7 @@ use crate::upgrade::ActiveVersionChangeSource;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineEventReport {
     pub sequence: u64,
-    pub engine: EngineId,
+    pub engine: EngineIdentifier,
     pub source: EngineEventSourceKind,
     pub source_component: Option<ComponentName>,
     pub body: EngineEventBodyReport,
@@ -72,7 +72,7 @@ impl NotaDecode for EngineEventReport {
     fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
         decoder.expect_record_head("EngineEventReport")?;
         let sequence = u64::decode(decoder)?;
-        let engine = EngineId::decode(decoder)?;
+        let engine = EngineIdentifier::decode(decoder)?;
         let source = EngineEventSourceKind::decode(decoder)?;
         let source_component = Option::<ComponentName>::decode(decoder)?;
         let body = EngineEventBodyReport::decode(decoder)?;
@@ -306,7 +306,7 @@ impl NotaDecode for ComponentStatusMissingReport {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetirementAcceptanceReport {
-    pub engine: EngineId,
+    pub engine: EngineIdentifier,
 }
 
 impl NotaEncode for RetirementAcceptanceReport {
@@ -320,7 +320,7 @@ impl NotaEncode for RetirementAcceptanceReport {
 impl NotaDecode for RetirementAcceptanceReport {
     fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
         decoder.expect_record_head("RetirementAcceptanceReport")?;
-        let engine = EngineId::decode(decoder)?;
+        let engine = EngineIdentifier::decode(decoder)?;
         decoder.expect_record_end()?;
         Ok(Self { engine })
     }

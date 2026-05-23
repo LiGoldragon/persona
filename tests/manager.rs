@@ -21,7 +21,7 @@ use signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, EngineStatusScope,
     Query, WirePath,
 };
-use signal_persona_auth::EngineId;
+use signal_persona_origin::EngineIdentifier;
 use signal_version_handover::{
     Date, HandoverAcceptance, HandoverFinalization, HandoverMarker, HandoverRejection,
     HandoverRejectionReason, Operation as HandoverOperation, RecoveryResult,
@@ -407,7 +407,7 @@ fn constraint_engine_manager_is_not_a_zst_actor() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_prepares_upgrade_with_version_handover_request() {
     let fixture = StoreFixture::new("persona-manager-upgrade-prepare");
-    let engine = EngineId::new("engine-upgrade-prepare");
+    let engine = EngineIdentifier::new("engine-upgrade-prepare");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine, store.clone())
         .await
@@ -449,7 +449,7 @@ async fn constraint_engine_manager_prepares_upgrade_with_version_handover_reques
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_records_active_version_after_handover_completion() {
     let fixture = StoreFixture::new("persona-manager-upgrade-complete");
-    let engine = EngineId::new("engine-upgrade-complete");
+    let engine = EngineIdentifier::new("engine-upgrade-complete");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
         .await
@@ -505,7 +505,7 @@ async fn constraint_persona_engine_drives_version_handover_over_component_upgrad
     ));
     wait_for_socket(&current_socket).await;
     wait_for_socket(&next_socket).await;
-    let engine = EngineId::new("engine-upgrade-socket-drive");
+    let engine = EngineIdentifier::new("engine-upgrade-socket-drive");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
         .await
@@ -572,7 +572,7 @@ async fn constraint_persona_engine_drives_version_handover_over_component_upgrad
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_starts_next_component_unit_before_handover_socket_probe() {
     let fixture = StoreFixture::new("persona-manager-start-next-unit-before-handover");
-    let engine = EngineId::new("engine-start-next-unit-before-handover");
+    let engine = EngineIdentifier::new("engine-start-next-unit-before-handover");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let unit_controller = RecordingUnitController::default();
     let manager = EngineManager::start_with_store_and_unit_controller(
@@ -665,7 +665,7 @@ async fn constraint_persona_engine_refuses_handover_when_next_marker_is_stale() 
     ));
     wait_for_socket(&current_socket).await;
     wait_for_socket(&next_socket).await;
-    let engine = EngineId::new("engine-upgrade-next-marker-stale");
+    let engine = EngineIdentifier::new("engine-upgrade-next-marker-stale");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
         .await
@@ -749,7 +749,7 @@ async fn constraint_persona_engine_recovers_current_handover_when_completion_fai
     ));
     wait_for_socket(&current_socket).await;
     wait_for_socket(&next_socket).await;
-    let engine = EngineId::new("engine-handover-completion-recovery");
+    let engine = EngineIdentifier::new("engine-handover-completion-recovery");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
         .await
@@ -835,7 +835,7 @@ async fn constraint_owner_attempt_handover_drives_component_upgrade_socket() {
     ));
     wait_for_socket(&current_socket).await;
     wait_for_socket(&next_socket).await;
-    let engine = EngineId::new("engine-owner-attempt-handover");
+    let engine = EngineIdentifier::new("engine-owner-attempt-handover");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
         .await
@@ -902,7 +902,7 @@ async fn constraint_owner_attempt_handover_drives_component_upgrade_socket() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_refuses_handover_with_quarantined_version() {
     let fixture = StoreFixture::new("persona-manager-quarantine-gates-handover");
-    let engine = EngineId::new("engine-quarantine-gates-handover");
+    let engine = EngineIdentifier::new("engine-quarantine-gates-handover");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine, store.clone())
         .await
@@ -940,7 +940,7 @@ async fn constraint_engine_manager_refuses_handover_with_quarantined_version() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_owner_attempt_handover_reports_quarantined_version() {
     let fixture = StoreFixture::new("persona-manager-owner-attempt-quarantined");
-    let engine = EngineId::new("engine-owner-attempt-quarantined");
+    let engine = EngineIdentifier::new("engine-owner-attempt-quarantined");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine, store.clone())
         .await
@@ -982,7 +982,7 @@ async fn constraint_owner_attempt_handover_reports_quarantined_version() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_applies_owner_force_flip_to_active_selector() {
     let fixture = StoreFixture::new("persona-manager-owner-force-flip");
-    let engine = EngineId::new("engine-owner-force-flip");
+    let engine = EngineIdentifier::new("engine-owner-force-flip");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
         .await
@@ -1035,7 +1035,7 @@ async fn constraint_engine_manager_applies_owner_force_flip_to_active_selector()
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_applies_owner_rollback_to_active_selector() {
     let fixture = StoreFixture::new("persona-manager-owner-rollback");
-    let engine = EngineId::new("engine-owner-rollback");
+    let engine = EngineIdentifier::new("engine-owner-rollback");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
         .await
@@ -1081,7 +1081,7 @@ async fn constraint_engine_manager_applies_owner_rollback_to_active_selector() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_records_owner_quarantine_event() {
     let fixture = StoreFixture::new("persona-manager-owner-quarantine");
-    let engine = EngineId::new("engine-owner-quarantine");
+    let engine = EngineIdentifier::new("engine-owner-quarantine");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
         .await

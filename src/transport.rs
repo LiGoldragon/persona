@@ -15,7 +15,7 @@ use signal_frame::{
     SubReply,
 };
 use signal_persona::engine::{Frame, FrameBody, Operation as EngineRequest, Reply as EngineReply};
-use signal_persona_auth::EngineId;
+use signal_persona_origin::EngineIdentifier;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 use unix_ancillary::UnixStreamExt;
@@ -205,14 +205,14 @@ impl ComponentHandoffEndpoint {
 
 #[derive(Debug, Clone)]
 pub struct ManagerStoreActiveVersionReader {
-    engine: EngineId,
+    engine: EngineIdentifier,
     component_name: signal_persona::ComponentName,
     store: ActorRef<ManagerStore>,
 }
 
 impl ManagerStoreActiveVersionReader {
     pub fn new(
-        engine: EngineId,
+        engine: EngineIdentifier,
         component: EngineComponent,
         store: ActorRef<ManagerStore>,
     ) -> Self {
@@ -220,7 +220,7 @@ impl ManagerStoreActiveVersionReader {
     }
 
     pub fn for_component_name(
-        engine: EngineId,
+        engine: EngineIdentifier,
         component_name: impl Into<String>,
         store: ActorRef<ManagerStore>,
     ) -> Self {
@@ -740,7 +740,7 @@ impl PersonaDaemon {
         let owner_listener = UnixListener::bind(self.owner_endpoint.as_path())?;
         let store = ManagerStore::start(self.manager_store.clone())?;
         let manager = EngineManager::start_with_store_and_unit_controller(
-            EngineId::new("default"),
+            EngineIdentifier::new("default"),
             store.clone(),
             self.unit_controller.clone(),
         )
@@ -881,7 +881,7 @@ impl PersonaDaemonCommand {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaLaunchPlan {
-    engine: EngineId,
+    engine: EngineIdentifier,
     topology: EngineTopology,
     paths: PersonaDaemonPaths,
     manager_socket: PathBuf,
@@ -897,8 +897,8 @@ impl PersonaLaunchPlan {
             return Ok(None);
         };
         let engine = std::env::var("PERSONA_MANAGER_ENGINE_ID")
-            .map(EngineId::new)
-            .unwrap_or_else(|_| EngineId::new("default"));
+            .map(EngineIdentifier::new)
+            .unwrap_or_else(|_| EngineIdentifier::new("default"));
         let paths = Self::paths_from_environment(endpoint)?;
         Ok(Some(Self {
             engine,
@@ -957,7 +957,7 @@ impl PersonaLaunchPlan {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaLaunchPlanInput {
-    pub engine: EngineId,
+    pub engine: EngineIdentifier,
     pub topology: EngineTopology,
     pub paths: PersonaDaemonPaths,
     pub manager_socket: PathBuf,

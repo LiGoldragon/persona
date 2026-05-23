@@ -1,10 +1,10 @@
 use nota_codec::NotaEnum;
 pub use signal_persona::engine::OperationKind as EngineOperationKind;
 use signal_persona::{ComponentName, EnginePhase};
-use signal_persona_auth::EngineId;
 pub use signal_persona_harness::HarnessOperationKind;
 pub use signal_persona_message::MessageOperationKind;
 pub use signal_persona_mind::MindOperationKind;
+use signal_persona_origin::EngineIdentifier;
 pub use signal_persona_system::SystemOperationKind;
 pub use signal_persona_terminal::TerminalOperationKind;
 use strum::EnumDiscriminants;
@@ -39,7 +39,7 @@ impl EngineEventSequence {
 )))]
 pub struct EngineEvent {
     sequence: EngineEventSequence,
-    engine: EngineId,
+    engine: EngineIdentifier,
     source: EngineEventSource,
     body: EngineEventBody,
 }
@@ -58,7 +58,7 @@ impl EngineEvent {
         self.sequence
     }
 
-    pub fn engine(&self) -> &EngineId {
+    pub fn engine(&self) -> &EngineIdentifier {
         &self.engine
     }
 
@@ -78,14 +78,14 @@ impl EngineEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineEventInput {
     pub sequence: EngineEventSequence,
-    pub engine: EngineId,
+    pub engine: EngineIdentifier,
     pub source: EngineEventSource,
     pub body: EngineEventBody,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineEventDraft {
-    engine: EngineId,
+    engine: EngineIdentifier,
     source: EngineEventSource,
     body: EngineEventBody,
 }
@@ -111,7 +111,7 @@ impl EngineEventDraft {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineEventDraftInput {
-    pub engine: EngineId,
+    pub engine: EngineIdentifier,
     pub source: EngineEventSource,
     pub body: EngineEventBody,
 }

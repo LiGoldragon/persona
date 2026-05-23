@@ -19,7 +19,7 @@ use signal_persona::engine::{Operation as EngineRequest, Reply as EngineReply};
 use signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, Query, WirePath,
 };
-use signal_persona_auth::EngineId;
+use signal_persona_origin::EngineIdentifier;
 use signal_version_handover::{Date, HandoverMarker, Time};
 use version_projection::{ComponentName as HandoverComponentName, ContractVersion};
 
@@ -46,7 +46,7 @@ impl StoreFixture {
         self.location.clone()
     }
 
-    fn spawned_event(engine: EngineId, component: &str) -> EngineEventDraft {
+    fn spawned_event(engine: EngineIdentifier, component: &str) -> EngineEventDraft {
         let component = ComponentName::new(component);
         EngineEventDraft::from_input(EngineEventDraftInput {
             engine,
@@ -55,7 +55,7 @@ impl StoreFixture {
         })
     }
 
-    fn unimplemented_event(engine: EngineId, component: &str) -> EngineEventDraft {
+    fn unimplemented_event(engine: EngineIdentifier, component: &str) -> EngineEventDraft {
         let component = ComponentName::new(component);
         EngineEventDraft::from_input(EngineEventDraftInput {
             engine,
@@ -128,7 +128,7 @@ impl UniqueName {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_manager_store_writes_engine_status_through_writer_actor() {
     let fixture = StoreFixture::new("persona-manager-store-writer");
-    let engine = EngineId::new("engine-store-writer");
+    let engine = EngineIdentifier::new("engine-store-writer");
     let status = EngineState::default_catalog().snapshot().clone();
 
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
@@ -159,7 +159,7 @@ async fn constraint_manager_store_writes_engine_status_through_writer_actor() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_persists_component_mutation_through_manager_store() {
     let fixture = StoreFixture::new("persona-engine-manager-store-path");
-    let engine = EngineId::new("engine-manager-store-path");
+    let engine = EngineIdentifier::new("engine-manager-store-path");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
         .await
@@ -221,7 +221,7 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_status() {
     let fixture = StoreFixture::new("persona-engine-manager-restore");
-    let engine = EngineId::new("engine-manager-restore");
+    let engine = EngineIdentifier::new("engine-manager-restore");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
         .await
@@ -276,7 +276,7 @@ async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_event_log_records_typed_manager_events() {
     let fixture = StoreFixture::new("persona-manager-event-log");
-    let engine = EngineId::new("engine-event-log");
+    let engine = EngineIdentifier::new("engine-event-log");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
 
     let first = store
@@ -321,7 +321,7 @@ async fn constraint_engine_event_log_records_typed_manager_events() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_manager_store_projects_active_component_version_from_event_log() {
     let fixture = StoreFixture::new("persona-manager-active-version");
-    let engine = EngineId::new("engine-active-version");
+    let engine = EngineIdentifier::new("engine-active-version");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let target = StoreFixture::spirit_upgrade_target();
     let marker = StoreFixture::spirit_handover_marker(45);
@@ -382,7 +382,7 @@ async fn constraint_manager_store_projects_active_component_version_from_event_l
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_event_log_nota_projection_is_view() {
     let fixture = StoreFixture::new("persona-manager-event-log-projection");
-    let engine = EngineId::new("engine-event-projection");
+    let engine = EngineIdentifier::new("engine-event-projection");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
 
     store
@@ -436,7 +436,7 @@ async fn constraint_engine_event_log_nota_projection_is_view() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables() {
     let fixture = StoreFixture::new("persona-manager-store-snapshot-reduce");
-    let engine = EngineId::new("engine-snapshot-reduce");
+    let engine = EngineIdentifier::new("engine-snapshot-reduce");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
 
     store
@@ -510,7 +510,7 @@ async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables(
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
     let fixture = StoreFixture::new("persona-engine-manager-snapshot-hydrate");
-    let engine = EngineId::new("engine-snapshot-hydrate");
+    let engine = EngineIdentifier::new("engine-snapshot-hydrate");
 
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     store
@@ -568,7 +568,7 @@ async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapshot_truncation() {
     let fixture = StoreFixture::new("persona-manager-store-snapshot-rebuild");
-    let engine = EngineId::new("engine-snapshot-rebuild");
+    let engine = EngineIdentifier::new("engine-snapshot-rebuild");
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
 
     // Append a lifecycle arc that fully exercises both reducers.
@@ -694,7 +694,7 @@ async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapsh
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_manager_store_close_protocol_releases_redb_lock_before_shutdown() {
     let fixture = StoreFixture::new("persona-manager-store-release");
-    let engine = EngineId::new("engine-store-release");
+    let engine = EngineIdentifier::new("engine-store-release");
 
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     store
@@ -748,7 +748,7 @@ fn sorted_status(mut rows: Vec<ComponentStatusSnapshotRow>) -> Vec<ComponentStat
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_spawn() {
     let fixture = StoreFixture::new("persona-manager-orphan-detection");
-    let engine = EngineId::new("engine-orphan-detection");
+    let engine = EngineIdentifier::new("engine-orphan-detection");
 
     // Simulate a prior daemon arc: spawn two components, mark one
     // ready, leave the other in the open arc that the prior daemon

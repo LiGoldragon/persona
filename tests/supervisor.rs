@@ -10,13 +10,13 @@ use persona::supervisor::{
     EngineSupervisor, EngineSupervisorInput, ReadEngineSupervisorSnapshot,
     StartPrototypeSupervision, StopPrototypeSupervision,
 };
-use signal_persona_auth::EngineId;
+use signal_persona_origin::EngineIdentifier;
 
 mod support;
 
 struct SupervisorFixture {
     root: PathBuf,
-    engine: EngineId,
+    engine: EngineIdentifier,
 }
 
 impl SupervisorFixture {
@@ -31,7 +31,7 @@ impl SupervisorFixture {
         std::fs::create_dir_all(&root).expect("fixture root created");
         Self {
             root,
-            engine: EngineId::new("supervisor-test"),
+            engine: EngineIdentifier::new("supervisor-test"),
         }
     }
 
@@ -53,7 +53,7 @@ impl SupervisorFixture {
 
     fn component_capture_for_engine(
         &self,
-        engine: &EngineId,
+        engine: &EngineIdentifier,
         component: EngineComponent,
     ) -> PathBuf {
         self.state_root()
@@ -94,7 +94,7 @@ impl SupervisorFixture {
             .engine_layout_with_topology(self.engine.clone(), topology)
     }
 
-    fn layout_for_engine(&self, engine: EngineId) -> persona::engine::EngineLayout {
+    fn layout_for_engine(&self, engine: EngineIdentifier) -> persona::engine::EngineLayout {
         PersonaDaemonPaths::new(self.state_root(), self.run_root()).engine_layout(engine)
     }
 
@@ -350,8 +350,8 @@ async fn constraint_engine_supervisor_launches_prototype_supervised_components_t
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_supervisor_scopes_spirit_per_engine() {
     let fixture = SupervisorFixture::new("spirit-per-engine-supervision");
-    let first_engine = EngineId::new("spirit-engine-one");
-    let second_engine = EngineId::new("spirit-engine-two");
+    let first_engine = EngineIdentifier::new("spirit-engine-one");
+    let second_engine = EngineIdentifier::new("spirit-engine-two");
     let store = ManagerStore::start(ManagerStoreLocation::new(fixture.manager_store()))
         .expect("manager store starts");
     let first_supervisor = EngineSupervisor::spawn(EngineSupervisor::new(EngineSupervisorInput {

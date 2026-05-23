@@ -11,7 +11,7 @@ use persona::unit::{
 };
 use persona::upgrade::Version;
 use signal_persona::ComponentName;
-use signal_persona_auth::EngineId;
+use signal_persona_origin::EngineIdentifier;
 
 #[derive(Debug, Clone, Default)]
 struct RecordingController {
@@ -63,7 +63,7 @@ impl UnitController for RecordingController {
 
 fn spirit_unit() -> ComponentUnit {
     ComponentUnit::new(
-        EngineId::new("default"),
+        EngineIdentifier::new("default"),
         ComponentName::new("persona-spirit"),
         Version::new("v0.1.1"),
     )
