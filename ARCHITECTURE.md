@@ -335,7 +335,7 @@ Origin is provenance, not authority. Two closed enums type the boundary:
 
 ```
 ConnectionClass (minted from SO_PEERCRED at accept):
-    Owner | NonOwnerUser(Uid) | System(SystemPrincipal)
+    Owner | NonOwnerUser(UnixUserIdentifier) | System(SystemPrincipal)
   | OtherPersona { engine_identifier, host } | Network(NetworkSource)
 
 MessageOrigin (stamped on each accepted message):
