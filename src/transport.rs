@@ -206,7 +206,7 @@ impl ComponentHandoffEndpoint {
 #[derive(Debug, Clone)]
 pub struct ManagerStoreActiveVersionReader {
     engine: EngineId,
-    component: EngineComponent,
+    component_name: signal_persona::ComponentName,
     store: ActorRef<ManagerStore>,
 }
 
@@ -216,9 +216,17 @@ impl ManagerStoreActiveVersionReader {
         component: EngineComponent,
         store: ActorRef<ManagerStore>,
     ) -> Self {
+        Self::for_component_name(engine, component.as_component_name(), store)
+    }
+
+    pub fn for_component_name(
+        engine: EngineId,
+        component_name: impl Into<String>,
+        store: ActorRef<ManagerStore>,
+    ) -> Self {
         Self {
             engine,
-            component,
+            component_name: signal_persona::ComponentName::new(component_name),
             store,
         }
     }
@@ -228,7 +236,7 @@ impl ManagerStoreActiveVersionReader {
             .store
             .ask(ReadActiveVersion::new(
                 self.engine.clone(),
-                self.component.component_name(),
+                self.component_name.clone(),
             ))
             .await
             .map_err(|error| Error::actor("read active component version", error))?;
@@ -236,7 +244,7 @@ impl ManagerStoreActiveVersionReader {
             .map(|version| version.active_version().clone())
             .ok_or_else(|| Error::ActiveVersionMissing {
                 engine: self.engine.as_str().to_owned(),
-                component: self.component.as_component_name().to_owned(),
+                component: self.component_name.as_str().to_owned(),
             })
     }
 }
