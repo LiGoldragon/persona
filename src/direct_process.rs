@@ -11,7 +11,7 @@ use kameo::message::{Context, Message};
 use nota_codec::{Encoder, NotaEncode};
 use signal_persona_auth::EngineId;
 use signal_persona_router::{
-    Actor as RouterBootstrapActor, ActorId as RouterBootstrapActorId,
+    Actor as RouterBootstrapActor, ActorIdentifier as RouterBootstrapActorIdentifier,
     EndpointKind as RouterBootstrapEndpointKind,
     EndpointTransport as RouterBootstrapEndpointTransport,
     GrantDirectMessage as RouterBootstrapGrantDirectMessage,
@@ -1074,7 +1074,7 @@ impl ThreeHarnessRouterBootstrap {
             };
             operations.push(RouterBootstrapOperation::RegisterActor(
                 RouterBootstrapRegisterActor::new(RouterBootstrapActor::new(
-                    RouterBootstrapActorId::new(name),
+                    RouterBootstrapActorIdentifier::new(name),
                     0,
                     Some(RouterBootstrapEndpointTransport::new(
                         RouterBootstrapEndpointKind::HarnessSocket,
@@ -1095,8 +1095,8 @@ impl ThreeHarnessRouterBootstrap {
         ] {
             operations.push(RouterBootstrapOperation::GrantDirectMessage(
                 RouterBootstrapGrantDirectMessage::new(
-                    RouterBootstrapActorId::new(from),
-                    RouterBootstrapActorId::new(to),
+                    RouterBootstrapActorIdentifier::new(from),
+                    RouterBootstrapActorIdentifier::new(to),
                 ),
             ));
         }

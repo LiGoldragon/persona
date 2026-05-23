@@ -502,7 +502,7 @@ dependencies = [
 [[package]]
 name = "nota-config"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/nota-config.git?branch=main#b3e01ea50999ca568240d0e245d53d2dde2f462c"
+source = "git+https://github.com/LiGoldragon/nota-config.git?branch=main#575bcd5ed737abd730888bc504a8ae13cf3f3fd1"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -1011,7 +1011,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-router"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-router.git#e0804f775f964387f487b2645598d9558cc81906"
+source = "git+https://github.com/LiGoldragon/signal-persona-router.git#b61903ca7ed3c85ce4559c3036cc86dc954da6e6"
 dependencies = [
  "nota-codec",
  "nota-config",

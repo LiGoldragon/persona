@@ -705,12 +705,13 @@
         "nixpkgs": "nixpkgs_4"
       },
       "locked": {
-        "lastModified": 1779500320,
-        "narHash": "sha256-jsi0LgDzxR4LU+9I9CoRqn0W6lH6oUZbNHqgFh5xLzk=",
-        "owner": "LiGoldragon",
-        "repo": "persona-router",
-        "rev": "aa9f2a30283f80fb542401367f56135c97e577d7",
-        "type": "github"
+        "lastModified": 1779534378,
+        "narHash": "sha256-cM/ywF1hnUfiIdhThfPrKuMuuIQAUMi8Qja85h9PS3Q=",
+        "ref": "refs/heads/main",
+        "rev": "e4e1408bff490bbe98902a178f543689d48ff0ef",
+        "revCount": 70,
+        "type": "git",
+        "url": "https://github.com/LiGoldragon/persona-router.git"
       },
       "original": {
         "owner": "LiGoldragon",
