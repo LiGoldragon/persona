@@ -142,7 +142,8 @@ impl OwnerEndpoint {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComponentHandoffEndpoint {
-    component: EngineComponent,
+    component_name: String,
+    public_socket_mode: crate::engine::SocketMode,
     public_socket_path: PathBuf,
     control_socket_path: PathBuf,
 }
@@ -153,8 +154,23 @@ impl ComponentHandoffEndpoint {
         public_socket_path: impl Into<PathBuf>,
         control_socket_path: impl Into<PathBuf>,
     ) -> Self {
+        Self::for_component_name(
+            component.as_component_name(),
+            public_socket_path,
+            control_socket_path,
+            component.socket_mode(),
+        )
+    }
+
+    pub fn for_component_name(
+        component_name: impl Into<String>,
+        public_socket_path: impl Into<PathBuf>,
+        control_socket_path: impl Into<PathBuf>,
+        public_socket_mode: crate::engine::SocketMode,
+    ) -> Self {
         Self {
-            component,
+            component_name: component_name.into(),
+            public_socket_mode,
             public_socket_path: public_socket_path.into(),
             control_socket_path: control_socket_path.into(),
         }
@@ -170,8 +186,12 @@ impl ComponentHandoffEndpoint {
         )
     }
 
-    pub fn component(&self) -> EngineComponent {
-        self.component
+    pub fn component_name(&self) -> &str {
+        self.component_name.as_str()
+    }
+
+    pub fn public_socket_mode(&self) -> crate::engine::SocketMode {
+        self.public_socket_mode
     }
 
     pub fn public_socket_path(&self) -> &Path {
@@ -223,13 +243,16 @@ impl ManagerStoreActiveVersionReader {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ComponentHandoffRouteKey {
-    component: EngineComponent,
+    component_name: String,
     version: Version,
 }
 
 impl ComponentHandoffRouteKey {
-    fn new(component: EngineComponent, version: Version) -> Self {
-        Self { component, version }
+    fn new(component_name: impl Into<String>, version: Version) -> Self {
+        Self {
+            component_name: component_name.into(),
+            version,
+        }
     }
 }
 
@@ -241,23 +264,24 @@ struct ComponentHandoffRegistry {
 impl ComponentHandoffRegistry {
     fn register(
         &mut self,
-        component: EngineComponent,
+        component_name: impl Into<String>,
         version: Version,
         receiver: StandardUnixStream,
     ) {
-        self.receivers
-            .insert(ComponentHandoffRouteKey::new(component, version), receiver);
+        self.receivers.insert(
+            ComponentHandoffRouteKey::new(component_name, version),
+            receiver,
+        );
     }
 
-    fn receiver_for(
-        &self,
-        component: EngineComponent,
-        version: &Version,
-    ) -> Result<StandardUnixStream> {
+    fn receiver_for(&self, component_name: &str, version: &Version) -> Result<StandardUnixStream> {
         self.receivers
-            .get(&ComponentHandoffRouteKey::new(component, version.clone()))
+            .get(&ComponentHandoffRouteKey::new(
+                component_name,
+                version.clone(),
+            ))
             .ok_or_else(|| Error::HandoffReceiverUnavailable {
-                component: component.as_component_name().to_owned(),
+                component: component_name.to_owned(),
                 version: version.as_str().to_owned(),
             })?
             .try_clone()
@@ -283,7 +307,7 @@ impl ComponentHandoffRouter {
         let control_listener = UnixListener::bind(endpoint.control_socket_path())?;
         std::fs::set_permissions(
             endpoint.public_socket_path(),
-            std::fs::Permissions::from_mode(endpoint.component().socket_mode().as_octal()),
+            std::fs::Permissions::from_mode(endpoint.public_socket_mode().as_octal()),
         )?;
         std::fs::set_permissions(
             endpoint.control_socket_path(),
@@ -306,7 +330,7 @@ impl ComponentHandoffRouter {
         let stream = stream.into_std()?;
         stream.set_nonblocking(false)?;
         self.registry
-            .register(self.endpoint.component(), version, stream);
+            .register(self.endpoint.component_name(), version, stream);
         Ok(())
     }
 
@@ -316,7 +340,7 @@ impl ComponentHandoffRouter {
         stream.set_nonblocking(false)?;
         let receiver = self
             .registry
-            .receiver_for(self.endpoint.component(), active_version)?;
+            .receiver_for(self.endpoint.component_name(), active_version)?;
         receiver.send_fds(b"persona-public-client", &[&stream])?;
         Ok(())
     }

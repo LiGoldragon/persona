@@ -575,7 +575,7 @@ The first implementation surface lives in `src/transport.rs`:
 
 | Type | Role |
 |---|---|
-| `ComponentHandoffEndpoint` | Names one component's Persona-owned public socket and private control socket. |
+| `ComponentHandoffEndpoint` | Names one component's Persona-owned public socket, private control socket, component name, and public socket mode. Engine-component layouts can derive it directly; out-of-topology components such as `persona-spirit` can provide the same fields by name. |
 | `ComponentHandoffRouter` | Binds the two sockets, registers per-version receiver connections, and sends each accepted public client descriptor to the selected version. |
 | `ManagerStoreActiveVersionReader` | Reads `manager.active-version-snapshot` through `ManagerStore` so runtime handoff loops can select the active version per accepted client. |
 
