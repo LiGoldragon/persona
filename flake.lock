@@ -732,12 +732,13 @@
         ]
       },
       "locked": {
-        "lastModified": 1779498943,
-        "narHash": "sha256-g4H7L1ey6S9+e8w+Pq5hmBjl90tfWeeVJHxmSXqJcdA=",
-        "owner": "LiGoldragon",
-        "repo": "persona-spirit",
-        "rev": "f131c5214290b679da6382e43b0c5e84a661e1ae",
-        "type": "github"
+        "lastModified": 1779528677,
+        "narHash": "sha256-nz4XkiuNyhaakf38OHAKqNyTtITpLuiuICbZvsHrS5c=",
+        "ref": "refs/heads/main",
+        "rev": "85f6e9bcfad56f0823a2a0fe0bd5db104099b69f",
+        "revCount": 60,
+        "type": "git",
+        "url": "https://github.com/LiGoldragon/persona-spirit.git"
       },
       "original": {
         "owner": "LiGoldragon",
@@ -941,12 +942,13 @@
         "nixpkgs": "nixpkgs_6"
       },
       "locked": {
-        "lastModified": 1779026975,
-        "narHash": "sha256-MGaFX1dzCeuqVdHk0KKZ+Eh9uR/y9BuWPh2ewjCYqsw=",
-        "owner": "LiGoldragon",
-        "repo": "signal-persona",
-        "rev": "cd57f48e7007dc16cd7e4586aa4461048e88424c",
-        "type": "github"
+        "lastModified": 1779527527,
+        "narHash": "sha256-WMySVu1NSDC073wzmUJTnuygbSbvhle86N4m6Pw71WE=",
+        "ref": "refs/heads/main",
+        "rev": "4e6d22b3a000cc461a441f157fb87bcedd685470",
+        "revCount": 60,
+        "type": "git",
+        "url": "https://github.com/LiGoldragon/signal-persona.git"
       },
       "original": {
         "owner": "LiGoldragon",

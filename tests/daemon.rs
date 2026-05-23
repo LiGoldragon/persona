@@ -1476,7 +1476,7 @@ async fn constraint_persona_daemon_launches_prototype_supervised_components_thro
             "capture for {component:?}: {capture}"
         );
         assert!(
-            capture.contains("peer_count=6"),
+            capture.contains("peer_count=7"),
             "capture for {component:?}: {capture}"
         );
     }

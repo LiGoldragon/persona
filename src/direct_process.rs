@@ -29,6 +29,51 @@ use crate::engine_event::{
 };
 use crate::manager_store::{AppendEngineEvent, ManagerStore};
 
+mod spirit_daemon_configuration {
+    #[derive(Debug, Clone, PartialEq, Eq, nota_codec::NotaRecord)]
+    pub struct DaemonConfiguration {
+        pub ordinary_socket_path: SocketPath,
+        pub owner_socket_path: SocketPath,
+        pub upgrade_socket_path: SocketPath,
+        pub store_path: StorePath,
+        pub socket_mode: SocketMode,
+        pub bootstrap_policy_path: Option<BootstrapPolicyPath>,
+        pub handoff_control_socket_path: Option<SocketPath>,
+        pub engine_management_socket_path: Option<SocketPath>,
+        pub engine_management_socket_mode: Option<SocketMode>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, nota_codec::NotaTransparent)]
+    pub struct SocketPath(String);
+
+    #[derive(Debug, Clone, PartialEq, Eq, nota_codec::NotaTransparent)]
+    pub struct StorePath(String);
+
+    #[derive(Debug, Clone, PartialEq, Eq, nota_codec::NotaTransparent)]
+    pub struct BootstrapPolicyPath(String);
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, nota_codec::NotaTransparent)]
+    pub struct SocketMode(u32);
+
+    impl SocketPath {
+        pub fn new(value: impl Into<String>) -> Self {
+            Self(value.into())
+        }
+    }
+
+    impl StorePath {
+        pub fn new(value: impl Into<String>) -> Self {
+            Self(value.into())
+        }
+    }
+
+    impl SocketMode {
+        pub const fn new(value: u32) -> Self {
+            Self(value)
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChildProcessId(u32);
 
@@ -463,6 +508,9 @@ impl DirectProcessLauncher {
             EngineComponent::System => {
                 Self::write_system_daemon_configuration_file(envelope).map(Some)
             }
+            EngineComponent::Spirit => {
+                Self::write_spirit_daemon_configuration_file(envelope).map(Some)
+            }
             _ => Ok(None),
         }
     }
@@ -789,6 +837,47 @@ impl DirectProcessLauncher {
             ),
             backend: signal_persona_system::SystemBackend::Niri,
             owner_identity: envelope.owner_identity().clone(),
+        };
+        Self::write_configuration_nota_file(envelope, &configuration)
+    }
+
+    fn write_spirit_daemon_configuration_file(
+        envelope: &ComponentSpawnEnvelope,
+    ) -> Result<PathBuf, DirectProcessFailure> {
+        use spirit_daemon_configuration as spirit;
+
+        let instance = envelope.component_instance().as_str();
+        let owner_socket_path = envelope
+            .domain_socket_path()
+            .with_file_name(format!("owner-{instance}.sock"));
+        let upgrade_socket_path = envelope
+            .domain_socket_path()
+            .with_file_name(format!("{instance}-upgrade.sock"));
+        let configuration = spirit::DaemonConfiguration {
+            ordinary_socket_path: spirit::SocketPath::new(
+                envelope.domain_socket_path().to_string_lossy().into_owned(),
+            ),
+            owner_socket_path: spirit::SocketPath::new(
+                owner_socket_path.to_string_lossy().into_owned(),
+            ),
+            upgrade_socket_path: spirit::SocketPath::new(
+                upgrade_socket_path.to_string_lossy().into_owned(),
+            ),
+            store_path: spirit::StorePath::new(
+                envelope.state_path().to_string_lossy().into_owned(),
+            ),
+            socket_mode: spirit::SocketMode::new(envelope.domain_socket_mode().as_octal()),
+            bootstrap_policy_path: None,
+            handoff_control_socket_path: None,
+            engine_management_socket_path: Some(spirit::SocketPath::new(
+                envelope
+                    .supervision_socket_path()
+                    .to_string_lossy()
+                    .into_owned(),
+            )),
+            engine_management_socket_mode: Some(spirit::SocketMode::new(
+                envelope.supervision_socket_mode().as_octal(),
+            )),
         };
         Self::write_configuration_nota_file(envelope, &configuration)
     }

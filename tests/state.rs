@@ -25,6 +25,7 @@ fn default_catalog_names_engine_components() {
             "persona-terminal",
             "persona-message",
             "persona-introspect",
+            "persona-spirit",
         ]
     );
 }

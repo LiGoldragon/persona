@@ -138,6 +138,7 @@
                   printf 'component=%s\n' "''${PERSONA_COMPONENT:?}"
                   printf 'component_instance=%s\n' "''${PERSONA_COMPONENT_INSTANCE:?}"
                   printf 'process=%s\n' "$$"
+                  printf 'state_path=%s\n' "''${PERSONA_STATE_PATH:?}"
                   printf 'domain_socket=%s\n' "''${PERSONA_DOMAIN_SOCKET_PATH:?}"
                   printf 'supervision_socket=%s\n' "''${PERSONA_SUPERVISION_SOCKET_PATH:?}"
                   printf 'spawn_envelope=%s\n' "''${PERSONA_SPAWN_ENVELOPE:?}"
@@ -209,6 +210,13 @@
               exec ${inputs.persona-introspect.packages.${system}.default}/bin/persona-introspect-daemon "$@"
             '';
           };
+          prototypeSpiritLauncher = mkPrototypeLauncher {
+            name = "persona-spirit-prototype-launcher";
+            actual = "${inputs.persona-spirit.packages.${system}.persona-spirit-daemon}/bin/persona-spirit-daemon";
+            command = ''
+              exec ${inputs.persona-spirit.packages.${system}.persona-spirit-daemon}/bin/persona-spirit-daemon "$@"
+            '';
+          };
           prototypeComponentLaunchers = pkgs.symlinkJoin {
             name = "persona-prototype-component-launchers";
             paths = [
@@ -220,6 +228,7 @@
               prototypeTerminalLauncher
               prototypeMessageLauncher
               prototypeIntrospectLauncher
+              prototypeSpiritLauncher
             ];
           };
           threeHarnessTerminalLauncher = mkPrototypeLauncher {
@@ -1775,6 +1784,16 @@
                   cargoTestExtraArgs = "--test supervisor constraint_engine_supervisor_launches_prototype_supervised_components_through_process_launcher -- --exact";
                 }
               );
+          persona-engine-supervisor-scopes-spirit-per-engine =
+            context.craneLib.cargoTest
+              (
+                context.commonArgs
+                // {
+                  inherit (context) cargoArtifacts;
+                  PERSONA_TEST_SHELL = "${context.pkgs.bash}/bin/bash";
+                  cargoTestExtraArgs = "--test supervisor constraint_engine_supervisor_scopes_spirit_per_engine -- --exact";
+                }
+              );
           persona-engine-supervisor-launches-message-router-topology-without-full-stack =
             context.craneLib.cargoTest
               (
@@ -1935,6 +1954,7 @@
                 export PERSONA_TERMINAL_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-terminal-prototype-launcher
                 export PERSONA_MESSAGE_DAEMON_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-message-prototype-launcher
                 export PERSONA_INTROSPECT_DAEMON_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-introspect-prototype-launcher
+                export PERSONA_SPIRIT_DAEMON_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-spirit-prototype-launcher
 
                 ${self.packages.${system}.default}/bin/persona-daemon "$manager_socket" \
                   > "$work/persona-daemon.stdout" \
@@ -1969,7 +1989,7 @@
                 done
                 grep -Fq "persona-daemon socket=$manager_socket" "$work/persona-daemon.stdout"
 
-                for component in mind router system harness terminal message introspect; do
+                for component in mind router system harness terminal message introspect spirit; do
                   capture="$work/state/default/$component.env"
                   for attempt in $(seq 1 100); do
                     if [ -f "$capture" ]; then
@@ -1980,7 +2000,7 @@
                   test -f "$capture"
                   grep -Fx "engine=default" "$capture"
                   grep -Fx "component=$component" "$capture"
-                  grep -Fx "peer_count=6" "$capture"
+                  grep -Fx "peer_count=7" "$capture"
                   grep -Fx "spawn_envelope=$work/run/default/$component.envelope" "$capture"
                   grep -Fx "manager_socket=$work/persona.sock" "$capture"
                   if [ "$component" = "message" ]; then
@@ -2017,8 +2037,11 @@
                 grep -Fx "actual=${
                   inputs.persona-introspect.packages.${system}.default
                 }/bin/persona-introspect-daemon" "$work/state/default/introspect.env"
+                grep -Fx "actual=${
+                  inputs.persona-spirit.packages.${system}.persona-spirit-daemon
+                }/bin/persona-spirit-daemon" "$work/state/default/spirit.env"
 
-                for socket in mind router system harness terminal message introspect; do
+                for socket in mind router system harness terminal message introspect spirit; do
                   path="$work/run/default/$socket.sock"
                   for attempt in $(seq 1 100); do
                     if [ -S "$path" ]; then

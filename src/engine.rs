@@ -338,6 +338,7 @@ pub enum EngineComponent {
     Terminal,
     Message,
     Introspect,
+    Spirit,
 }
 
 const OPERATIONAL_DELIVERY_COMPONENTS: [EngineComponent; 6] = [
@@ -349,7 +350,7 @@ const OPERATIONAL_DELIVERY_COMPONENTS: [EngineComponent; 6] = [
     EngineComponent::Message,
 ];
 
-const PROTOTYPE_SUPERVISED_COMPONENTS: [EngineComponent; 7] = [
+const PROTOTYPE_SUPERVISED_COMPONENTS: [EngineComponent; 8] = [
     EngineComponent::Mind,
     EngineComponent::Router,
     EngineComponent::System,
@@ -357,6 +358,7 @@ const PROTOTYPE_SUPERVISED_COMPONENTS: [EngineComponent; 7] = [
     EngineComponent::Terminal,
     EngineComponent::Message,
     EngineComponent::Introspect,
+    EngineComponent::Spirit,
 ];
 
 const MESSAGE_ROUTER_COMPONENTS: [EngineComponent; 2] =
@@ -372,7 +374,7 @@ const THREE_HARNESS_CHAIN_COMPONENTS: [EngineComponent; 4] = [
     EngineComponent::Terminal,
 ];
 
-const PROTOTYPE_SUPERVISED_COMPONENT_ENTRIES: [ComponentTopologyEntry; 7] = [
+const PROTOTYPE_SUPERVISED_COMPONENT_ENTRIES: [ComponentTopologyEntry; 8] = [
     ComponentTopologyEntry::for_component(EngineComponent::Mind),
     ComponentTopologyEntry::for_component(EngineComponent::Router),
     ComponentTopologyEntry::for_component(EngineComponent::System),
@@ -380,6 +382,7 @@ const PROTOTYPE_SUPERVISED_COMPONENT_ENTRIES: [ComponentTopologyEntry; 7] = [
     ComponentTopologyEntry::for_component(EngineComponent::Terminal),
     ComponentTopologyEntry::for_component(EngineComponent::Message),
     ComponentTopologyEntry::for_component(EngineComponent::Introspect),
+    ComponentTopologyEntry::for_component(EngineComponent::Spirit),
 ];
 
 const MESSAGE_ROUTER_COMPONENT_ENTRIES: [ComponentTopologyEntry; 2] = [
@@ -408,7 +411,7 @@ impl EngineComponent {
         OPERATIONAL_DELIVERY_COMPONENTS
     }
 
-    pub const fn prototype_supervised_components() -> [Self; 7] {
+    pub const fn prototype_supervised_components() -> [Self; 8] {
         PROTOTYPE_SUPERVISED_COMPONENTS
     }
 
@@ -426,6 +429,7 @@ impl EngineComponent {
             Self::Terminal => signal_persona::ComponentKind::Terminal,
             Self::Message => signal_persona::ComponentKind::Message,
             Self::Introspect => signal_persona::ComponentKind::Introspect,
+            Self::Spirit => signal_persona::ComponentKind::Spirit,
         }
     }
 
@@ -443,6 +447,7 @@ impl EngineComponent {
             "persona-terminal" => Some(Self::Terminal),
             "persona-message" => Some(Self::Message),
             "persona-introspect" => Some(Self::Introspect),
+            "persona-spirit" => Some(Self::Spirit),
             _ => None,
         }
     }
@@ -457,6 +462,7 @@ impl EngineComponent {
             Self::Terminal => SignalComponentName::Terminal,
             Self::Message => SignalComponentName::Message,
             Self::Introspect => SignalComponentName::Introspect,
+            Self::Spirit => SignalComponentName::Spirit,
         }
     }
 
@@ -470,6 +476,7 @@ impl EngineComponent {
             Self::Terminal => "terminal.sock",
             Self::Message => "message.sock",
             Self::Introspect => "introspect.sock",
+            Self::Spirit => "spirit.sock",
         }
     }
 
@@ -483,6 +490,7 @@ impl EngineComponent {
             Self::Terminal => "terminal.supervision.sock",
             Self::Message => "message.supervision.sock",
             Self::Introspect => "introspect.supervision.sock",
+            Self::Spirit => "spirit.supervision.sock",
         }
     }
 
@@ -496,6 +504,7 @@ impl EngineComponent {
             Self::Terminal => "terminal.envelope",
             Self::Message => "message.envelope",
             Self::Introspect => "introspect.envelope",
+            Self::Spirit => "spirit.envelope",
         }
     }
 
@@ -509,6 +518,7 @@ impl EngineComponent {
             Self::Terminal => "terminal.redb",
             Self::Message => "message.redb",
             Self::Introspect => "introspect.redb",
+            Self::Spirit => "spirit.redb",
         }
     }
 
@@ -522,6 +532,7 @@ impl EngineComponent {
             Self::Terminal => "terminal",
             Self::Message => "message",
             Self::Introspect => "introspect",
+            Self::Spirit => "spirit",
         }
     }
 
@@ -535,6 +546,7 @@ impl EngineComponent {
             Self::Terminal => "persona-terminal",
             Self::Message => "persona-message",
             Self::Introspect => "persona-introspect",
+            Self::Spirit => "persona-spirit",
         }
     }
 
@@ -548,6 +560,7 @@ impl EngineComponent {
             Self::Terminal => "PERSONA_TERMINAL_EXECUTABLE",
             Self::Message => "PERSONA_MESSAGE_DAEMON_EXECUTABLE",
             Self::Introspect => "PERSONA_INTROSPECT_DAEMON_EXECUTABLE",
+            Self::Spirit => "PERSONA_SPIRIT_DAEMON_EXECUTABLE",
         }
     }
 
@@ -560,7 +573,8 @@ impl EngineComponent {
             | Self::System
             | Self::Harness
             | Self::Terminal
-            | Self::Introspect => SocketMode::internal_component(),
+            | Self::Introspect
+            | Self::Spirit => SocketMode::internal_component(),
         }
     }
 

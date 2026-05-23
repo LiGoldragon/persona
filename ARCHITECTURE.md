@@ -706,7 +706,7 @@ required binary is missing or ambiguous.
 
 The current prototype bridge is
 `packages.<system>.persona-prototype-component-launchers`: Nix-built launcher
-scripts for the seven default prototype-supervised components plus
+scripts for the eight default prototype-supervised components plus
 `persona-orchestrate` for the `mind-orchestrate` topology. Each launcher adapts
 the manager's common spawn-envelope environment
 (`PERSONA_ENGINE_ID`, `PERSONA_COMPONENT`, `PERSONA_STATE_PATH`,
@@ -1578,6 +1578,7 @@ The apex repo owns tests that prove cross-component shape:
 | persona-daemon owner socket drives two real `persona-spirit-daemon` binaries through a copied-database handover and persists the selector flip | `nix build .#checks.x86_64-linux.persona-daemon-handover-uses-real-spirit-daemon-binaries` |
 | persona-daemon asks a real current `persona-spirit-daemon` to recover after completion failure and keeps `v0.1.0` active | `nix build .#checks.x86_64-linux.persona-daemon-recovers-real-spirit-after-completion-failure` |
 | persona-daemon can hand over from a current Spirit database copy to a next Spirit daemon and leave the copied state readable on the next ordinary socket | `nix build .#checks.x86_64-linux.persona-daemon-hands-over-between-copied-spirit-databases` |
+| engine supervisor scopes `persona-spirit-daemon` per engine with distinct process captures, sockets, and redb paths | `nix build .#checks.x86_64-linux.persona-engine-supervisor-scopes-spirit-per-engine` |
 | persona test docs name live Nix witnesses rather than bare cargo review commands | `nix build .#checks.x86_64-linux.persona-engine-meta-testing-docs-are-nix-backed` |
 | sandbox runner is a Nix-owned app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-script-builds` |
 | sandbox runner supports each first harness name | `nix build .#checks.x86_64-linux.persona-engine-sandbox-supports-all-harnesses` |

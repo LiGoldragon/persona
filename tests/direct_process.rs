@@ -691,6 +691,37 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
 }
 
 #[tokio::test]
+async fn constraint_spirit_launch_writes_engine_scoped_daemon_configuration() {
+    let fixture = DirectProcessFixture::new("spirit-daemon-configuration");
+    let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
+    let envelope = fixture.envelope(EngineComponent::Spirit).await;
+    let envelope_path = envelope.envelope_path().to_path_buf();
+
+    DirectProcessFixture::launch(&launcher, envelope)
+        .await
+        .expect("spirit component launches");
+
+    let configuration_path = envelope_path.with_file_name("spirit-daemon.nota");
+    let configuration_text =
+        std::fs::read_to_string(&configuration_path).expect("spirit configuration was written");
+    assert!(configuration_text.contains("spirit.sock"));
+    assert!(configuration_text.contains("owner-spirit.sock"));
+    assert!(configuration_text.contains("spirit-upgrade.sock"));
+    assert!(configuration_text.contains("spirit.redb"));
+    assert!(configuration_text.contains("spirit.supervision.sock"));
+    assert!(
+        configuration_text.contains("384"),
+        "spirit sockets must be internal-only in prototype supervision: {configuration_text}"
+    );
+
+    DirectProcessFixture::stop(&launcher, EngineComponent::Spirit)
+        .await
+        .expect("spirit component stops");
+    launcher.stop_gracefully().await.expect("launcher stops");
+    let _shutdown_completion = launcher.wait_for_shutdown().await;
+}
+
+#[tokio::test]
 async fn constraint_component_launcher_does_not_block_manager_mailbox() {
     let fixture = DirectProcessFixture::new("mailbox");
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());

@@ -48,8 +48,16 @@ impl SupervisorFixture {
     }
 
     fn component_capture(&self, component: EngineComponent) -> PathBuf {
+        self.component_capture_for_engine(&self.engine, component)
+    }
+
+    fn component_capture_for_engine(
+        &self,
+        engine: &EngineId,
+        component: EngineComponent,
+    ) -> PathBuf {
         self.state_root()
-            .join(self.engine.as_str())
+            .join(engine.as_str())
             .join(format!("{}.env", component.as_str()))
     }
 
@@ -84,6 +92,18 @@ impl SupervisorFixture {
     fn layout_for_topology(&self, topology: EngineTopology) -> persona::engine::EngineLayout {
         PersonaDaemonPaths::new(self.state_root(), self.run_root())
             .engine_layout_with_topology(self.engine.clone(), topology)
+    }
+
+    fn layout_for_engine(&self, engine: EngineId) -> persona::engine::EngineLayout {
+        PersonaDaemonPaths::new(self.state_root(), self.run_root()).engine_layout(engine)
+    }
+
+    fn capture_value<'a>(capture: &'a str, field: &str) -> &'a str {
+        let prefix = format!("{field}=");
+        capture
+            .lines()
+            .find_map(|line| line.strip_prefix(prefix.as_str()))
+            .unwrap_or_else(|| panic!("capture field {field} missing: {capture}"))
     }
 
     async fn wait_for_capture(path: &Path) -> String {
@@ -267,7 +287,7 @@ async fn constraint_engine_supervisor_launches_prototype_supervised_components_t
             "supervision_mode={:o}",
             component.supervision_socket_mode().as_octal()
         )));
-        assert!(capture.contains("peer_count=6"));
+        assert!(capture.contains("peer_count=7"));
     }
 
     let events = store
@@ -323,6 +343,97 @@ async fn constraint_engine_supervisor_launches_prototype_supervised_components_t
         .await
         .expect("supervisor stops");
     let _shutdown_completion = supervisor.wait_for_shutdown().await;
+    store.stop_gracefully().await.expect("manager store stops");
+    let _shutdown_completion = store.wait_for_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn constraint_engine_supervisor_scopes_spirit_per_engine() {
+    let fixture = SupervisorFixture::new("spirit-per-engine-supervision");
+    let first_engine = EngineId::new("spirit-engine-one");
+    let second_engine = EngineId::new("spirit-engine-two");
+    let store = ManagerStore::start(ManagerStoreLocation::new(fixture.manager_store()))
+        .expect("manager store starts");
+    let first_supervisor = EngineSupervisor::spawn(EngineSupervisor::new(EngineSupervisorInput {
+        layout: fixture.layout_for_engine(first_engine.clone()),
+        command_catalog: fixture.command_catalog(),
+        launch_configuration: EngineLaunchConfiguration::empty(),
+        store: Some(store.clone()),
+    }));
+    let second_supervisor = EngineSupervisor::spawn(EngineSupervisor::new(EngineSupervisorInput {
+        layout: fixture.layout_for_engine(second_engine.clone()),
+        command_catalog: fixture.command_catalog(),
+        launch_configuration: EngineLaunchConfiguration::empty(),
+        store: Some(store.clone()),
+    }));
+
+    let first_report = first_supervisor
+        .ask(StartPrototypeSupervision)
+        .await
+        .expect("first engine supervision starts");
+    let second_report = second_supervisor
+        .ask(StartPrototypeSupervision)
+        .await
+        .expect("second engine supervision starts");
+    assert!(
+        first_report
+            .components()
+            .iter()
+            .any(|component| component.component() == EngineComponent::Spirit)
+    );
+    assert!(
+        second_report
+            .components()
+            .iter()
+            .any(|component| component.component() == EngineComponent::Spirit)
+    );
+
+    let first_capture = SupervisorFixture::wait_for_capture(
+        &fixture.component_capture_for_engine(&first_engine, EngineComponent::Spirit),
+    )
+    .await;
+    let second_capture = SupervisorFixture::wait_for_capture(
+        &fixture.component_capture_for_engine(&second_engine, EngineComponent::Spirit),
+    )
+    .await;
+
+    assert!(first_capture.contains("component=spirit"));
+    assert!(second_capture.contains("component=spirit"));
+    assert!(first_capture.contains("state_path="));
+    assert!(second_capture.contains("state_path="));
+    assert!(first_capture.contains("state/spirit-engine-one/spirit.redb"));
+    assert!(second_capture.contains("state/spirit-engine-two/spirit.redb"));
+    assert!(first_capture.contains("domain_socket="));
+    assert!(second_capture.contains("domain_socket="));
+    assert!(first_capture.contains("run/spirit-engine-one/spirit.sock"));
+    assert!(second_capture.contains("run/spirit-engine-two/spirit.sock"));
+    assert_ne!(
+        SupervisorFixture::capture_value(&first_capture, "process"),
+        SupervisorFixture::capture_value(&second_capture, "process")
+    );
+    assert_ne!(
+        SupervisorFixture::capture_value(&first_capture, "state_path"),
+        SupervisorFixture::capture_value(&second_capture, "state_path")
+    );
+
+    first_supervisor
+        .ask(StopPrototypeSupervision)
+        .await
+        .expect("first engine supervision stops");
+    second_supervisor
+        .ask(StopPrototypeSupervision)
+        .await
+        .expect("second engine supervision stops");
+    first_supervisor
+        .stop_gracefully()
+        .await
+        .expect("first supervisor stops");
+    second_supervisor
+        .stop_gracefully()
+        .await
+        .expect("second supervisor stops");
+    let _shutdown_completion = first_supervisor.wait_for_shutdown().await;
+    let _shutdown_completion = second_supervisor.wait_for_shutdown().await;
     store.stop_gracefully().await.expect("manager store stops");
     let _shutdown_completion = store.wait_for_shutdown().await;
 }

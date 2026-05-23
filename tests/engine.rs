@@ -57,6 +57,7 @@ impl TemporaryEngineRoot {
             EngineComponent::Terminal => "persona-terminal-daemon",
             EngineComponent::Message => "persona-message-daemon",
             EngineComponent::Introspect => "persona-introspect-daemon",
+            EngineComponent::Spirit => "persona-spirit-daemon",
         };
         ComponentCommand::executable(ExecutablePath::new(format!(
             "{}/nix-closure/{command_name}/bin/{command_name}",
@@ -301,13 +302,15 @@ fn constraint_three_harness_chain_topology_allocates_distinct_instances() {
 #[test]
 fn constraint_prototype_supervision_includes_introspect_but_delivery_does_not() {
     assert_eq!(EngineComponent::operational_delivery_components().len(), 6);
-    assert_eq!(EngineComponent::prototype_supervised_components().len(), 7);
+    assert_eq!(EngineComponent::prototype_supervised_components().len(), 8);
     assert!(
         !EngineComponent::operational_delivery_components().contains(&EngineComponent::Introspect)
     );
     assert!(
         EngineComponent::prototype_supervised_components().contains(&EngineComponent::Introspect)
     );
+    assert!(!EngineComponent::operational_delivery_components().contains(&EngineComponent::Spirit));
+    assert!(EngineComponent::prototype_supervised_components().contains(&EngineComponent::Spirit));
 }
 
 #[test]
@@ -323,6 +326,7 @@ fn constraint_engine_layout_assigns_socket_modes_by_component_boundary() {
         EngineComponent::Harness,
         EngineComponent::Terminal,
         EngineComponent::Introspect,
+        EngineComponent::Spirit,
     ] {
         let socket = layout
             .component(component)
@@ -405,7 +409,7 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     assert!(envelope.manager_socket().ends_with("persona.sock"));
     assert_eq!(envelope.domain_socket_mode().as_octal(), 0o600);
     assert_eq!(envelope.supervision_socket_mode().as_octal(), 0o600);
-    assert_eq!(envelope.peers().len(), 6);
+    assert_eq!(envelope.peers().len(), 7);
     assert!(
         envelope
             .peers()
@@ -426,6 +430,13 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
             .iter()
             .any(|peer| peer.component() == EngineComponent::Introspect
                 && peer.domain_socket_path().ends_with("introspect.sock"))
+    );
+    assert!(
+        envelope
+            .peers()
+            .iter()
+            .any(|peer| peer.component() == EngineComponent::Spirit
+                && peer.domain_socket_path().ends_with("spirit.sock"))
     );
 
     let signal_envelope = envelope.signal_spawn_envelope();
@@ -462,7 +473,7 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
         signal_envelope.engine_management_socket_mode.into_u32(),
         0o600
     );
-    assert_eq!(signal_envelope.peer_sockets.len(), 6);
+    assert_eq!(signal_envelope.peer_sockets.len(), 7);
 
     let mut encoder = Encoder::new();
     signal_envelope

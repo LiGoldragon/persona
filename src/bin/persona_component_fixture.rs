@@ -71,11 +71,12 @@ impl FixtureProcess {
         let component_instance = Self::required_env("PERSONA_COMPONENT_INSTANCE");
         let capture = state_dir.join(format!("{component_instance}.env"));
         let text = format!(
-            "engine={}\ncomponent={}\ncomponent_instance={}\nprocess={}\ndomain_socket={}\nsupervision_socket={}\nspawn_envelope={}\nmanager_socket={}\ndomain_mode={}\nsupervision_mode={}\npeer_count={}\n",
+            "engine={}\ncomponent={}\ncomponent_instance={}\nprocess={}\nstate_path={}\ndomain_socket={}\nsupervision_socket={}\nspawn_envelope={}\nmanager_socket={}\ndomain_mode={}\nsupervision_mode={}\npeer_count={}\n",
             Self::required_env("PERSONA_ENGINE_ID"),
             self.component.as_str(),
             component_instance,
             std::process::id(),
+            Self::required_env("PERSONA_STATE_PATH"),
             self.domain_socket.path().display(),
             self.supervision_socket.path().display(),
             self.spawn_envelope,
@@ -122,6 +123,7 @@ impl FixtureComponent {
             "terminal" => ComponentKind::Terminal,
             "message" => ComponentKind::Message,
             "introspect" => ComponentKind::Introspect,
+            "spirit" => ComponentKind::Spirit,
             other => panic!("unknown component name: {other}"),
         };
         Self {
