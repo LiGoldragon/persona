@@ -66,28 +66,6 @@ pub enum Error {
     #[error("component unit control: {0}")]
     ComponentUnit(#[from] crate::unit::UnitFailure),
 
-    #[error("component upgrade orchestration requires a manager store")]
-    UpgradeRequiresManagerStore,
-
-    #[error("handover marker component mismatch: expected {expected}, got {actual}")]
-    HandoverMarkerComponentMismatch { expected: String, actual: String },
-
-    #[error("next handover marker mismatch on {field}: expected {expected}, got {actual}")]
-    NextHandoverMarkerMismatch {
-        field: &'static str,
-        expected: String,
-        actual: String,
-    },
-
-    #[error(
-        "component version is quarantined: component={component}, version={version}, reason={reason:?}"
-    )]
-    ComponentVersionQuarantined {
-        component: String,
-        version: String,
-        reason: owner_signal_version_handover::QuarantineReason,
-    },
-
     #[error("active version is missing: engine={engine}, component={component}")]
     ActiveVersionMissing { engine: String, component: String },
 

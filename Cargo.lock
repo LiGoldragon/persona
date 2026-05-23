@@ -492,7 +492,7 @@ dependencies = [
 [[package]]
 name = "nota-codec"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/nota-codec.git?branch=main#538555e895529e2884b7d37d20c66aadc2a49c08"
+source = "git+https://github.com/LiGoldragon/nota-codec.git?branch=main#c366e3ccb75b10840062e4d4c289368afce28bf5"
 dependencies = [
  "camino",
  "nota-derive",
@@ -512,7 +512,7 @@ dependencies = [
 [[package]]
 name = "nota-derive"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/nota-derive.git?branch=main#8323149593b95d6e90c1fdde54e9aba58803337c"
+source = "git+https://github.com/LiGoldragon/nota-derive.git?branch=main#f22a947a94024be2d9b60eba3ee51dd492b29852"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -547,14 +547,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "owner-signal-version-handover"
+name = "owner-signal-upgrade"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/owner-signal-version-handover.git?branch=main#1a78b08162a7325c2712e89ba2813644bbafa29c"
+source = "git+https://github.com/LiGoldragon/owner-signal-upgrade.git?branch=main#e1fbc8ccea0b4e7dd5ab07fa0b73bc9f5cf2403e"
 dependencies = [
  "nota-codec",
  "rkyv",
  "signal-frame",
  "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
+ "signal-upgrade",
  "thiserror",
  "version-projection",
 ]
@@ -578,7 +579,7 @@ dependencies = [
  "kameo 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc",
  "nota-codec",
- "owner-signal-version-handover",
+ "owner-signal-upgrade",
  "persona-spirit",
  "redb",
  "rkyv",
@@ -596,11 +597,12 @@ dependencies = [
  "signal-persona-system",
  "signal-persona-terminal",
  "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
- "signal-version-handover",
+ "signal-upgrade",
  "strum",
  "thiserror",
  "tokio",
  "unix-ancillary",
+ "upgrade",
  "version-projection",
  "zbus",
 ]
@@ -1086,6 +1088,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-upgrade"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-upgrade.git?branch=main#b5eb0e8eba94443dfb5398167f97e089fc3f533e"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "signal-frame",
+ "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
+ "thiserror",
+ "version-projection",
+]
+
+[[package]]
 name = "signal-version-handover"
 version = "0.1.0"
 source = "git+https://github.com/LiGoldragon/signal-version-handover.git?branch=main#f1a1473b554cb63fbe77efc16fb8be7fd5bc2b33"
@@ -1321,6 +1336,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "upgrade"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/upgrade.git?branch=main#17ff93037afe6a320a876a496936cee63685e727"
+dependencies = [
+ "nota-codec",
+ "owner-signal-upgrade",
+ "rkyv",
+ "sema",
+ "sema-engine",
+ "signal-executor",
+ "signal-frame",
+ "signal-persona-spirit",
+ "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
+ "signal-upgrade",
+ "thiserror",
+ "tokio",
+ "version-projection",
+]
+
+[[package]]
 name = "uuid"
 version = "1.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1334,7 +1369,7 @@ dependencies = [
 [[package]]
 name = "version-projection"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/version-projection.git?branch=main#190a25f1d86bd5bad20def614c670593601ad0b5"
+source = "git+https://github.com/LiGoldragon/version-projection.git?branch=main#7ce14f0c34cc18b140dfe36a64fcbfdfb2952d21"
 dependencies = [
  "nota-codec",
  "rkyv",

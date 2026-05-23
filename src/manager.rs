@@ -1,11 +1,6 @@
 use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use owner_signal_version_handover::{
-    ForcedFlip, HandoverSucceeded, Operation as OwnerVersionHandoverOperation, Quarantined,
-    Rejected, RejectionReason, Reply as OwnerVersionReply, RequestUnimplemented, RolledBack,
-    UnimplementedReason,
-};
 use signal_persona::engine::{Operation, Reply};
 use signal_persona::{
     ActionRejection, ActionRejectionReason, ComponentName, ComponentShutdown, ComponentStartup,
@@ -13,26 +8,19 @@ use signal_persona::{
     RetirementRejection, RetirementRejectionReason,
 };
 use signal_persona_origin::EngineIdentifier;
-use signal_version_handover::HandoverMarker;
 use std::sync::Arc;
 
-use crate::engine_event::{
-    EngineEventBody, EngineEventDraft, EngineEventDraftInput, EngineEventSource,
-};
 use crate::error::{Error, Result};
 use crate::manager_store::{
-    AppendEngineEvent, AppendOrphansFromEventLog, ComponentStatusSnapshotRow, ManagerStore,
-    PersistEngineRecord, ReadEngineEvents, ReadEngineRecord, ReadEngineStatusSnapshot,
+    AppendOrphansFromEventLog, ComponentStatusSnapshotRow, ManagerStore, PersistEngineRecord,
+    ReadEngineRecord, ReadEngineStatusSnapshot,
 };
 use crate::state::EngineState;
 use crate::unit::{
     ComponentUnit, ComponentUnitManager, ManualUnitController, StartUnit, UnitController,
     UnitReceipt,
 };
-use crate::upgrade::{
-    ActiveVersionChanged, DrivenHandover, HandoverDriver, Prepared, PreparedEvent, Target,
-    VersionQuarantined,
-};
+use crate::upgrade::Version;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ManagerEvent {
@@ -40,11 +28,6 @@ pub enum ManagerEvent {
     EngineRequestAccepted,
     EngineReplyCreated,
     TraceRead,
-    UpgradePrepared,
-    ActiveVersionChanged,
-    VersionHandoverDriven,
-    VersionAuthorityApplied,
-    VersionQuarantined,
     ComponentUnitStarted,
     Stopping,
 }
@@ -240,175 +223,21 @@ impl EngineManager {
         Ok(())
     }
 
-    async fn append_event(&self, body: EngineEventBody) -> Result<()> {
-        let Some(store) = &self.store else {
-            return Err(Error::UpgradeRequiresManagerStore);
-        };
-        store
-            .ask(AppendEngineEvent::new(EngineEventDraft::from_input(
-                EngineEventDraftInput {
-                    engine: self.engine.clone(),
-                    source: EngineEventSource::Manager,
-                    body,
-                },
-            )))
-            .await
-            .map_err(|error| Error::actor("append manager upgrade event", error))?;
-        Ok(())
-    }
-
-    async fn prepare_upgrade(&mut self, target: Target) -> Result<Prepared> {
-        self.ensure_target_not_quarantined(&target).await?;
-        let prepared = target.prepare();
-        self.append_event(EngineEventBody::UpgradePrepared(
-            PreparedEvent::from_target(prepared.target()),
-        ))
-        .await?;
-        self.events.push(ManagerEvent::UpgradePrepared);
-        Ok(prepared)
-    }
-
-    async fn complete_upgrade(
+    pub async fn start_component_unit(
         &mut self,
-        target: Target,
-        marker: HandoverMarker,
-    ) -> Result<ActiveVersionChanged> {
-        self.ensure_target_not_quarantined(&target).await?;
-        if marker.component.as_str() != target.component().as_str() {
-            return Err(Error::HandoverMarkerComponentMismatch {
-                expected: target.component().as_str().to_string(),
-                actual: marker.component.as_str().to_string(),
-            });
-        }
-        let change = ActiveVersionChanged::from_marker(&target, &marker);
-        self.append_event(EngineEventBody::ActiveVersionChanged(change.clone()))
-            .await?;
-        self.events.push(ManagerEvent::ActiveVersionChanged);
-        Ok(change)
-    }
-
-    async fn drive_version_handover(&mut self, target: Target) -> Result<DrivenHandover> {
-        self.prepare_upgrade(target.clone()).await?;
-        self.start_next_component_unit(&target).await?;
-        let driven = HandoverDriver::from_target(target.clone())
-            .drive_current_side()
-            .await?;
-        self.complete_upgrade(target, driven.marker().clone())
-            .await?;
-        self.events.push(ManagerEvent::VersionHandoverDriven);
-        Ok(driven)
-    }
-
-    async fn start_next_component_unit(&mut self, target: &Target) -> Result<UnitReceipt> {
-        let unit = ComponentUnit::new(
-            self.engine.clone(),
-            target.component().clone(),
-            target.next_version().clone(),
-        );
+        component: ComponentName,
+        version: Version,
+    ) -> Result<UnitReceipt> {
+        let unit = ComponentUnit::new(self.engine.clone(), component, version);
         let receipt = match self.unit_manager.ask(StartUnit::new(unit)).await {
             Ok(receipt) => receipt,
-            Err(kameo::error::SendError::HandlerError(failure)) => return Err(failure.into()),
+            Err(kameo::error::SendError::HandlerError(failure)) => {
+                return Err(failure.into());
+            }
             Err(error) => return Err(Error::actor("start next component unit", error)),
         };
         self.events.push(ManagerEvent::ComponentUnitStarted);
         Ok(receipt)
-    }
-
-    async fn ensure_target_not_quarantined(&self, target: &Target) -> Result<()> {
-        let Some(store) = &self.store else {
-            return Err(Error::UpgradeRequiresManagerStore);
-        };
-        let events = store
-            .ask(ReadEngineEvents::new(self.engine.clone()))
-            .await
-            .map_err(|error| Error::actor("read quarantine events", error))?;
-        for event in events {
-            let EngineEventBody::VersionQuarantined(quarantine) = event.body() else {
-                continue;
-            };
-            if quarantine.component() != target.component() {
-                continue;
-            }
-            if quarantine.version() == target.current_version()
-                || quarantine.version() == target.next_version()
-            {
-                return Err(Error::ComponentVersionQuarantined {
-                    component: target.component().as_str().to_string(),
-                    version: quarantine.version().as_str().to_string(),
-                    reason: quarantine.reason(),
-                });
-            }
-        }
-        Ok(())
-    }
-
-    async fn handle_owner_version_handover(
-        &mut self,
-        operation: OwnerVersionHandoverOperation,
-    ) -> Result<OwnerVersionReply> {
-        let reply = match operation {
-            OwnerVersionHandoverOperation::AttemptHandover(order) => {
-                let target = Target::from_owner_attempt(&order);
-                match self.drive_version_handover(target).await {
-                    Ok(driven) => OwnerVersionReply::HandoverSucceeded(HandoverSucceeded {
-                        component: order.component,
-                        active_version: order.next.version,
-                        commit_sequence: driven.finalization().finalized_marker.commit_sequence,
-                    }),
-                    Err(error) => OwnerVersionReply::Rejected(Rejected {
-                        component: order.component,
-                        reason: Self::handover_rejection_reason(&error),
-                    }),
-                }
-            }
-            OwnerVersionHandoverOperation::ForceFlip(order) => {
-                let change = ActiveVersionChanged::from_force_flip(&order);
-                self.append_event(EngineEventBody::ActiveVersionChanged(change))
-                    .await?;
-                self.events.push(ManagerEvent::VersionAuthorityApplied);
-                OwnerVersionReply::FlipForced(ForcedFlip {
-                    component: order.component,
-                    active_version: order.target_version,
-                })
-            }
-            OwnerVersionHandoverOperation::Rollback(order) => {
-                let change = ActiveVersionChanged::from_rollback(&order);
-                self.append_event(EngineEventBody::ActiveVersionChanged(change))
-                    .await?;
-                self.events.push(ManagerEvent::VersionAuthorityApplied);
-                OwnerVersionReply::RolledBack(RolledBack {
-                    component: order.component,
-                    active_version: order.restore_version,
-                })
-            }
-            OwnerVersionHandoverOperation::Quarantine(order) => {
-                let event = VersionQuarantined::from_quarantine(&order);
-                self.append_event(EngineEventBody::VersionQuarantined(event))
-                    .await?;
-                self.events.push(ManagerEvent::VersionQuarantined);
-                OwnerVersionReply::Quarantined(Quarantined {
-                    component: order.component,
-                    version: order.version,
-                })
-            }
-            OwnerVersionHandoverOperation::Tap(_) | OwnerVersionHandoverOperation::Untap(_) => {
-                OwnerVersionReply::RequestUnimplemented(RequestUnimplemented {
-                    reason: UnimplementedReason::IntegrationNotLanded,
-                })
-            }
-        };
-        Ok(reply)
-    }
-
-    fn handover_rejection_reason(error: &Error) -> RejectionReason {
-        match error {
-            Error::ComponentVersionQuarantined { .. } => RejectionReason::VersionQuarantined,
-            Error::Io(_) => RejectionReason::UpgradeSocketUnavailable,
-            Error::UnexpectedSignalFrame { .. } | Error::HandoverMarkerComponentMismatch { .. } => {
-                RejectionReason::HandoverRejected
-            }
-            _ => RejectionReason::HandoverRejected,
-        }
     }
 
     fn read_events(&mut self, probe: TraceProbe) -> Vec<ManagerEvent> {
@@ -471,95 +300,27 @@ impl Message<HandleEngineRequest> for EngineManager {
 }
 
 #[derive(Debug, Clone)]
-pub struct PrepareUpgrade {
-    target: Target,
+pub struct StartComponentUnit {
+    component: ComponentName,
+    version: Version,
 }
 
-impl PrepareUpgrade {
-    pub fn new(target: Target) -> Self {
-        Self { target }
+impl StartComponentUnit {
+    pub fn new(component: ComponentName, version: Version) -> Self {
+        Self { component, version }
     }
 }
 
-impl Message<PrepareUpgrade> for EngineManager {
-    type Reply = Result<Prepared>;
+impl Message<StartComponentUnit> for EngineManager {
+    type Reply = Result<UnitReceipt>;
 
     async fn handle(
         &mut self,
-        message: PrepareUpgrade,
+        message: StartComponentUnit,
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.prepare_upgrade(message.target).await
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct CompleteUpgrade {
-    target: Target,
-    marker: HandoverMarker,
-}
-
-impl CompleteUpgrade {
-    pub fn new(target: Target, marker: HandoverMarker) -> Self {
-        Self { target, marker }
-    }
-}
-
-impl Message<CompleteUpgrade> for EngineManager {
-    type Reply = Result<ActiveVersionChanged>;
-
-    async fn handle(
-        &mut self,
-        message: CompleteUpgrade,
-        _context: &mut Context<Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.complete_upgrade(message.target, message.marker).await
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct DriveVersionHandover {
-    target: Target,
-}
-
-impl DriveVersionHandover {
-    pub fn new(target: Target) -> Self {
-        Self { target }
-    }
-}
-
-impl Message<DriveVersionHandover> for EngineManager {
-    type Reply = Result<DrivenHandover>;
-
-    async fn handle(
-        &mut self,
-        message: DriveVersionHandover,
-        _context: &mut Context<Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.drive_version_handover(message.target).await
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct HandleOwnerVersionHandover {
-    operation: OwnerVersionHandoverOperation,
-}
-
-impl HandleOwnerVersionHandover {
-    pub fn new(operation: OwnerVersionHandoverOperation) -> Self {
-        Self { operation }
-    }
-}
-
-impl Message<HandleOwnerVersionHandover> for EngineManager {
-    type Reply = Result<OwnerVersionReply>;
-
-    async fn handle(
-        &mut self,
-        message: HandleOwnerVersionHandover,
-        _context: &mut Context<Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.handle_owner_version_handover(message.operation).await
+        self.start_component_unit(message.component, message.version)
+            .await
     }
 }
 

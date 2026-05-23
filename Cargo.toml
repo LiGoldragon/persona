@@ -23,12 +23,11 @@ path = "src/bin/persona_daemon.rs"
 kameo                  = { version = "0.20", default-features = false }
 libc                   = "0.2"
 nota-codec             = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }
-owner-signal-version-handover = { git = "https://github.com/LiGoldragon/owner-signal-version-handover.git", branch = "main" }
+owner-signal-upgrade   = { git = "https://github.com/LiGoldragon/owner-signal-upgrade.git", branch = "main" }
 redb                   = "4"
 rkyv                   = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
 sema                   = { git = "https://github.com/LiGoldragon/sema.git" }
 signal-frame           = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "main" }
-signal-version-handover = { git = "https://github.com/LiGoldragon/signal-version-handover.git", branch = "main" }
 signal-core            = { git = "https://github.com/LiGoldragon/signal-core.git" }
 signal-persona          = { git = "https://github.com/LiGoldragon/signal-persona.git" }
 signal-persona-origin     = { git = "https://github.com/LiGoldragon/signal-persona-origin.git" }
@@ -43,6 +42,7 @@ strum                  = { version = "0.28", features = ["derive"] }
 thiserror              = "2"
 tokio                  = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "process", "time"] }
 unix-ancillary         = "0.2"
+upgrade                = { git = "https://github.com/LiGoldragon/upgrade.git", branch = "main" }
 version-projection     = { git = "https://github.com/LiGoldragon/version-projection.git", branch = "main" }
 zbus                   = { version = "5.15", default-features = false, features = ["tokio"] }
 
@@ -50,6 +50,7 @@ zbus                   = { version = "5.15", default-features = false, features 
 persona-spirit = { git = "https://github.com/LiGoldragon/persona-spirit.git", branch = "main" }
 signal-persona-spirit = { git = "https://github.com/LiGoldragon/signal-persona-spirit.git", branch = "main" }
 signal-sema = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "main" }
+signal-upgrade = { git = "https://github.com/LiGoldragon/signal-upgrade.git", branch = "main" }
 
 # ─── Wire-test shim binaries (for nix-chained tests) ──────
 # These exercise signal-persona-message end-to-end through

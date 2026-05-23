@@ -6,10 +6,6 @@ use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::os::unix::net::UnixStream as StandardUnixStream;
 
 use kameo::actor::ActorRef;
-use owner_signal_version_handover::{
-    Frame as OwnerFrame, FrameBody as OwnerFrameBody, Operation as OwnerRequest,
-    Reply as OwnerReply,
-};
 use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
     SubReply,
@@ -23,7 +19,7 @@ use unix_ancillary::UnixStreamExt;
 use crate::engine::{ComponentLayout, EngineComponent, EngineTopology, PersonaDaemonPaths};
 use crate::error::{Error, Result};
 use crate::launch::{ComponentCommandCatalog, EngineLaunchConfiguration};
-use crate::manager::{EngineManager, HandleEngineRequest, HandleOwnerVersionHandover};
+use crate::manager::{EngineManager, HandleEngineRequest};
 use crate::manager_store::{ManagerStore, ManagerStoreLocation, ReadActiveVersion};
 use crate::supervisor::{EngineSupervisor, EngineSupervisorInput, StartPrototypeSupervision};
 use crate::unit::{ManualUnitController, UnitController};
@@ -68,53 +64,6 @@ impl PersonaEndpoint {
             Some(path) => Self::from_path(path),
             None => Self::from_environment(),
         }
-    }
-
-    pub fn from_path(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
-    }
-
-    pub fn as_path(&self) -> &Path {
-        self.path.as_path()
-    }
-
-    fn unlink_existing_socket(&self) -> Result<()> {
-        match std::fs::symlink_metadata(&self.path) {
-            Ok(metadata) if metadata.file_type().is_socket() => {
-                std::fs::remove_file(&self.path)?;
-                Ok(())
-            }
-            Ok(_) => Err(Error::SocketPathOccupied {
-                path: self.path.clone(),
-            }),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(error.into()),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OwnerEndpoint {
-    path: PathBuf,
-}
-
-impl OwnerEndpoint {
-    pub fn from_environment_or_manager(manager: &PersonaEndpoint) -> Self {
-        match std::env::var_os("PERSONA_OWNER_SOCKET") {
-            Some(path) => Self::from_path(path),
-            None => Self::from_manager(manager),
-        }
-    }
-
-    pub fn from_manager(manager: &PersonaEndpoint) -> Self {
-        let manager_path = manager.as_path();
-        let parent = manager_path.parent().unwrap_or_else(|| Path::new("."));
-        let stem = manager_path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .and_then(|name| name.strip_suffix(".sock"))
-            .unwrap_or("persona");
-        Self::from_path(parent.join(format!("{stem}-owner.sock")))
     }
 
     pub fn from_path(path: impl Into<PathBuf>) -> Self {
@@ -477,120 +426,6 @@ impl Default for PersonaFrameCodec {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OwnerFrameCodec {
-    maximum_frame_bytes: usize,
-}
-
-impl OwnerFrameCodec {
-    pub const fn new(maximum_frame_bytes: usize) -> Self {
-        Self {
-            maximum_frame_bytes,
-        }
-    }
-
-    pub async fn read_frame(&self, stream: &mut UnixStream) -> Result<OwnerFrame> {
-        let mut prefix = [0_u8; 4];
-        stream.read_exact(&mut prefix).await?;
-        let length = u32::from_be_bytes(prefix) as usize;
-        if length > self.maximum_frame_bytes {
-            return Err(Error::DaemonFrameTooLarge { bytes: length });
-        }
-
-        let mut bytes = Vec::with_capacity(4 + length);
-        bytes.extend_from_slice(&prefix);
-        bytes.resize(4 + length, 0);
-        stream.read_exact(&mut bytes[4..]).await?;
-
-        Ok(OwnerFrame::decode_length_prefixed(&bytes)?)
-    }
-
-    pub async fn write_frame(&self, stream: &mut UnixStream, frame: &OwnerFrame) -> Result<()> {
-        let bytes = frame.encode_length_prefixed()?;
-        stream.write_all(&bytes).await?;
-        stream.flush().await?;
-        Ok(())
-    }
-
-    pub fn request_frame(&self, request: OwnerRequest) -> OwnerFrame {
-        OwnerFrame::new(OwnerFrameBody::Request {
-            exchange: self.initial_exchange(),
-            request: Request::from_payload(request),
-        })
-    }
-
-    pub fn reply_frame(&self, exchange: ExchangeIdentifier, reply: OwnerReply) -> OwnerFrame {
-        OwnerFrame::new(OwnerFrameBody::Reply {
-            exchange,
-            reply: Reply::committed(NonEmpty::single(SubReply::Ok(reply))),
-        })
-    }
-
-    pub fn request_from_frame(&self, frame: OwnerFrame) -> Result<ReceivedOwnerRequest> {
-        match frame.into_body() {
-            OwnerFrameBody::Request { exchange, request } => {
-                let mut operations = request.payloads.into_vec();
-                if operations.len() != 1 {
-                    return Err(Error::UnexpectedSignalFrame {
-                        got: format!(
-                            "persona owner endpoint currently accepts one operation, got {}",
-                            operations.len()
-                        ),
-                    });
-                }
-                Ok(ReceivedOwnerRequest::new(exchange, operations.remove(0)))
-            }
-            other => Err(Error::UnexpectedSignalFrame {
-                got: format!("{other:?}"),
-            }),
-        }
-    }
-
-    pub fn reply_from_frame(&self, frame: OwnerFrame) -> Result<OwnerReply> {
-        match frame.into_body() {
-            OwnerFrameBody::Reply { reply, .. } => match reply {
-                Reply::Accepted { per_operation, .. } => {
-                    let mut operations = per_operation.into_vec();
-                    if operations.len() != 1 {
-                        return Err(Error::UnexpectedSignalFrame {
-                            got: format!(
-                                "persona owner client currently accepts one reply operation, got {}",
-                                operations.len()
-                            ),
-                        });
-                    }
-                    match operations.remove(0) {
-                        SubReply::Ok(payload) => Ok(payload),
-                        other => Err(Error::UnexpectedSignalFrame {
-                            got: format!("{other:?}"),
-                        }),
-                    }
-                }
-                Reply::Rejected { reason } => Err(Error::UnexpectedSignalFrame {
-                    got: format!("{reason:?}"),
-                }),
-            },
-            other => Err(Error::UnexpectedSignalFrame {
-                got: format!("{other:?}"),
-            }),
-        }
-    }
-
-    fn initial_exchange(&self) -> ExchangeIdentifier {
-        ExchangeIdentifier::new(
-            SessionEpoch::new(1),
-            ExchangeLane::Connector,
-            LaneSequence::first(),
-        )
-    }
-}
-
-impl Default for OwnerFrameCodec {
-    fn default() -> Self {
-        Self::new(1024 * 1024)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReceivedEngineRequest {
     exchange: ExchangeIdentifier,
@@ -607,26 +442,6 @@ impl ReceivedEngineRequest {
     }
 
     pub fn into_request(self) -> EngineRequest {
-        self.request
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReceivedOwnerRequest {
-    exchange: ExchangeIdentifier,
-    request: OwnerRequest,
-}
-
-impl ReceivedOwnerRequest {
-    pub fn new(exchange: ExchangeIdentifier, request: OwnerRequest) -> Self {
-        Self { exchange, request }
-    }
-
-    pub fn exchange(&self) -> ExchangeIdentifier {
-        self.exchange
-    }
-
-    pub fn into_request(self) -> OwnerRequest {
         self.request
     }
 }
@@ -659,37 +474,12 @@ impl PersonaClient {
 }
 
 #[derive(Debug, Clone)]
-pub struct OwnerClient {
-    endpoint: OwnerEndpoint,
-    codec: OwnerFrameCodec,
-}
-
-impl OwnerClient {
-    pub fn new(endpoint: OwnerEndpoint) -> Self {
-        Self {
-            endpoint,
-            codec: OwnerFrameCodec::default(),
-        }
-    }
-
-    pub async fn submit(&self, request: OwnerRequest) -> Result<OwnerReply> {
-        let mut stream = UnixStream::connect(self.endpoint.as_path()).await?;
-        let frame = self.codec.request_frame(request);
-        self.codec.write_frame(&mut stream, &frame).await?;
-        let reply = self.codec.read_frame(&mut stream).await?;
-        self.codec.reply_from_frame(reply)
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct PersonaDaemon {
     endpoint: PersonaEndpoint,
-    owner_endpoint: OwnerEndpoint,
     manager_store: ManagerStoreLocation,
     launch_plan: Option<PersonaLaunchPlan>,
     unit_controller: Arc<dyn UnitController>,
     codec: PersonaFrameCodec,
-    owner_codec: OwnerFrameCodec,
 }
 
 impl PersonaDaemon {
@@ -703,23 +493,12 @@ impl PersonaDaemon {
         endpoint: PersonaEndpoint,
         manager_store: ManagerStoreLocation,
     ) -> Self {
-        let owner_endpoint = OwnerEndpoint::from_environment_or_manager(&endpoint);
-        Self::with_manager_store_and_owner_endpoint(endpoint, owner_endpoint, manager_store)
-    }
-
-    pub fn with_manager_store_and_owner_endpoint(
-        endpoint: PersonaEndpoint,
-        owner_endpoint: OwnerEndpoint,
-        manager_store: ManagerStoreLocation,
-    ) -> Self {
         Self {
             endpoint,
-            owner_endpoint,
             manager_store,
             launch_plan: None,
             unit_controller: Arc::new(ManualUnitController),
             codec: PersonaFrameCodec::default(),
-            owner_codec: OwnerFrameCodec::default(),
         }
     }
 
@@ -735,9 +514,7 @@ impl PersonaDaemon {
 
     pub async fn serve(self) -> Result<()> {
         self.endpoint.unlink_existing_socket()?;
-        self.owner_endpoint.unlink_existing_socket()?;
         let listener = UnixListener::bind(self.endpoint.as_path())?;
-        let owner_listener = UnixListener::bind(self.owner_endpoint.as_path())?;
         let store = ManagerStore::start(self.manager_store.clone())?;
         let manager = EngineManager::start_with_store_and_unit_controller(
             EngineIdentifier::new("default"),
@@ -746,15 +523,12 @@ impl PersonaDaemon {
         )
         .await?;
         let supervisor = self.start_supervisor(store).await?;
-        let owner_task =
-            Self::spawn_owner_server(owner_listener, manager.clone(), self.owner_codec);
 
         println!(
             "persona-daemon socket={}",
             self.endpoint.as_path().display()
         );
 
-        let _owner_server_lifetime = owner_task;
         let _supervisor_lifetime = supervisor;
         loop {
             let (stream, _) = listener.accept().await?;
@@ -809,43 +583,6 @@ impl PersonaDaemon {
             .map_err(|error| Error::actor("handle daemon engine request", error))?;
         let frame = self.codec.reply_frame(exchange, reply);
         self.codec.write_frame(&mut stream, &frame).await
-    }
-
-    fn spawn_owner_server(
-        listener: UnixListener,
-        manager: ActorRef<EngineManager>,
-        codec: OwnerFrameCodec,
-    ) -> tokio::task::JoinHandle<()> {
-        tokio::spawn(async move {
-            loop {
-                let stream = listener.accept().await;
-                let Ok((stream, _)) = stream else {
-                    if let Err(error) = stream {
-                        eprintln!("persona-daemon owner listener error: {error}");
-                    }
-                    break;
-                };
-                if let Err(error) = Self::handle_owner_stream(stream, &manager, codec).await {
-                    eprintln!("persona-daemon owner connection error: {error}");
-                }
-            }
-        })
-    }
-
-    async fn handle_owner_stream(
-        mut stream: UnixStream,
-        manager: &ActorRef<EngineManager>,
-        codec: OwnerFrameCodec,
-    ) -> Result<()> {
-        let frame = codec.read_frame(&mut stream).await?;
-        let received = codec.request_from_frame(frame)?;
-        let exchange = received.exchange();
-        let reply = manager
-            .ask(HandleOwnerVersionHandover::new(received.into_request()))
-            .await
-            .map_err(|error| Error::actor("handle daemon owner version handover request", error))?;
-        let frame = codec.reply_frame(exchange, reply);
-        codec.write_frame(&mut stream, &frame).await
     }
 }
 

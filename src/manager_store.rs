@@ -407,7 +407,8 @@ impl ManagerTables {
             | EngineEventBody::VersionQuarantined(_) => {}
             EngineEventBody::ActiveVersionChanged(change) => {
                 let row = ActiveVersion::from_change(change);
-                let key = SnapshotKey::new(engine, row.component());
+                let component = ComponentName::new(row.component().as_str());
+                let key = SnapshotKey::new(engine, &component);
                 ACTIVE_VERSION_SNAPSHOT.insert(transaction, key.as_str(), &row)?;
             }
         }

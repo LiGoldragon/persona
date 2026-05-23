@@ -17,12 +17,13 @@ use persona::schema::{
 use persona::state::EngineState;
 use signal_persona::engine::{Operation as EngineRequest, Reply as EngineReply};
 use signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, Query, WirePath,
+    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, Query,
 };
 use signal_persona_origin::EngineIdentifier;
-use signal_version_handover::{Date, HandoverMarker, Time};
-use version_projection::{ComponentName as HandoverComponentName, ContractVersion};
+use signal_upgrade::{ComponentName as UpgradeComponentName, Date, HandoverMarker, Time};
+use version_projection::{ComponentName as ProjectionComponentName, ContractVersion};
 
+use persona::upgrade::SocketPath as UpgradeSocketPath;
 use persona::upgrade::{ActiveVersionChanged, PreparedEvent, Target, TargetInput, Version};
 
 struct StoreFixture {
@@ -72,17 +73,19 @@ impl StoreFixture {
 
     fn spirit_upgrade_target() -> Target {
         Target::from_input(TargetInput {
-            component: ComponentName::new("persona-spirit"),
+            component: UpgradeComponentName::new("persona-spirit"),
             current_version: Version::new("v0.1.0"),
             next_version: Version::new("v0.1.1"),
-            current_owner_socket_path: WirePath::new(
+            current_owner_socket_path: UpgradeSocketPath::new(
                 "/run/persona/default/spirit/v0.1.0/owner.sock",
             ),
-            current_upgrade_socket_path: WirePath::new(
+            current_upgrade_socket_path: UpgradeSocketPath::new(
                 "/run/persona/default/spirit/v0.1.0/upgrade.sock",
             ),
-            next_owner_socket_path: WirePath::new("/run/persona/default/spirit/v0.1.1/owner.sock"),
-            next_upgrade_socket_path: WirePath::new(
+            next_owner_socket_path: UpgradeSocketPath::new(
+                "/run/persona/default/spirit/v0.1.1/owner.sock",
+            ),
+            next_upgrade_socket_path: UpgradeSocketPath::new(
                 "/run/persona/default/spirit/v0.1.1/upgrade.sock",
             ),
         })
@@ -90,7 +93,7 @@ impl StoreFixture {
 
     fn spirit_handover_marker(commit_sequence: u64) -> HandoverMarker {
         HandoverMarker {
-            component: HandoverComponentName::new("persona-spirit"),
+            component: ProjectionComponentName::new("persona-spirit"),
             schema_hash: ContractVersion::new([7; 32]),
             commit_sequence,
             write_counter: 99,

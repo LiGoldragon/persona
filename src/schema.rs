@@ -1,5 +1,5 @@
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode, NotaEnum, NotaRecord};
-use owner_signal_version_handover::{ForceReason, QuarantineReason, RollbackReason};
+use owner_signal_upgrade::{ForceReason, QuarantineReason, RollbackReason};
 use signal_persona as contract;
 use signal_persona_origin::EngineIdentifier;
 
@@ -429,21 +429,21 @@ impl EngineEventBodyReport {
             }
             EngineEventBody::UpgradePrepared(event) => {
                 Self::UpgradePrepared(UpgradePreparedReport {
-                    component: event.component().clone(),
+                    component: ComponentName::new(event.component().as_str()),
                     current_version: event.current_version().as_str().to_string(),
                     next_version: event.next_version().as_str().to_string(),
                 })
             }
             EngineEventBody::ActiveVersionChanged(event) => {
                 Self::ActiveVersionChanged(ActiveVersionChangedReport {
-                    component: event.component().clone(),
+                    component: ComponentName::new(event.component().as_str()),
                     active_version: event.active_version().as_str().to_string(),
                     source: ActiveVersionChangeSourceReport::from_source(event.source()),
                 })
             }
             EngineEventBody::VersionQuarantined(event) => {
                 Self::VersionQuarantined(VersionQuarantinedReport {
-                    component: event.component().clone(),
+                    component: ComponentName::new(event.component().as_str()),
                     version: event.version().as_str().to_string(),
                     reason: event.reason(),
                 })
