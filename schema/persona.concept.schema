@@ -1,0 +1,38 @@
+{}
+
+[
+  (Engine [Launch Retire Query])
+  (Component [Start Stop Query])
+  (Status [Engine Component])
+]
+
+[
+  (Policy [Bootstrap Selector])
+]
+
+[]
+
+{
+  Engine [(Launch Launch) (Retire Retire) (Query Query)]
+  Component [(Start Start) (Stop Stop) (Query Query)]
+  Status [(Engine Engine) (Component Component)]
+  Policy [(Bootstrap Bootstrap) (Selector Selector)]
+  EngineIdentifier (u64)
+  ComponentName (String)
+  Launch (ComponentName)
+  Retire (EngineIdentifier)
+  Query (ComponentName)
+  Start (ComponentName)
+  Stop (ComponentName)
+  Bootstrap (Text)
+  Selector (Text)
+  Text (String)
+  Identifier (u64)
+  Name (String)
+  Path (String)
+}
+
+[
+  (Version 0 1)
+  (Status Concept)
+]
