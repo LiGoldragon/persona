@@ -1772,6 +1772,25 @@ src/bin/wire_*   signal-persona-message wire-test shims
 tests/           daemon, manager, store, supervisor, process, layout, wire, and meta-test witnesses
 ```
 
+## Pending schema-engine upgrade
+
+**Status:** scheduled for migration to schema-language-based contract per `reports/designer/326-v13-spirit-complete-schema-vision.md` + `reports/designer/324-migration-mvp-spirit-handover-re-specification.md`.
+
+**Target:** this component's hand-written `signal_channel!` invocation + Layer 2 Command/Effect + storage types convert to a single `persona/persona.schema` file. The brilliant macro library (`primary-ezqx.1`) reads the schema + emits all the wire types + ShortHeader projection + dispatcher + VersionProjection + storage descriptors.
+
+**Sequence:** Spirit is the MVP pilot landing first via `primary-ezqx.1`; Persona follows after pilot succeeds and per-component schema cutover beads land. Persona's contract surface is now narrow post-/318 (engine supervision + systemd unit-start; AttemptHandover shed to the upgrade triad), so the cutover edits one small daemon contract and the engine-management surface.
+
+**Per-component concerns:**
+- Narrowed role per /318 Wave-4 — Persona is engine supervision + systemd unit-start; the AttemptHandover verb and handover-dispatch state have moved to the upgrade triad. The schema cutover lands a much smaller wire surface than the pre-/318 design (no longer covers the upgrade-orchestration verbs).
+- Manager state (engine catalog, component desired state, lifecycle event log, snapshot projections, active-version reducer) is the storage surface the schema file declares — events plus reducer-projected snapshots, per the §1.7 manager-state model.
+- The Design D `SCM_RIGHTS` public-socket handoff (§1.6.7) is descriptor-level routing, not a Signal-frame relation; it stays out of the schema cutover.
+
+**References:**
+- `reports/designer/326-v13-spirit-complete-schema-vision.md` — uniform header form + schema-language design
+- `reports/designer/324-migration-mvp-spirit-handover-re-specification.md` — migration MVP + handover state
+- `reports/designer/322-spirit-mvp-positional-schema-worked-example.md` — Spirit MVP worked example
+- `reports/operator/174-schema-import-header-design-critique-2026-05-24.md` — header/body/feature separation + lowering rules
+
 ## See Also
 
 - `~/primary/protocols/active-repositories.md`

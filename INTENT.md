@@ -223,6 +223,19 @@ forward.
 - **Appending psyche intent to `intent/*.nota` files.** Use the
   Spirit CLI; the file substrate is historical.
 
+## Pending schema-engine upgrade
+
+**Status:** scheduled for migration to schema-language-based contract per `reports/designer/326-v13-spirit-complete-schema-vision.md` + `reports/designer/324-migration-mvp-spirit-handover-re-specification.md`.
+
+**Target:** Persona's hand-written `signal_channel!` invocation + Layer 2 Command/Effect + storage types convert to a single `persona/persona.schema` file consumed by the brilliant macro library (`primary-ezqx.1`).
+
+**Sequence:** Spirit is the MVP pilot landing first via `primary-ezqx.1`; Persona follows after pilot succeeds. Persona's contract surface is narrowed post-/318 to engine supervision + systemd unit-start; the AttemptHandover verb has moved to the upgrade triad. The cutover edits a small daemon contract plus the engine-management surface.
+
+**References:**
+- `reports/designer/326-v13-spirit-complete-schema-vision.md`
+- `reports/designer/324-migration-mvp-spirit-handover-re-specification.md`
+- `reports/operator/174-schema-import-header-design-critique-2026-05-24.md`
+
 ## See also
 
 - `/home/li/primary/skills/component-triad.md` — the triad
