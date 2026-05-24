@@ -1338,7 +1338,7 @@ dependencies = [
 [[package]]
 name = "upgrade"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/upgrade.git?branch=main#17ff93037afe6a320a876a496936cee63685e727"
+source = "git+https://github.com/LiGoldragon/upgrade.git?branch=main#2f56e37d51ffd0ad94b31077333571f42a5b872a"
 dependencies = [
  "nota-codec",
  "owner-signal-upgrade",
