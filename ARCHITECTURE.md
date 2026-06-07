@@ -34,7 +34,7 @@ sends one length-prefixed `signal-persona` frame to `persona-daemon`, waits for 
 typed reply frame, renders one NOTA reply record, and exits. `persona-daemon` owns
 the live Kameo `EngineManager` actor for the daemon lifetime.
 
-The center of mind state is `persona-mind`: the daemon-backed state component
+The center of mind state is `mind`: the daemon-backed state component
 for work memory, typed thoughts, relations, decisions, aliases, subscriptions,
 choreography policy, and ready/blocked views. Ordinary role claims, handoffs,
 and role activity live in `persona-orchestrate`.
@@ -51,7 +51,7 @@ transitions, terminal adapters, storage table internals, actor logic, and
 relation-specific signal records.
 
 Sema belongs to the component that owns the state inside an engine:
-`persona-mind` has mind Sema / `mind.redb`, `persona-router` has router Sema /
+`mind` has mind Sema / `mind.redb`, `router` has router Sema /
 `router.redb`, and so on. Persona owns manager-level state: the engine
 catalog, component desired state, health, lifecycle observations,
 startup/shutdown activity, inter-engine routes, and engine-level status.
@@ -115,18 +115,18 @@ identity) lives in the criome ecosystem.
 
 ## 0.6 · Introspection
 
-`persona-introspect` is the supervised inspection-plane component.
+`introspect` is the supervised inspection-plane component.
 It sits next to the six-component operational delivery path instead
 of inside that path. It asks each supervised component daemon for
 typed inspectable records over Signal and projects them to NOTA at
 the edge.
 
-- `persona-introspect` is **not** part of the six-component
+- `introspect` is **not** part of the six-component
   operational delivery path.
-- `persona-introspect` **is** part of the prototype-supervised
+- `introspect` **is** part of the prototype-supervised
   component set, so the manager can launch and observe it with the
   rest of the engine skeletons.
-- `persona-introspect` does **not** directly open any other
+- `introspect` does **not** directly open any other
   component's redb. Live introspection asks the owning
   component daemon through a Signal relation; the component
   decides which records to expose, how to read consistent
@@ -144,7 +144,7 @@ the edge.
     (`IntrospectionRequest`, `IntrospectionReply`,
     `IntrospectionSubscription`, etc.).
 
-The first introspection slice is **terminal** — `persona-terminal`
+The first introspection slice is **terminal** — `terminal`
 has the largest existing gap between durable local Sema records
 (`StoredTerminalSession`, `StoredDeliveryAttempt`,
 `StoredTerminalEvent`, `StoredViewerAttachment`,
@@ -156,19 +156,19 @@ third.
 
 ## 0.7 · Persona-system: paused (FocusTracker is real, plan is deferred)
 
-`persona-system` was originally scoped to push focus and prompt-buffer
+`system` was originally scoped to push focus and prompt-buffer
 observations to the router for injection gating. That use case dissolves:
 the terminal-cell lock-and-cache input gate (see §5.1) handles
 non-interleaving locally without needing focus observation. The
-`FocusTracker` Kameo actor exists in code in `persona-system` and stays;
-plan substance does not grow until persona-system is unpaused by a real
+`FocusTracker` Kameo actor exists in code in `system` and stays;
+plan substance does not grow until system is unpaused by a real
 consumer.
 
 - The Niri focus observer + `FocusTracker` actor are real and tested.
 - `signal-persona-system` keeps its current observation shape; no new
   variants land until a real consumer surfaces.
 - The privileged-action surface (`SystemPrivilegedRequest` with
-  `ForceFocus` / `SuppressDrift`) is deferred. When persona-system
+  `ForceFocus` / `SuppressDrift`) is deferred. When system
   returns, force-focus's naming is reopened.
 - Likely future consumers: window-focus-aware notifications,
   multi-engine UI coordination, multi-monitor layout observations.
@@ -177,7 +177,7 @@ consumer.
 
 `persona-orchestrate` is the orchestration-machinery component: ordinary role
 claims, handoffs, activity, agent spawning, supervision, scheduling,
-escalation, and executor lifecycle. `persona-mind` remains the authority root
+escalation, and executor lifecycle. `mind` remains the authority root
 for central mind state; orchestrate is the machinery that carries out mind's
 down-tree `Mutate` orders.
 
@@ -192,21 +192,21 @@ when `PERSONA_ORCHESTRATE_EXECUTABLE` points at the launcher or daemon.
 | Repository | Role |
 |---|---|
 | `persona` | Engine manager, `persona-daemon` home, apex Nix/deployment/test composition, and meta architecture. |
-| `persona-mind` | Central mind-state component and command-line mind runtime: work graph, typed thoughts/relations, subscriptions, and choreography policy. |
-| `signal-persona-mind` | Typed contract for central mind state, work graph operations, typed thoughts/relations, subscriptions, and channel choreography. |
+| `mind` | Central mind-state component and command-line mind runtime: work graph, typed thoughts/relations, subscriptions, and choreography policy. |
+| `signal-mind` | Typed contract for central mind state, work graph operations, typed thoughts/relations, subscriptions, and channel choreography. |
 | `persona-orchestrate` | Orchestration machinery component: ordinary role claims, handoffs, activity, and future spawn/supervise/schedule/escalate execution under mind authority. |
 | `signal-persona-orchestrate` | Typed contract for ordinary role/activity orchestration records. |
-| `persona-router` | Message routing, delivery state, gate state, and pending-delivery decisions. |
-| `persona-message` | Message ingress component: `message` NOTA CLI plus supervised `persona-message-daemon`; the daemon forwards typed message frames to the internal router socket. |
-| `persona-system` | System/window focus observation adapters. |
-| `persona-harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
-| `persona-terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. It exposes an ordinary terminal communication surface, an owner-only terminal lifecycle surface, plus one engine-management socket. |
-| `terminal-cell` | Low-level PTY/transcript library consumed by `persona-terminal`; standalone daemon form is a development/test harness. |
+| `router` | Message routing, delivery state, gate state, and pending-delivery decisions. |
+| `message` | Message ingress component: `message` NOTA CLI plus supervised `message-daemon`; the daemon forwards typed message frames to the internal router socket. |
+| `system` | System/window focus observation adapters. |
+| `harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
+| `terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. It exposes an ordinary terminal communication surface, an owner-only terminal lifecycle surface, plus one engine-management socket. |
+| `terminal-cell` | Low-level PTY/transcript library consumed by `terminal`; standalone daemon form is a development/test harness. |
 | `sema` | Typed database kernel library over redb/rkyv. |
 | `signal-frame` | Signal wire kernel: frames, exchange identifiers, handshake, channel macro. (Renamed from `signal-core`.) |
 | `signal-sema` | Universal payloadless Sema classification labels (`Assert` / `Mutate` / `Retract` / `Match` / `Subscribe` / `Validate`) used for observation only; `PatternField<T>`, `Slot<T>`, `Revision` primitives. |
 | `signal-persona` | Management contract for Persona. |
-| `signal-persona-message` | Message ingress contract. |
+| `signal-message` | Message ingress contract. |
 | `signal-persona-system` | System observation contract. |
 | `signal-persona-harness` | Router/harness delivery and observation contract. |
 | `signal-persona-terminal` | Ordinary terminal transport, prompt-gate, injection, session-registry-read, and worker-lifecycle contract. |
@@ -240,8 +240,8 @@ graph LR
 
 One host has one `persona` daemon. That daemon can supervise N engine
 instances. Each engine owns its own full component federation:
-`persona-mind`, `persona-router`, `persona-system`, `persona-harness`,
-`persona-terminal`, and `persona-message`.
+`mind`, `router`, `system`, `harness`,
+`terminal`, and `message`.
 
 The daemon runs as the dedicated `persona` system user, not as `root` and not
 as the operator's user. The elevated position is for scoped OS authority:
@@ -275,8 +275,8 @@ manager tables.
 **Pattern-based decision (per §1.5 engine-id-scoped resources): each
 engine has its own `persona-spirit` daemon, scoped under
 `/var/lib/persona/<engine-id>/spirit.redb`.** Spirit is part of the
-per-engine component federation alongside `persona-mind`,
-`persona-router`, and the others; it does not span engines. The
+per-engine component federation alongside `mind`,
+`router`, and the others; it does not span engines. The
 implicit default that each engine owns its own component federation
 applies to spirit identically. Per-engine spirit isolates the intent
 substrate, observation scope, and bootstrap-policy provenance to its
@@ -344,7 +344,7 @@ MessageOrigin (stamped on each accepted message):
 
 These live in the `signal-persona-origin` contract crate (the kernel
 extracted from `signal-persona` once cross-domain demand fired). Every
-domain contract (`signal-persona-message`, `signal-persona-mind`,
+domain contract (`signal-message`, `signal-mind`,
 `signal-persona-system`, `signal-persona-harness`,
 `signal-persona-terminal`) depends on it. `signal-persona` itself keeps
 its narrow surface — engine catalog operations — and no longer owns
@@ -380,7 +380,7 @@ ChannelStatus    = Active | Expired | Retracted{...} | Consumed
 GrantSource      = Mind | EngineSetup
 ```
 
-Mind's choreography ops (in `signal-persona-mind`): `ChannelGrant`,
+Mind's choreography ops (in `signal-mind`): `ChannelGrant`,
 `ChannelExtend`, `ChannelRetract`, `ChannelList`, `AdjudicationDeny`.
 
 **Structural channels** are pre-installed at engine setup. The
@@ -397,7 +397,7 @@ them into the router's redb at engine-creation time with
 | `Internal(Terminal)` | `Internal(Harness)` | transcript events | `Permanent` |
 | `Internal(Router)` | `Internal(Mind)` | adjudication request, delivery notification | `Permanent` |
 | `Internal(Mind)` | `Internal(Router)` | channel grant/extend/retract | `Permanent` |
-| `External(Owner)` | `Internal(Router)` | message submission via `persona-message-daemon` | `Permanent` |
+| `External(Owner)` | `Internal(Router)` | message submission via `message-daemon` | `Permanent` |
 
 Unknown-channel messages park in router's `adjudication_pending` table
 and emit `AdjudicationRequest` to mind. Mind decides:
@@ -405,8 +405,8 @@ and emit `AdjudicationRequest` to mind. Mind decides:
 ```mermaid
 sequenceDiagram
     participant src as source
-    participant router as persona-router
-    participant mind as persona-mind
+    participant router as router
+    participant mind as mind
     src->>router: message on unknown channel
     router->>router: park in adjudication_pending
     router->>mind: AdjudicationRequest
@@ -726,7 +726,7 @@ engine-management relation.
 
 The engine launch configuration is the place for explicit component command
 overrides. A NOTA launch record may provide an override for one component
-command, for example a custom `persona-message` build during an integration
+command, for example a custom `message` build during an integration
 test. Omitted components use the Nix-provided default.
 
 **Two distinct records** carry the spawn information:
@@ -756,7 +756,7 @@ launch state — those stay inside `ResolvedComponentLaunch`.
 
 **State directory for stateless components**: every component
 receives a `state_dir` via its `SpawnEnvelope`. Stateless
-components (today: `persona-message-daemon`, `persona-system` in
+components (today: `message-daemon`, `system` in
 skeleton mode) leave the directory empty and do not open a redb
 file until they own durable state. The manager prepares the
 directory at spawn-envelope mint time; the child opens it only if
@@ -873,9 +873,9 @@ The first meta-repo runner starts only the executable halves that exist today:
 ```mermaid
 graph LR
     dev["persona-dev-stack"]
-    router["persona-router daemon"]
-    harness["persona-harness daemon"]
-    terminal["persona-terminal daemon"]
+    router["router daemon"]
+    harness["harness daemon"]
+    terminal["terminal daemon"]
     message["message CLI"]
     terminal_signal["persona-terminal-signal"]
     pty["terminal-cell child PTY"]
@@ -914,8 +914,8 @@ Prometheus-backed model path.
 
 The current executable inside-unit witness is still deliberately smaller than
 the final federation: it runs the existing Nix-built `persona-dev-stack-smoke`
-under `state/dev-stack`, starts real `persona-router-daemon` and
-`persona-harness-daemon` and `persona-terminal-daemon` processes, drives them
+under `state/dev-stack`, starts real `router-daemon` and
+`harness-daemon` and `terminal-daemon` processes, drives them
 through the `message` and `persona-terminal-signal` CLIs, and writes
 `dev-stack-run.nota`, `dev-stack-processes.nota`, and
 `dev-stack-sockets.nota` under `artifacts/`. This proves the sandbox envelope
@@ -924,10 +924,10 @@ fixture router-to-harness-to-terminal path; it does not claim router-to-mind
 adjudication or a terminal-cell live-agent path yet.
 
 The managed three-harness topology writes router bootstrap through
-`signal-persona-router::RouterBootstrapDocument`. `persona` chooses the
+`signal-router::RouterBootstrapDocument`. `persona` chooses the
 topology and writes the startup file, but the `RegisterActor` /
 `GrantDirectMessage` / `InstallStructuralChannels` vocabulary belongs to the
-router contract crate and is decoded by `persona-router` from the same types.
+router contract crate and is decoded by `router` from the same types.
 
 The terminal-cell sandbox lane is a separate witness. It runs
 `terminal-cell-daemon` directly at `$sandbox_dir/run/cell.sock`, launches one
@@ -992,7 +992,7 @@ builder it proves every prototype-supervised component receives the spawn
 envelope and reaches its launcher, proves every domain socket binds with the
 envelope-declared mode, proves every engine-management socket binds with mode `0600`,
 and proves the manager receives typed engine-management identity/readiness/health
-replies before recording `ComponentReady`. `persona-terminal` still needs the
+replies before recording `ComponentReady`. `terminal` still needs the
 stateful terminal-cell smoke lane for real PTY readiness, because pure Nix
 builders do not provide the PTY environment that terminal-cell needs. The
 remaining engine-manager layers are restore-on-restart, socket owner/group ACL
@@ -1001,7 +1001,7 @@ catalog, origin tagging, and privileged-user deployment witnesses.
 
 The same supervisor path also has a narrow two-component topology for the
 current Signal refactor wave: `PERSONA_ENGINE_TOPOLOGY=message-router`
-launches only `persona-message` and `persona-router`, gives each component
+launches only `message` and `router`, gives each component
 one peer socket, and proves the manager can start a focused integration
 sandbox without booting the full prototype federation. This is a test
 topology, not a separate production engine shape.
@@ -1009,7 +1009,7 @@ topology, not a separate production engine shape.
 ## 2 · Command-line Mind
 
 The first foundational implementation target is the command-line mind backed
-by a long-lived `persona-mind` daemon.
+by a long-lived `mind` daemon.
 
 ```mermaid
 graph LR
@@ -1111,14 +1111,14 @@ The central split:
 
 | Component | Owns | Does not own |
 |---|---|---|
-| `persona-mind` | work graph, typed thoughts/relations, subscriptions, decisions, aliases, choreography policy, ready/blocked views. | ordinary role/activity ledger, message delivery, terminal sessions, system focus facts. |
+| `mind` | work graph, typed thoughts/relations, subscriptions, decisions, aliases, choreography policy, ready/blocked views. | ordinary role/activity ledger, message delivery, terminal sessions, system focus facts. |
 | `persona-orchestrate` | ordinary role claims, handoffs, activity, and execution orchestration. | central work graph, message delivery, terminal sessions, system focus facts. |
-| `persona-router` | message routing, delivery queue, delivery gate state, message durability. | role claims, work graph, harness process lifecycle. |
-| `persona-system` | OS/window focus observations. | router decisions, mind state, harness delivery, terminal prompt/input gates. |
-| `persona-harness` | harness identity, lifecycle, injection/observation adapter boundary. | router policy, central work graph. |
-| `persona-terminal` | durable PTY/session ownership, visible viewer adapters, and raw terminal byte transport. | Persona delivery policy or role/activity state. |
+| `router` | message routing, delivery queue, delivery gate state, message durability. | role claims, work graph, harness process lifecycle. |
+| `system` | OS/window focus observations. | router decisions, mind state, harness delivery, terminal prompt/input gates. |
+| `harness` | harness identity, lifecycle, injection/observation adapter boundary. | router policy, central work graph. |
+| `terminal` | durable PTY/session ownership, visible viewer adapters, and raw terminal byte transport. | Persona delivery policy or role/activity state. |
 
-`persona-mind` is not a router. `persona-router` is not the central project
+`mind` is not a router. `router` is not the central project
 memory. The two communicate through explicit contracts when they need each
 other.
 
@@ -1126,17 +1126,17 @@ Runtime authorization and origin handling are component-owned:
 
 | Component | Boundary behavior |
 |---|---|
-| `persona-router` | Holds live authorized-channel state in `channels` sema-db table. Parked messages awaiting mind adjudication live in `adjudication_pending`. `OneShot` channels mark `Consumed` after delivery; `TimeBound` channels expire by deadline; `Retract` writes `Retracted` before re-adjudication. |
-| `persona-system` | Currently paused (see §0.7). When active, exposes the observation surface as `signal-persona-system::SystemRequest` / `SystemEvent`. Privileged-action surface deferred. |
-| `persona-harness` | Owns harness identity and lifecycle records. **`HarnessKind` is a closed enum** — variants `Codex`, `Claude`, `Pi`, `Fixture`. No `Other` variant. New harness types are coordinated schema bumps. |
-| `persona-terminal` | Owns terminal input safety, prompt cleanliness, and the lock-and-cache injection mechanism (§5.1). The gate is for non-interleaving, not auth. `MessageBody(String)` is the durable freeform body shape; typing grows by adding `MessageKind` variants additively, not by retroactive body migration. |
-| `persona-mind` | Owns choreography (`ChannelGrant`/`Extend`/`Retract`/`Deny`). Non-`Owner` messages arrive as typed `ThirdPartySuggestion` records; the owner explicitly `AdoptSuggestion` for them to become claims. The `OwnerApprovalInbox` (formerly proposed as router-owned) lives in mind. |
+| `router` | Holds live authorized-channel state in `channels` sema-db table. Parked messages awaiting mind adjudication live in `adjudication_pending`. `OneShot` channels mark `Consumed` after delivery; `TimeBound` channels expire by deadline; `Retract` writes `Retracted` before re-adjudication. |
+| `system` | Currently paused (see §0.7). When active, exposes the observation surface as `signal-persona-system::SystemRequest` / `SystemEvent`. Privileged-action surface deferred. |
+| `harness` | Owns harness identity and lifecycle records. **`HarnessKind` is a closed enum** — variants `Codex`, `Claude`, `Pi`, `Fixture`. No `Other` variant. New harness types are coordinated schema bumps. |
+| `terminal` | Owns terminal input safety, prompt cleanliness, and the lock-and-cache injection mechanism (§5.1). The gate is for non-interleaving, not auth. `MessageBody(String)` is the durable freeform body shape; typing grows by adding `MessageKind` variants additively, not by retroactive body migration. |
+| `mind` | Owns choreography (`ChannelGrant`/`Extend`/`Retract`/`Deny`). Non-`Owner` messages arrive as typed `ThirdPartySuggestion` records; the owner explicitly `AdoptSuggestion` for them to become claims. The `OwnerApprovalInbox` (formerly proposed as router-owned) lives in mind. |
 
 ### 5.1 · Terminal injection: lock-and-cache
 
 When the router or harness needs to inject a programmatic message into
 a terminal where a human may be typing, the mechanism is local to
-`persona-terminal`: lock the input gate; cache human keystrokes during
+`terminal`: lock the input gate; cache human keystrokes during
 the lock; check prompt cleanliness against a pre-registered
 `PromptPattern`; if clean, inject; on release, the cache replays as
 human input. Focus observation is **not** required — the gate solves
@@ -1144,7 +1144,7 @@ non-interleaving locally.
 
 Key pieces:
 
-- `PromptPattern` typed record registered by `persona-terminal` with
+- `PromptPattern` typed record registered by `terminal` with
   `terminal-cell` at session-create time, identified by
   `PromptPatternIdentifier`. Variants: `LiteralSuffix(bytes)`,
   `RegexSuffix(pattern_bytes)`. `terminal-cell` runs literal/regex
@@ -1164,15 +1164,15 @@ This mechanism replaces the originally-proposed router-side join of
 
 Router and mind subscribe to **typed observations + sequence pointers**
 from terminal/harness — not raw transcript bytes. Raw bytes stay in
-persona-terminal storage. Direct authorized queries can read sequence
+terminal storage. Direct authorized queries can read sequence
 ranges by request. A future move (not designed today): a **transcript
 inspection agent**, a persona-mind-resident role with direct typed
 range-query access to terminal transcript storage. Range-shaped, not
 stream-shaped.
 
-### 5.3 · persona-terminal owns communication; terminal-cell owns the cell primitive
+### 5.3 · terminal owns communication; terminal-cell owns the cell primitive
 
-`persona-terminal` is the Persona component. It exposes the ordinary component
+`terminal` is the Persona component. It exposes the ordinary component
 communication socket that speaks `signal-persona-terminal` frames
 (length-prefixed rkyv), an owner-only terminal surface that speaks
 `owner-signal-persona-terminal` frames for session lifecycle mutation, and the
@@ -1194,7 +1194,7 @@ attached viewer reach the child PTY without traversing an actor mailbox.
 The cell-level socket split remains useful for local development and tests:
 each standalone terminal cell exposes `control.sock` and `data.sock`.
 Production Persona does not make `terminal-cell-daemon` the engine boundary;
-the component boundary is `persona-terminal`.
+the component boundary is `terminal`.
 
 ## 6 · Lock Files and BEADS
 
@@ -1203,7 +1203,7 @@ workspace. They are not the destination architecture.
 
 Do not implement lock-file projections in Persona. The current lock files are
 part of the temporary operator workflow and will be retired when agents switch
-to `persona-orchestrate` for role/activity and `persona-mind` for central work
+to `persona-orchestrate` for role/activity and `mind` for central work
 state. Neither component writes lock files as a compatibility feature.
 
 Destination:
@@ -1222,11 +1222,11 @@ Migration rules:
 
 - lock files are not part of Persona implementation work;
 - lock files are not durable truth and do not get projections from
-  `persona-mind`;
+  `mind`;
 - BEADS entries may be imported once as items, aliases, or external
   references;
 - Persona does not grow a long-term BEADS bridge;
-- new work graph behavior belongs in `persona-mind`.
+- new work graph behavior belongs in `mind`.
 
 ## 7 · Constraints
 
@@ -1250,7 +1250,7 @@ Migration rules:
   real `terminal-cell-daemon`, creates `run/cell.sock`, runs a child harness
   inside the PTY, drives that harness with `terminal-cell-send`/`wait`, records
   a transcript, and records a host attach command. It is deliberately separate
-  from `persona-dev-stack`, whose terminal socket is the persona-terminal
+  from `persona-dev-stack`, whose terminal socket is the terminal
   contract socket rather than the raw terminal-cell attach surface.
 - Prompt-bearing Claude/Codex sandbox tests require dedicated sandbox
   credentials; the runner never copies live host authentication files.
@@ -1291,12 +1291,12 @@ Migration rules:
   guess.
 - Engine topology is explicit. The default prototype topology launches every
   prototype-supervised component; the `message-router` topology launches only
-  `persona-message` and `persona-router` for focused Signal refactor witnesses.
+  `message` and `router` for focused Signal refactor witnesses.
 - The prototype launcher set adapts the shared spawn-envelope environment to
   the current component daemon CLIs and records which Nix-built binary it
   executed.
 - The pure Nix prototype uses `persona-terminal-supervisor` for the terminal
-  component socket. PTY-bearing `persona-terminal-daemon` readiness belongs in
+  component socket. PTY-bearing `terminal-daemon` readiness belongs in
   the stateful terminal-cell lane because pure builders do not provide a real
   interactive PTY surface.
 - Resolved spawn envelopes carry executable path, argv, environment, state
@@ -1393,7 +1393,7 @@ Migration rules:
 - `persona` does not own mind state transitions, router policy, harness
   lifecycle, terminal transport, storage table internals, or Signal records.
 - Every runtime boundary in the stack has a dedicated Signal contract repo.
-- Manager-written router bootstrap uses `signal-persona-router` contract
+- Manager-written router bootstrap uses `signal-router` contract
   records; `persona` must not carry private duplicate `RegisterActor` or
   `GrantDirectMessage` record definitions.
 - Cross-component tests prove boundaries by bytes, processes, dependency
@@ -1408,8 +1408,8 @@ Migration rules:
   local enforcement is path ownership, socket mode, and sandbox discipline;
   stronger per-component proof belongs in the auth substrate. The
   `message.sock` is group-writable for owner ingress (bound by
-  `persona-message-daemon`, the supervised prototype message-ingress
-  component). `router.sock` (mode 0600) is bound by `persona-router` for
+  `message-daemon`, the supervised prototype message-ingress
+  component). `router.sock` (mode 0600) is bound by `router` for
   internal traffic. The "proxy" name retires; the daemon itself stays.
 - Spawn envelopes carry the component's own state/socket paths and every peer
   socket path plus the manager's owner identity; components do not derive peers
@@ -1485,7 +1485,7 @@ Migration rules:
 - Each wire between components has a Signal contract repo.
 - Contract repos own types; runtime repos own behavior.
 - Runtime behavior lives in direct Kameo actors inside the owning component.
-- `persona-mind` is Persona's central daemon-backed state component.
+- `mind` is Persona's central daemon-backed state component.
 - Each state-bearing component owns its own redb file.
 - Each state-bearing component owns its own Sema layer/table declarations.
   There is no shared `persona-sema` component in the current architecture.
@@ -1519,7 +1519,7 @@ Migration rules:
   record.
 - Command-line persona input is one NOTA request record; output is one NOTA
   reply record.
-- The `mind` CLI is a thin client. The long-lived `persona-mind` daemon owns
+- The `mind` CLI is a thin client. The long-lived `mind` daemon owns
   `MindRoot` and `mind.redb`.
 - Persona is the durable agent — long-lived, persistent, inspectable.
   One-shot agent CLIs and reconciliation-stack controllers are not
@@ -1543,11 +1543,11 @@ The apex repo owns tests that prove cross-component shape:
 
 | Invariant | Witness |
 |---|---|
-| `mind` uses the mind contract | CLI decodes into `signal-persona-mind::MindRequest`. |
+| `mind` uses the mind contract | CLI decodes into `signal-mind::MindRequest`. |
 | orchestrate owns ordinary role/activity state | lock files are absent and role claims route to `signal-persona-orchestrate`. |
-| mind owns central work state | work graph requests route to `signal-persona-mind`. |
+| mind owns central work state | work graph requests route to `signal-mind`. |
 | router commits before delivery | delivery trace follows durable router commit. |
-| router does not own terminal transport | router dependency graph excludes `persona-terminal` and `terminal-cell`. |
+| router does not own terminal transport | router dependency graph excludes `terminal` and `terminal-cell`. |
 | component databases are separate | router/mind/harness open distinct redb files. |
 | NOTA is the only text syntax | no CLI-only parser accepts non-NOTA command records. |
 | engine resources are scoped | generated state/socket paths include `EngineIdentifier`. |
@@ -1580,7 +1580,7 @@ The apex repo owns tests that prove cross-component shape:
 | auth isolation witness protects host credential/session files | `nix build .#checks.x86_64-linux.persona-engine-sandbox-auth-isolation-witness` |
 | host attach helper is a Nix-owned app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-attach-script-builds` |
 | sandbox dev-stack smoke is a Nix-owned stateful app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-dev-stack-smoke-script-builds`; run with `nix run .#persona-engine-sandbox-dev-stack-smoke` |
-| sandbox dev-stack passes a manager-style spawn envelope to persona-message | run `nix run .#persona-engine-sandbox-dev-stack-smoke` and inspect `dev-stack-processes.nota` / `dev-stack-sockets.nota` for `MessageSpawnEnvelope` |
+| sandbox dev-stack passes a manager-style spawn envelope to message | run `nix run .#persona-engine-sandbox-dev-stack-smoke` and inspect `dev-stack-processes.nota` / `dev-stack-sockets.nota` for `MessageSpawnEnvelope` |
 | sandbox three-harness chain is a Nix-owned stateful app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-dev-stack-chain-smoke-script-builds`; run with `nix run .#persona-engine-sandbox-dev-stack-chain-smoke` |
 | sandbox three-harness chain routes through message, router, harness, and terminal | run `nix run .#persona-engine-sandbox-dev-stack-chain-smoke` and inspect `dev-stack-chain-manifest.nota`, terminal captures, and owner inbox for the final `reviewer completed task` |
 | manager-started three-harness chain is a Nix-owned stateful app | `nix build .#checks.x86_64-linux.persona-daemon-three-harness-chain-smoke-script-builds`; run with `nix run .#persona-daemon-three-harness-chain-smoke` |
@@ -1638,14 +1638,14 @@ honest about what it's a realization step toward.
 
 ### 10.1 · Schema as proposal-and-recompile (medium-term)
 
-Once `persona-mind` carries real traffic, the workspace will encounter
+Once `mind` carries real traffic, the workspace will encounter
 the need for new typed record kinds — node-kinds, edge-kinds, or new
 contract variants — that today require a human writing Rust and
 recompiling. The medium-term shape is **proposal-and-recompile**, run
 through the same Signal verb spine as everything else:
 
 1. An agent encounters a domain that needs a new typed record kind.
-2. The agent `Asserts` a `TypeProposal` record into `persona-mind`'s
+2. The agent `Asserts` a `TypeProposal` record into `mind`'s
    proposal table. The proposal carries the proposed kind name, the
    field sketch (name × type × constraints), worked examples, and the
    proposer's identity + motivation.
@@ -1729,14 +1729,14 @@ The three horizons stack:
 2. **Medium-term**: §10.1 proposal-and-recompile flow lands once
    real traffic produces schema-change pressure. The
    `TypeProposal` record family takes its place in
-   `signal-persona-mind` alongside other coordination records.
+   `signal-mind` alongside other coordination records.
 3. **Long-term**: §10.2 content-addressed versioning + translator
    nodes land alongside the eventual Sema-on-Sema substrate. The
    proposal flow continues to exist; the recompile-on-acceptance
    step becomes content-addressing in the Sema layer instead of
    binary-rebuild in Rust.
 
-None of this is first-prototype work. Today's `persona-mind` does
+None of this is first-prototype work. Today's `mind` does
 not have proposals, translation, or content-addressed versioning.
 The path is sequential: today, then medium, then long.
 
@@ -1768,7 +1768,7 @@ src/manager_store.rs  Kameo ManagerStore actor and manager.redb Sema tables
 src/request.rs   NOTA projection into signal-persona requests and replies
 src/state.rs     in-memory engine-state reducer
 src/bin/persona_component_fixture.rs  typed component/engine-management fixture for tests
-src/bin/wire_*   signal-persona-message wire-test shims
+src/bin/wire_*   signal-message wire-test shims
 tests/           daemon, manager, store, supervisor, process, layout, wire, and meta-test witnesses
 ```
 
@@ -1794,5 +1794,5 @@ tests/           daemon, manager, store, supervisor, process, layout, wire, and 
 ## See Also
 
 - `~/primary/protocols/active-repositories.md`
-- `../persona-mind/ARCHITECTURE.md`
-- `../signal-persona-mind/ARCHITECTURE.md`
+- `../mind/ARCHITECTURE.md`
+- `../signal-mind/ARCHITECTURE.md`
