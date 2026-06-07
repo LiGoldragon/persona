@@ -1,5 +1,5 @@
-use signal_persona::engine::Reply;
-use signal_persona::{
+use owner_signal_persona::Reply;
+use owner_signal_persona::{
     ActionAcceptance, ActionRejection, ActionRejectionReason, ComponentDesiredState,
     ComponentHealth, ComponentName, ComponentShutdown, ComponentStartup, ComponentStatus,
     EngineGeneration, EnginePhase, EngineStatus,

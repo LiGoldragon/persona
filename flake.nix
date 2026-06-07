@@ -28,24 +28,30 @@
     persona-spirit.inputs.nixpkgs.follows = "nixpkgs";
     persona-spirit.inputs.fenix.follows = "fenix";
     persona-spirit.inputs.crane.follows = "crane";
-    signal-persona.url = "github:LiGoldragon/signal-persona";
-    signal-persona-mind.url = "github:LiGoldragon/signal-persona-mind";
-    signal-persona-orchestrate.url = "github:LiGoldragon/signal-persona-orchestrate";
-    signal-persona-orchestrate.inputs.nixpkgs.follows = "nixpkgs";
-    signal-persona-orchestrate.inputs.fenix.follows = "fenix";
-    signal-persona-orchestrate.inputs.crane.follows = "crane";
-    signal-persona-system.url = "github:LiGoldragon/signal-persona-system";
-    signal-persona-system.inputs.nixpkgs.follows = "nixpkgs";
-    signal-persona-system.inputs.fenix.follows = "fenix";
-    signal-persona-system.inputs.crane.follows = "crane";
-    signal-persona-terminal.url = "github:LiGoldragon/signal-persona-terminal";
-    signal-persona-terminal.inputs.nixpkgs.follows = "nixpkgs";
-    signal-persona-terminal.inputs.fenix.follows = "fenix";
-    signal-persona-terminal.inputs.crane.follows = "crane";
-    owner-signal-persona-terminal.url = "github:LiGoldragon/owner-signal-persona-terminal";
-    owner-signal-persona-terminal.inputs.nixpkgs.follows = "nixpkgs";
-    owner-signal-persona-terminal.inputs.fenix.follows = "fenix";
-    owner-signal-persona-terminal.inputs.crane.follows = "crane";
+    owner-signal-persona.url = "github:LiGoldragon/owner-signal-persona";
+    owner-signal-persona.inputs.nixpkgs.follows = "nixpkgs";
+    owner-signal-persona.inputs.fenix.follows = "fenix";
+    owner-signal-persona.inputs.crane.follows = "crane";
+    signal-mind.url = "github:LiGoldragon/signal-mind";
+    signal-mind.inputs.nixpkgs.follows = "nixpkgs";
+    signal-mind.inputs.fenix.follows = "fenix";
+    signal-mind.inputs.crane.follows = "crane";
+    signal-orchestrate.url = "github:LiGoldragon/signal-orchestrate";
+    signal-orchestrate.inputs.nixpkgs.follows = "nixpkgs";
+    signal-orchestrate.inputs.fenix.follows = "fenix";
+    signal-orchestrate.inputs.crane.follows = "crane";
+    signal-system.url = "github:LiGoldragon/signal-system";
+    signal-system.inputs.nixpkgs.follows = "nixpkgs";
+    signal-system.inputs.fenix.follows = "fenix";
+    signal-system.inputs.crane.follows = "crane";
+    signal-terminal.url = "github:LiGoldragon/signal-terminal";
+    signal-terminal.inputs.nixpkgs.follows = "nixpkgs";
+    signal-terminal.inputs.fenix.follows = "fenix";
+    signal-terminal.inputs.crane.follows = "crane";
+    owner-signal-terminal.url = "github:LiGoldragon/owner-signal-terminal";
+    owner-signal-terminal.inputs.nixpkgs.follows = "nixpkgs";
+    owner-signal-terminal.inputs.fenix.follows = "fenix";
+    owner-signal-terminal.inputs.crane.follows = "crane";
     persona-system.url = "github:LiGoldragon/persona-system";
     persona-system.inputs.nixpkgs.follows = "nixpkgs";
     persona-system.inputs.fenix.follows = "fenix";
@@ -557,12 +563,12 @@
           persona-mind = inputs.persona-mind.packages.${system}.default;
           persona-orchestrate = inputs.persona-orchestrate.packages.${system}.default;
           persona-router = inputs.persona-router.packages.${system}.default;
-          signal-persona = inputs.signal-persona.packages.${system}.default;
-          signal-persona-mind = inputs.signal-persona-mind.packages.${system}.default;
-          signal-persona-orchestrate = inputs.signal-persona-orchestrate.packages.${system}.default;
-          signal-persona-system = inputs.signal-persona-system.packages.${system}.default;
-          signal-persona-terminal = inputs.signal-persona-terminal.packages.${system}.default;
-          owner-signal-persona-terminal = inputs.owner-signal-persona-terminal.packages.${system}.default;
+          owner-signal-persona = inputs.owner-signal-persona.packages.${system}.default;
+          signal-mind = inputs.signal-mind.packages.${system}.default;
+          signal-orchestrate = inputs.signal-orchestrate.packages.${system}.default;
+          signal-system = inputs.signal-system.packages.${system}.default;
+          signal-terminal = inputs.signal-terminal.packages.${system}.default;
+          owner-signal-terminal = inputs.owner-signal-terminal.packages.${system}.default;
           persona-system = inputs.persona-system.packages.${system}.default;
           persona-terminal = inputs.persona-terminal.packages.${system}.default;
           terminal-cell = context.terminalCellBinaries;
@@ -607,28 +613,27 @@
           persona-mind = inputs.persona-mind.checks.${system}.default;
           persona-orchestrate = inputs.persona-orchestrate.checks.${system}.test;
           persona-router = inputs.persona-router.checks.${system}.default;
-          signal-persona-build = inputs.signal-persona.checks.${system}.build;
-          signal-persona-test = inputs.signal-persona.checks.${system}.test;
-          signal-persona-test-engine-manager = inputs.signal-persona.checks.${system}.test-engine-manager;
-          signal-persona-test-version = inputs.signal-persona.checks.${system}.test-version;
-          signal-persona-doc = inputs.signal-persona.checks.${system}.doc;
-          signal-persona-fmt = inputs.signal-persona.checks.${system}.fmt;
-          signal-persona-clippy = inputs.signal-persona.checks.${system}.clippy;
-          signal-persona-mind = inputs.signal-persona-mind.checks.${system}.test;
-          signal-persona-orchestrate = inputs.signal-persona-orchestrate.checks.${system}.test;
-          signal-persona-system-build = inputs.signal-persona-system.checks.${system}.build;
-          signal-persona-system-test = inputs.signal-persona-system.checks.${system}.test;
-          signal-persona-system-round-trip = inputs.signal-persona-system.checks.${system}.test-round-trip;
-          signal-persona-system-test-doc = inputs.signal-persona-system.checks.${system}.test-doc;
-          signal-persona-system-doc = inputs.signal-persona-system.checks.${system}.doc;
-          signal-persona-system-fmt = inputs.signal-persona-system.checks.${system}.fmt;
-          signal-persona-system-clippy = inputs.signal-persona-system.checks.${system}.clippy;
-          signal-persona-terminal = inputs.signal-persona-terminal.checks.${system}.test;
-          owner-signal-persona-terminal = inputs.owner-signal-persona-terminal.checks.${system}.test;
+          owner-signal-persona-build = inputs.owner-signal-persona.checks.${system}.build;
+          owner-signal-persona-test = inputs.owner-signal-persona.checks.${system}.test;
+          owner-signal-persona-round-trip = inputs.owner-signal-persona.checks.${system}.test-round-trip;
+          owner-signal-persona-doc = inputs.owner-signal-persona.checks.${system}.doc;
+          owner-signal-persona-fmt = inputs.owner-signal-persona.checks.${system}.fmt;
+          owner-signal-persona-clippy = inputs.owner-signal-persona.checks.${system}.clippy;
+          signal-mind = inputs.signal-mind.checks.${system}.test;
+          signal-orchestrate = inputs.signal-orchestrate.checks.${system}.test;
+          signal-system-build = inputs.signal-system.checks.${system}.build;
+          signal-system-test = inputs.signal-system.checks.${system}.test;
+          signal-system-round-trip = inputs.signal-system.checks.${system}.test-round-trip;
+          signal-system-test-doc = inputs.signal-system.checks.${system}.test-doc;
+          signal-system-doc = inputs.signal-system.checks.${system}.doc;
+          signal-system-fmt = inputs.signal-system.checks.${system}.fmt;
+          signal-system-clippy = inputs.signal-system.checks.${system}.clippy;
+          signal-terminal = inputs.signal-terminal.checks.${system}.test;
+          owner-signal-terminal = inputs.owner-signal-terminal.checks.${system}.test;
           persona-system = inputs.persona-system.checks.${system}.default;
           persona-terminal = inputs.persona-terminal.checks.${system}.default;
 
-          # ─── Wire-test chain: signal-persona-message ───
+          # ─── Wire-test chain: signal-message ───
           #
           # Each derivation captures exactly one wire-layer boundary so
           # a failure pinpoints which bytes-on-the-line shape regressed.
@@ -1622,13 +1627,13 @@
                   cargoTestExtraArgs = "--test unit constraint_transient_unit_definition_projects_exec_start_and_environment -- --exact";
                 }
               );
-          persona-manager-store-close-protocol-releases-redb-lock-before-shutdown =
+          persona-manager-store-close-protocol-releases-storage-lock-before-shutdown =
             context.craneLib.cargoTest
               (
                 context.commonArgs
                 // {
                   inherit (context) cargoArtifacts;
-                  cargoTestExtraArgs = "--test manager_store constraint_manager_store_close_protocol_releases_redb_lock_before_shutdown -- --exact";
+                  cargoTestExtraArgs = "--test manager_store constraint_manager_store_close_protocol_releases_storage_lock_before_shutdown -- --exact";
                 }
               );
           persona-manager-startup-appends-orphaned-events-for-unfinished-spawn = context.craneLib.cargoTest (
@@ -1827,7 +1832,7 @@
                 mkdir -p "$work/state" "$work/run" "$work/artifacts"
                 manager_socket="$work/persona.sock"
 
-                export PERSONA_MANAGER_STORE="$work/manager.redb"
+                export PERSONA_MANAGER_STORE="$work/manager.sema"
                 export PERSONA_STATE_ROOT="$work/state"
                 export PERSONA_RUN_ROOT="$work/run"
                 export PERSONA_MIND_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-mind-prototype-launcher
@@ -1967,7 +1972,7 @@
                 mkdir -p "$work/state" "$work/run" "$work/artifacts"
                 manager_socket="$work/persona.sock"
 
-                export PERSONA_MANAGER_STORE="$work/manager.redb"
+                export PERSONA_MANAGER_STORE="$work/manager.sema"
                 export PERSONA_STATE_ROOT="$work/state"
                 export PERSONA_RUN_ROOT="$work/run"
                 export PERSONA_ENGINE_TOPOLOGY=message-router

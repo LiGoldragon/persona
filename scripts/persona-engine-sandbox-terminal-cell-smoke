@@ -247,7 +247,7 @@ start_message_router_engine() {
   : "${PERSONA_MESSAGE_DAEMON_EXECUTABLE:?PERSONA_MESSAGE_DAEMON_EXECUTABLE must point at persona-message launcher}"
 
   mkdir -p "$engine_state_root" "$engine_run_root"
-  PERSONA_MANAGER_STORE="$engine_state_root/manager.redb" \
+  PERSONA_MANAGER_STORE="$engine_state_root/manager.sema" \
   PERSONA_STATE_ROOT="$engine_state_root" \
   PERSONA_RUN_ROOT="$engine_run_root" \
   PERSONA_ENGINE_TOPOLOGY=message-router \
@@ -281,7 +281,7 @@ start_managed_harness_engine() {
   : "${PERSONA_THREE_HARNESS_LAUNCHERS:?PERSONA_THREE_HARNESS_LAUNCHERS must point at three-harness launchers}"
 
   mkdir -p "$engine_state_root" "$engine_run_root"
-  PERSONA_MANAGER_STORE="$engine_state_root/manager.redb" \
+  PERSONA_MANAGER_STORE="$engine_state_root/manager.sema" \
   PERSONA_STATE_ROOT="$engine_state_root" \
   PERSONA_RUN_ROOT="$engine_run_root" \
   PERSONA_ENGINE_TOPOLOGY=three-harness-chain \

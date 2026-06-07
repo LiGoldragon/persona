@@ -1,11 +1,11 @@
-use nota_codec::NotaRecord;
+use nota_next::{NotaDecode, NotaEncode};
 use thiserror::Error;
 
 use crate::engine::{EngineComponent, EngineTopology};
 
 use super::command::{ComponentCommand, ExecutablePath};
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentCommandEntry {
     component: EngineComponent,
     command: ComponentCommand,
@@ -106,19 +106,16 @@ impl ComponentCommandCatalog {
         let mut entries = Vec::new();
         let mut saw_environment = false;
         for component in topology.components().iter().copied() {
-            match std::env::var_os(component.executable_environment_variable()) {
-                Some(path) => {
-                    saw_environment = true;
-                    entries.push(ComponentCommandEntry::from_input(
-                        ComponentCommandEntryInput {
-                            component,
-                            command: ComponentCommand::executable(ExecutablePath::new(
-                                path.to_string_lossy().into_owned(),
-                            )),
-                        },
-                    ));
-                }
-                None => {}
+            if let Some(path) = std::env::var_os(component.executable_environment_variable()) {
+                saw_environment = true;
+                entries.push(ComponentCommandEntry::from_input(
+                    ComponentCommandEntryInput {
+                        component,
+                        command: ComponentCommand::executable(ExecutablePath::new(
+                            path.to_string_lossy().into_owned(),
+                        )),
+                    },
+                ));
             }
         }
 
@@ -162,7 +159,7 @@ impl ComponentCommandCatalog {
     }
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EngineLaunchConfiguration {
     overrides: Vec<ComponentCommandOverride>,
 }
@@ -200,7 +197,7 @@ impl EngineLaunchConfiguration {
     }
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentCommandOverride {
     component: EngineComponent,
     command: ComponentCommand,

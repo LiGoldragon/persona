@@ -5,15 +5,13 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
-use signal_frame::{ExchangeIdentifier, NonEmpty, Reply, SubReply};
-use signal_persona::engine_management::{
-    Frame as EngineManagementFrame, FrameBody, Operation as EngineManagementRequest,
-    Query as EngineManagementQuery, Reply as EngineManagementReply,
-};
-use signal_persona::{
+use signal_engine_management::{
     ComponentHealth, ComponentHealthReport, ComponentIdentity, ComponentKind, ComponentName,
-    ComponentReady, EngineManagementProtocolVersion, StopAcknowledgement,
+    ComponentReady, EngineManagementProtocolVersion, Frame as EngineManagementFrame, FrameBody,
+    Operation as EngineManagementRequest, Query as EngineManagementQuery,
+    Reply as EngineManagementReply, StopAcknowledgement,
 };
+use signal_frame::{ExchangeIdentifier, NonEmpty, Reply, SubReply};
 
 struct FixtureProcess {
     state_path: PathBuf,

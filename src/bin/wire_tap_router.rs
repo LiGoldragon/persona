@@ -31,8 +31,8 @@ use std::io::{Read, Write};
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
 
-use signal_core::{ExchangeIdentifier, NonEmpty, Reply, SignalVerb, SubReply};
-use signal_persona_message::{
+use signal_frame::{ExchangeIdentifier, NonEmpty, Reply, SubReply};
+use signal_message::{
     Frame, FrameBody, MessageOperationKind, MessageReply, MessageRequestUnimplemented, MessageSlot,
     MessageUnimplementedReason, SubmissionAcceptance,
 };
@@ -97,19 +97,19 @@ fn build_reply_frame(canned: CannedReply, request_exchange: ExchangeIdentifier) 
         }
         CannedReply::UnimplementedSubmission => {
             MessageReply::MessageRequestUnimplemented(MessageRequestUnimplemented {
-                operation: MessageOperationKind::MessageSubmission,
+                operation: MessageOperationKind::Submit,
                 reason: MessageUnimplementedReason::NotInPrototypeScope,
             })
         }
         CannedReply::UnimplementedStamped => {
             MessageReply::MessageRequestUnimplemented(MessageRequestUnimplemented {
-                operation: MessageOperationKind::StampedMessageSubmission,
+                operation: MessageOperationKind::SubmitStamped,
                 reason: MessageUnimplementedReason::NotInPrototypeScope,
             })
         }
         CannedReply::UnimplementedInboxQuery => {
             MessageReply::MessageRequestUnimplemented(MessageRequestUnimplemented {
-                operation: MessageOperationKind::InboxQuery,
+                operation: MessageOperationKind::QueryInbox,
                 reason: MessageUnimplementedReason::NotInPrototypeScope,
             })
         }
@@ -118,10 +118,7 @@ fn build_reply_frame(canned: CannedReply, request_exchange: ExchangeIdentifier) 
     // caller (which round-trips by exchange ID) accepts the reply.
     Frame::new(FrameBody::Reply {
         exchange: request_exchange,
-        reply: Reply::completed(NonEmpty::single(SubReply::Ok {
-            verb: SignalVerb::Assert,
-            payload,
-        })),
+        reply: Reply::committed(NonEmpty::single(SubReply::Ok(payload))),
     })
 }
 
@@ -130,8 +127,7 @@ fn read_length_prefixed_frame(stream: &mut std::os::unix::net::UnixStream) -> Ve
     stream
         .read_exact(&mut length_bytes)
         .expect("read frame length prefix");
-    // signal-core's Frame::encode_length_prefixed writes the prefix
-    // as big-endian — see signal-core/src/frame.rs `length_prefix`.
+    // signal-frame writes the length prefix as big-endian.
     let length = u32::from_be_bytes(length_bytes) as usize;
     let mut payload = vec![0u8; length];
     stream.read_exact(&mut payload).expect("read frame payload");

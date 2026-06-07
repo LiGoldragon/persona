@@ -1,4 +1,4 @@
-//! Shim binary — emit a `signal-persona-message`
+//! Shim binary — emit a `signal-message`
 //! `Frame::Reply(...)` as length-prefixed bytes on stdout.
 //!
 //! Used by the nix-chained midway tests: one derivation runs this
@@ -20,11 +20,10 @@
 
 use std::io::Write;
 
-use signal_core::{
-    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, SessionEpoch, SignalVerb,
-    SubReply,
+use signal_frame::{
+    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, SessionEpoch, SubReply,
 };
-use signal_persona_message::{
+use signal_message::{
     DependencyKind, Frame, FrameBody, InboxEntry, InboxListing, MessageBody, MessageOperationKind,
     MessageReply, MessageRequestUnimplemented, MessageSender, MessageSlot,
     MessageUnimplementedReason, ResourceKind, SubmissionAcceptance,
@@ -83,9 +82,9 @@ impl EntrySpec {
 
 fn parse_operation(value: &str) -> MessageOperationKind {
     match value {
-        "submission" => MessageOperationKind::MessageSubmission,
-        "stamped" => MessageOperationKind::StampedMessageSubmission,
-        "inbox-query" => MessageOperationKind::InboxQuery,
+        "submission" => MessageOperationKind::Submit,
+        "stamped" => MessageOperationKind::SubmitStamped,
+        "inbox-query" => MessageOperationKind::QueryInbox,
         other => panic!("unknown operation: {other}"),
     }
 }
@@ -163,17 +162,13 @@ fn build_reply(variant: Variant) -> MessageReply {
 fn main() {
     let variant = parse();
     let reply = build_reply(variant);
-    let verb = SignalVerb::Assert;
     let frame = Frame::new(FrameBody::Reply {
         exchange: ExchangeIdentifier::new(
             SessionEpoch::new(1),
             ExchangeLane::Connector,
             LaneSequence::first(),
         ),
-        reply: Reply::completed(NonEmpty::single(SubReply::Ok {
-            verb,
-            payload: reply,
-        })),
+        reply: Reply::committed(NonEmpty::single(SubReply::Ok(reply))),
     });
     let bytes = frame
         .encode_length_prefixed()

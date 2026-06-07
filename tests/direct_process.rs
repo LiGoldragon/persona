@@ -3,7 +3,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use kameo::actor::{ActorRef, Spawn};
 use kameo::error::SendError;
-use nota_codec::{Decoder, NotaDecode};
+use owner_signal_persona::{
+    EngineStatusScope, Operation as EngineRequest, Query, Reply as EngineReply,
+};
 use persona::direct_process::{
     DirectProcessFailure, DirectProcessLauncher, ExitNotifier, LaunchComponent,
     LaunchComponentReceipt, ReadLauncherSnapshot, StopComponentProcess, StopComponentReceipt,
@@ -21,15 +23,56 @@ use persona::launch::{
 };
 use persona::manager::{EngineManager, HandleEngineRequest};
 use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadEngineEvents};
-use signal_persona::engine::{Operation as EngineRequest, Reply as EngineReply};
-use signal_persona::{EngineStatusScope, Query};
-use signal_persona_harness::{HarnessDaemonConfiguration, HarnessKind};
-use signal_persona_message::MessageDaemonConfiguration;
+use signal_harness::{HarnessDaemonConfiguration, HarnessKind};
+use signal_message::MessageDaemonConfiguration;
 use signal_persona_origin::EngineIdentifier;
-use signal_persona_router::{
+use signal_router::{
     EndpointKind, RouterBootstrapDocument, RouterBootstrapOperation, RouterDaemonConfiguration,
 };
-use signal_persona_terminal::TerminalDaemonConfiguration;
+use signal_terminal::TerminalDaemonConfiguration;
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct SpiritDaemonConfiguration {
+    ordinary_socket_path: SpiritSocketPath,
+    owner_socket_path: SpiritSocketPath,
+    upgrade_socket_path: SpiritSocketPath,
+    store_path: SpiritStorePath,
+    socket_mode: SpiritSocketMode,
+    bootstrap_policy_path: Option<SpiritBootstrapPolicyPath>,
+    handoff_control_socket_path: Option<SpiritSocketPath>,
+    engine_management_socket_path: Option<SpiritSocketPath>,
+    engine_management_socket_mode: Option<SpiritSocketMode>,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct SpiritSocketPath(String);
+
+impl SpiritSocketPath {
+    fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct SpiritStorePath(String);
+
+impl SpiritStorePath {
+    fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct SpiritBootstrapPolicyPath(String);
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+struct SpiritSocketMode(u32);
+
+impl SpiritSocketMode {
+    fn into_u32(self) -> u32 {
+        self.0
+    }
+}
 
 struct DirectProcessFixture {
     root: PathBuf,
@@ -79,6 +122,18 @@ impl DirectProcessFixture {
         std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o700);
         std::fs::set_permissions(&path, permissions).expect("test script permissions set");
         path.to_string_lossy().into_owned()
+    }
+
+    fn decode_archive<Value>(path: &std::path::Path, context: &'static str) -> Value
+    where
+        Value: rkyv::Archive,
+        <Value as rkyv::Archive>::Archived: for<'archive> rkyv::bytecheck::CheckBytes<
+                rkyv::api::high::HighValidator<'archive, rkyv::rancor::Error>,
+            > + rkyv::Deserialize<Value, rkyv::api::high::HighDeserializer<rkyv::rancor::Error>>,
+    {
+        let bytes = std::fs::read(path).unwrap_or_else(|error| panic!("{context}: {error}"));
+        rkyv::from_bytes::<Value, rkyv::rancor::Error>(&bytes)
+            .unwrap_or_else(|error| panic!("{context}: {error:?}"))
     }
 
     fn short_running_command(&self) -> ComponentCommand {
@@ -366,20 +421,18 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
         .await
         .expect("router component launches");
 
-    let configuration_path = envelope_path.with_file_name("router-daemon.nota");
-    let configuration_text =
-        std::fs::read_to_string(&configuration_path).expect("router configuration was written");
-    let mut decoder = Decoder::new(&configuration_text);
-    let configuration =
-        RouterDaemonConfiguration::decode(&mut decoder).expect("router configuration decodes");
+    let configuration_path = envelope_path.with_file_name("router-daemon.rkyv");
+    let configuration = DirectProcessFixture::decode_archive::<RouterDaemonConfiguration>(
+        &configuration_path,
+        "router configuration decodes",
+    );
     let bootstrap_path = configuration
         .bootstrap_path
         .expect("three-harness topology writes a router bootstrap");
-    let bootstrap_text =
-        std::fs::read_to_string(bootstrap_path.as_str()).expect("router bootstrap was written");
-
-    let bootstrap = RouterBootstrapDocument::from_nota_lines(&bootstrap_text)
-        .expect("router bootstrap decodes through contract vocabulary");
+    let bootstrap = DirectProcessFixture::decode_archive::<RouterBootstrapDocument>(
+        std::path::Path::new(bootstrap_path.as_str()),
+        "router bootstrap decodes",
+    );
     assert_eq!(bootstrap.operations().len(), 9);
 
     for name in ["initiator", "responder", "reviewer"] {
@@ -396,7 +449,7 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
                                     && endpoint.target.ends_with(format!("{name}.sock").as_str())
                         )
             )),
-            "bootstrap did not register {name}: {bootstrap_text}"
+            "bootstrap did not register {name}: {bootstrap:?}"
         );
     }
     for (from, to) in [
@@ -413,7 +466,7 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
                 RouterBootstrapOperation::GrantDirectMessage(grant)
                     if grant.from.as_str() == from && grant.to.as_str() == to
             )),
-            "bootstrap did not include grant {from}->{to}: {bootstrap_text}"
+            "bootstrap did not include grant {from}->{to}: {bootstrap:?}"
         );
     }
 
@@ -448,12 +501,11 @@ async fn constraint_three_harness_chain_message_launch_writes_component_ingress_
         .await
         .expect("message component launches");
 
-    let configuration_path = envelope_path.with_file_name("message-daemon.nota");
-    let configuration_text =
-        std::fs::read_to_string(&configuration_path).expect("message configuration was written");
-    let mut decoder = Decoder::new(&configuration_text);
-    let configuration =
-        MessageDaemonConfiguration::decode(&mut decoder).expect("message configuration decodes");
+    let configuration_path = envelope_path.with_file_name("message-daemon.rkyv");
+    let configuration = DirectProcessFixture::decode_archive::<MessageDaemonConfiguration>(
+        &configuration_path,
+        "message configuration decodes",
+    );
 
     let ingresses = configuration.component_ingresses;
     assert_eq!(ingresses.len(), 3);
@@ -527,7 +579,7 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
         .join("engine-three-harness-instance-configurations");
 
     for instance_name in instance_names {
-        let path = engine_run_root.join(format!("{instance_name}-daemon.nota"));
+        let path = engine_run_root.join(format!("{instance_name}-daemon.rkyv"));
         assert!(
             path.exists(),
             "missing instance-specific configuration: {}",
@@ -535,12 +587,10 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
         );
     }
 
-    let message_configuration_text =
-        std::fs::read_to_string(engine_run_root.join("message-daemon.nota"))
-            .expect("message configuration reads");
-    let mut message_decoder = Decoder::new(&message_configuration_text);
-    let message_configuration = MessageDaemonConfiguration::decode(&mut message_decoder)
-        .expect("message configuration decodes");
+    let message_configuration = DirectProcessFixture::decode_archive::<MessageDaemonConfiguration>(
+        &engine_run_root.join("message-daemon.rkyv"),
+        "message configuration decodes",
+    );
     assert_eq!(message_configuration.component_ingresses.len(), 3);
 
     for agent_name in ["initiator", "responder", "reviewer"] {
@@ -566,17 +616,11 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
 
     for agent_name in ["initiator", "responder", "reviewer"] {
         let terminal_instance_name = format!("{agent_name}-terminal");
-        let terminal_configuration_text = std::fs::read_to_string(
-            engine_run_root.join(format!("{terminal_instance_name}-daemon.nota")),
-        )
-        .unwrap_or_else(|error| {
-            panic!("terminal configuration reads for {terminal_instance_name}: {error}")
-        });
-        let mut terminal_decoder = Decoder::new(&terminal_configuration_text);
-        let terminal_configuration = TerminalDaemonConfiguration::decode(&mut terminal_decoder)
-            .unwrap_or_else(|error| {
-                panic!("terminal configuration decodes for {terminal_instance_name}: {error:?}")
-            });
+        let terminal_configuration =
+            DirectProcessFixture::decode_archive::<TerminalDaemonConfiguration>(
+                &engine_run_root.join(format!("{terminal_instance_name}-daemon.rkyv")),
+                "terminal configuration decodes",
+            );
         assert!(
             terminal_configuration
                 .terminal_socket_path
@@ -605,7 +649,7 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
             terminal_configuration
                 .store_path
                 .as_str()
-                .ends_with(&format!("{terminal_instance_name}.redb")),
+                .ends_with(&format!("{terminal_instance_name}.sema")),
             "terminal store path belongs to {terminal_instance_name}: {}",
             terminal_configuration.store_path.as_str()
         );
@@ -618,18 +662,11 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
             terminal_configuration.store_path.as_str()
         );
 
-        let harness_configuration_text =
-            std::fs::read_to_string(engine_run_root.join(format!("{agent_name}-daemon.nota")))
-                .unwrap_or_else(|error| {
-                    panic!("harness configuration reads for {agent_name}: {error}")
-                });
-        let mut harness_decoder = Decoder::new(&harness_configuration_text);
-        let harness_configuration = HarnessDaemonConfiguration::decode(&mut harness_decoder)
-            .unwrap_or_else(|error| {
-                panic!("harness configuration decodes for {agent_name}: {error:?}")
-            });
-        assert_eq!(harness_configuration.harness_name.as_str(), agent_name);
-        assert_eq!(harness_configuration.harness_kind, HarnessKind::Fixture);
+        let harness_configuration =
+            DirectProcessFixture::decode_archive::<HarnessDaemonConfiguration>(
+                &engine_run_root.join(format!("{agent_name}-daemon.rkyv")),
+                "harness configuration decodes",
+            );
         assert!(
             harness_configuration
                 .harness_socket_path
@@ -651,7 +688,13 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
             harness_configuration.supervision_socket_mode.into_u32(),
             0o600
         );
-        let terminal_socket_path = harness_configuration
+        let harness_instance = harness_configuration
+            .harnesses
+            .first()
+            .unwrap_or_else(|| panic!("harness {agent_name} has an instance entry"));
+        assert_eq!(harness_instance.harness_name.as_str(), agent_name);
+        assert_eq!(harness_instance.harness_kind, HarnessKind::Fixture);
+        let terminal_socket_path = harness_instance
             .terminal_socket_path
             .as_ref()
             .unwrap_or_else(|| panic!("harness {agent_name} has paired terminal socket"));
@@ -668,7 +711,7 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
         !fixture
             .run_root()
             .join("engine-three-harness-instance-configurations")
-            .join("terminal-daemon.nota")
+            .join("terminal-daemon.rkyv")
             .exists(),
         "multi-terminal topology must not collapse terminal configurations into one shared file"
     );
@@ -676,7 +719,7 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
         !fixture
             .run_root()
             .join("engine-three-harness-instance-configurations")
-            .join("harness-daemon.nota")
+            .join("harness-daemon.rkyv")
             .exists(),
         "multi-harness topology must not collapse harness configurations into one shared file"
     );
@@ -701,18 +744,39 @@ async fn constraint_spirit_launch_writes_engine_scoped_daemon_configuration() {
         .await
         .expect("spirit component launches");
 
-    let configuration_path = envelope_path.with_file_name("spirit-daemon.nota");
-    let configuration_text =
-        std::fs::read_to_string(&configuration_path).expect("spirit configuration was written");
-    assert!(configuration_text.contains("spirit.sock"));
-    assert!(configuration_text.contains("owner-spirit.sock"));
-    assert!(configuration_text.contains("spirit-upgrade.sock"));
-    assert!(configuration_text.contains("spirit.redb"));
-    assert!(configuration_text.contains("spirit.supervision.sock"));
-    assert!(
-        configuration_text.contains("384"),
-        "spirit sockets must be internal-only in prototype supervision: {configuration_text}"
+    let configuration_path = envelope_path.with_file_name("spirit-daemon.rkyv");
+    let configuration = DirectProcessFixture::decode_archive::<SpiritDaemonConfiguration>(
+        &configuration_path,
+        "spirit configuration decodes",
     );
+    assert!(
+        configuration
+            .ordinary_socket_path
+            .as_str()
+            .contains("spirit.sock")
+    );
+    assert!(
+        configuration
+            .owner_socket_path
+            .as_str()
+            .contains("owner-spirit.sock")
+    );
+    assert!(
+        configuration
+            .upgrade_socket_path
+            .as_str()
+            .contains("spirit-upgrade.sock")
+    );
+    assert!(configuration.store_path.as_str().contains("spirit.sema"));
+    assert!(
+        configuration
+            .engine_management_socket_path
+            .as_ref()
+            .expect("engine management socket present")
+            .as_str()
+            .contains("spirit.supervision.sock")
+    );
+    assert_eq!(configuration.socket_mode.into_u32(), 0o600);
 
     DirectProcessFixture::stop(&launcher, EngineComponent::Spirit)
         .await
@@ -810,7 +874,7 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
     assert!(captured.contains("engine=engine-direct-process"));
     assert!(captured.contains("component=mind"));
     assert!(captured.contains("state="));
-    assert!(captured.contains("mind.redb"));
+    assert!(captured.contains("mind.sema"));
     assert!(captured.contains("domain_socket="));
     assert!(captured.contains("mind.sock"));
     assert!(captured.contains("supervision_socket="));
@@ -829,18 +893,16 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
     assert!(captured.contains("peer_0_component="));
     assert!(captured.contains("peer_0_socket="));
 
-    let envelope_text =
-        std::fs::read_to_string(&envelope_path).expect("typed spawn envelope file exists");
-    let mut decoder = Decoder::new(&envelope_text);
-    let signal_envelope =
-        signal_persona::SpawnEnvelope::decode(&mut decoder).expect("spawn envelope decodes");
+    let signal_envelope = DirectProcessFixture::decode_archive::<
+        signal_engine_management::SpawnEnvelope,
+    >(&envelope_path, "spawn envelope decodes");
     assert_eq!(
         signal_envelope.engine_identifier.as_str(),
         "engine-direct-process"
     );
     assert_eq!(
         signal_envelope.component_kind,
-        signal_persona::ComponentKind::Mind
+        signal_engine_management::ComponentKind::Mind
     );
     assert_eq!(
         signal_envelope.component_name,
@@ -888,7 +950,7 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
 async fn constraint_component_launcher_observes_natural_child_exit_and_appends_event() {
     let fixture = DirectProcessFixture::new("natural-exit");
     let engine = EngineIdentifier::new("engine-direct-process");
-    let manager_store_path = fixture.root.join("manager.redb");
+    let manager_store_path = fixture.root.join("manager.sema");
     let store = ManagerStore::start(ManagerStoreLocation::new(&manager_store_path))
         .expect("manager store starts");
     let launcher = DirectProcessLauncher::spawn(

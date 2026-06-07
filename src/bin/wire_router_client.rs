@@ -90,8 +90,7 @@ fn read_length_prefixed_frame(stream: &mut UnixStream) -> Vec<u8> {
     stream
         .read_exact(&mut length_bytes)
         .expect("read reply length prefix");
-    // signal-core's Frame::encode_length_prefixed writes the prefix
-    // as big-endian — see signal-core/src/frame.rs `length_prefix`.
+    // signal-frame writes the length prefix as big-endian.
     let length = u32::from_be_bytes(length_bytes) as usize;
     let mut payload = vec![0u8; length];
     stream.read_exact(&mut payload).expect("read reply payload");

@@ -19,7 +19,7 @@ harness_daemon="$PERSONA_HARNESS_PACKAGE/bin/persona-harness-daemon"
 
 router_socket="$root/router.sock"
 message_socket="$root/message.sock"
-router_store="$root/router.redb"
+router_store="$root/router.sema"
 message_store="$root/message-store"
 router_bootstrap="$root/router-bootstrap.nota"
 router_daemon_configuration="$root/router-daemon.nota"
@@ -70,7 +70,7 @@ terminal_data_socket() {
 }
 
 terminal_store() {
-  printf '%s/%s.terminal.redb\n' "$root" "$1"
+  printf '%s/%s.terminal.sema\n' "$root" "$1"
 }
 
 harness_socket() {

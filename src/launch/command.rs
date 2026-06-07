@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use nota_codec::{NotaRecord, NotaTransparent};
+use nota_next::{NotaDecode, NotaEncode};
 
-#[derive(NotaTransparent, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ExecutablePath(String);
 
 impl ExecutablePath {
@@ -19,7 +19,7 @@ impl ExecutablePath {
     }
 }
 
-#[derive(NotaTransparent, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct CommandArgument(String);
 
 impl CommandArgument {
@@ -32,7 +32,7 @@ impl CommandArgument {
     }
 }
 
-#[derive(NotaTransparent, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EnvironmentVariableName(String);
 
 impl EnvironmentVariableName {
@@ -45,7 +45,7 @@ impl EnvironmentVariableName {
     }
 }
 
-#[derive(NotaTransparent, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EnvironmentVariableValue(String);
 
 impl EnvironmentVariableValue {
@@ -58,7 +58,7 @@ impl EnvironmentVariableValue {
     }
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EnvironmentVariable {
     name: EnvironmentVariableName,
     value: EnvironmentVariableValue,
@@ -87,7 +87,7 @@ pub struct EnvironmentVariableInput {
     pub value: EnvironmentVariableValue,
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentCommand {
     executable_path: ExecutablePath,
     arguments: Vec<CommandArgument>,

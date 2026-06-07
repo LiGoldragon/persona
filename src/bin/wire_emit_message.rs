@@ -1,4 +1,4 @@
-//! Shim binary — emit a `signal-persona-message` request
+//! Shim binary — emit a `signal-message` request
 //! frame as length-prefixed bytes on stdout.
 //!
 //! Used by the nix-chained wire test: derivA runs this with
@@ -25,9 +25,9 @@
 
 use std::io::Write;
 
-use signal_core::{ExchangeIdentifier, ExchangeLane, LaneSequence, Request, SessionEpoch};
-use signal_persona::TimestampNanos;
-use signal_persona_message::{
+use signal_engine_management::TimestampNanos;
+use signal_frame::{ExchangeIdentifier, ExchangeLane, LaneSequence, RequestPayload, SessionEpoch};
+use signal_message::{
     Frame, FrameBody, InboxQuery, MessageBody, MessageKind, MessageRecipient, MessageRequest,
     MessageSubmission, StampedMessageSubmission,
 };
@@ -130,7 +130,7 @@ impl Cli {
     fn build_request(self) -> MessageRequest {
         let recipient = MessageRecipient::new(self.recipient);
         match self.variant {
-            Variant::Submission => MessageRequest::MessageSubmission(MessageSubmission {
+            Variant::Submission => MessageRequest::Submit(MessageSubmission {
                 recipient,
                 kind: MessageKind::Send,
                 body: MessageBody::new(self.body.expect("--body is required for submission")),
@@ -138,7 +138,7 @@ impl Cli {
             Variant::Stamped => {
                 let body = MessageBody::new(self.body.expect("--body is required for stamped"));
                 let origin = self.origin.expect("--origin is required for stamped");
-                MessageRequest::StampedMessageSubmission(StampedMessageSubmission {
+                MessageRequest::SubmitStamped(StampedMessageSubmission {
                     submission: MessageSubmission {
                         recipient,
                         kind: MessageKind::Send,
@@ -148,7 +148,7 @@ impl Cli {
                     stamped_at: TimestampNanos::new(self.stamped_at),
                 })
             }
-            Variant::InboxQuery => MessageRequest::InboxQuery(InboxQuery { recipient }),
+            Variant::InboxQuery => MessageRequest::QueryInbox(InboxQuery { recipient }),
         }
     }
 }
@@ -162,7 +162,7 @@ fn main() {
             ExchangeLane::Connector,
             LaneSequence::first(),
         ),
-        request: Request::from_payload(request),
+        request: request.into_request(),
     });
     let bytes = frame
         .encode_length_prefixed()

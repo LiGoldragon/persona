@@ -6,7 +6,8 @@ You MUST read lore's `AGENTS.md` - the workspace-wide contract.
 
 Persona is the engine manager for coordinating multiple AI harnesses and
 component daemons as one inspectable system. The manager surface reports engine
-status, component health, and supervisor actions through `signal-persona`.
+status, component health, and supervisor actions through the Persona manager
+signal contract.
 
 ## Current Phase
 
@@ -30,7 +31,7 @@ keep Git as the remote/storage compatibility layer.
 - Architecture docs describe the present direction at a high level.
 - When implementation begins, Rust follows lore's Rust style: methods on
   types, typed domain values, one object at each boundary, one crate error
-  enum, direct Kameo actors for runtime logic, redb/rkyv for durable typed
-  storage.
+  enum, direct Kameo actors for runtime logic, and sema-engine/Sema for
+  durable typed storage.
 - Persona CLI input and output are NOTA text unless a future command is
   explicitly binary.

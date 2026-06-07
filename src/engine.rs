@@ -1,11 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use nota_codec::NotaEnum;
+use nota_next::{NotaDecode, NotaEncode};
 use signal_persona_origin::{
     ComponentName as SignalComponentName, EngineIdentifier, OwnerIdentity, UnixUserIdentifier,
 };
 
-use crate::Result;
 use crate::launch::{ComponentCommand, ResolvedComponentCommands};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,7 +26,7 @@ impl PersonaDaemonPaths {
     }
 
     pub fn manager_store(&self) -> PathBuf {
-        self.state_root.join("manager.redb")
+        self.state_root.join("manager.sema")
     }
 
     pub fn manager_socket(&self) -> PathBuf {
@@ -228,7 +227,7 @@ impl EngineLayout {
         })
     }
 
-    pub fn prepare_directories(&self) -> Result<PreparedEngineLayout> {
+    pub fn prepare_directories(&self) -> crate::Result<PreparedEngineLayout> {
         std::fs::create_dir_all(&self.state_dir)?;
         std::fs::create_dir_all(&self.run_dir)?;
         Ok(PreparedEngineLayout {
@@ -290,7 +289,7 @@ impl EngineTopology {
         }
     }
 
-    pub fn from_str(value: &str) -> Option<Self> {
+    pub fn from_name(value: &str) -> Option<Self> {
         match value {
             "full-prototype" => Some(Self::FullPrototype),
             "message-router" => Some(Self::MessageRouter),
@@ -328,7 +327,7 @@ impl ComponentTopologyEntry {
     }
 }
 
-#[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EngineComponent {
     Mind,
     Orchestrate,
@@ -419,25 +418,27 @@ impl EngineComponent {
         MESSAGE_ROUTER_COMPONENTS
     }
 
-    pub const fn component_kind(self) -> signal_persona::ComponentKind {
+    pub const fn component_kind(self) -> signal_engine_management::ComponentKind {
         match self {
-            Self::Mind => signal_persona::ComponentKind::Mind,
-            Self::Orchestrate => signal_persona::ComponentKind::Orchestrate,
-            Self::Router => signal_persona::ComponentKind::Router,
-            Self::System => signal_persona::ComponentKind::System,
-            Self::Harness => signal_persona::ComponentKind::Harness,
-            Self::Terminal => signal_persona::ComponentKind::Terminal,
-            Self::Message => signal_persona::ComponentKind::Message,
-            Self::Introspect => signal_persona::ComponentKind::Introspect,
-            Self::Spirit => signal_persona::ComponentKind::Spirit,
+            Self::Mind => signal_engine_management::ComponentKind::Mind,
+            Self::Orchestrate => signal_engine_management::ComponentKind::Orchestrate,
+            Self::Router => signal_engine_management::ComponentKind::Router,
+            Self::System => signal_engine_management::ComponentKind::System,
+            Self::Harness => signal_engine_management::ComponentKind::Harness,
+            Self::Terminal => signal_engine_management::ComponentKind::Terminal,
+            Self::Message => signal_engine_management::ComponentKind::Message,
+            Self::Introspect => signal_engine_management::ComponentKind::Introspect,
+            Self::Spirit => signal_engine_management::ComponentKind::Spirit,
         }
     }
 
-    pub fn component_name(self) -> signal_persona::ComponentName {
-        signal_persona::ComponentName::new(self.as_component_name())
+    pub fn component_name(self) -> signal_engine_management::ComponentName {
+        signal_engine_management::ComponentName::new(self.as_component_name())
     }
 
-    pub fn from_component_name(component: &signal_persona::ComponentName) -> Option<Self> {
+    pub fn from_component_name(
+        component: &signal_engine_management::ComponentName,
+    ) -> Option<Self> {
         match component.as_str() {
             "persona-mind" => Some(Self::Mind),
             "persona-orchestrate" => Some(Self::Orchestrate),
@@ -510,15 +511,15 @@ impl EngineComponent {
 
     pub const fn state_file(self) -> &'static str {
         match self {
-            Self::Mind => "mind.redb",
-            Self::Orchestrate => "orchestrate.redb",
-            Self::Router => "router.redb",
-            Self::System => "system.redb",
-            Self::Harness => "harness.redb",
-            Self::Terminal => "terminal.redb",
-            Self::Message => "message.redb",
-            Self::Introspect => "introspect.redb",
-            Self::Spirit => "spirit.redb",
+            Self::Mind => "mind.sema",
+            Self::Orchestrate => "orchestrate.sema",
+            Self::Router => "router.sema",
+            Self::System => "system.sema",
+            Self::Harness => "harness.sema",
+            Self::Terminal => "terminal.sema",
+            Self::Message => "message.sema",
+            Self::Introspect => "introspect.sema",
+            Self::Spirit => "spirit.sema",
         }
     }
 
@@ -623,7 +624,7 @@ impl ComponentLayout {
         let component = entry.component();
         let instance_name = ComponentInstanceName::new(entry.instance_name());
         Self {
-            state_path: state_dir.join(format!("{}.redb", instance_name.as_str())),
+            state_path: state_dir.join(format!("{}.sema", instance_name.as_str())),
             envelope_path: run_dir.join(format!("{}.envelope", instance_name.as_str())),
             domain_socket: ComponentSocket {
                 component,
@@ -778,21 +779,25 @@ impl ComponentSpawnEnvelope {
         self.peers.as_slice()
     }
 
-    pub fn signal_spawn_envelope(&self) -> signal_persona::SpawnEnvelope {
-        signal_persona::SpawnEnvelope {
+    pub fn signal_spawn_envelope(&self) -> signal_engine_management::SpawnEnvelope {
+        signal_engine_management::SpawnEnvelope {
             engine_identifier: self.engine.clone(),
             component_kind: self.component.component_kind(),
             component_name: self.component.signal_name(),
             owner_identity: self.owner_identity.clone(),
-            state_dir: signal_persona::WirePath::new(self.state_dir.to_string_lossy().into_owned()),
-            domain_socket_path: signal_persona::WirePath::new(
+            state_dir: signal_engine_management::WirePath::new(
+                self.state_dir.to_string_lossy().into_owned(),
+            ),
+            domain_socket_path: signal_engine_management::WirePath::new(
                 self.domain_socket_path.to_string_lossy().into_owned(),
             ),
-            domain_socket_mode: signal_persona::SocketMode::new(self.domain_socket_mode.as_octal()),
-            engine_management_socket_path: signal_persona::WirePath::new(
+            domain_socket_mode: signal_engine_management::SocketMode::new(
+                self.domain_socket_mode.as_octal(),
+            ),
+            engine_management_socket_path: signal_engine_management::WirePath::new(
                 self.supervision_socket_path.to_string_lossy().into_owned(),
             ),
-            engine_management_socket_mode: signal_persona::SocketMode::new(
+            engine_management_socket_mode: signal_engine_management::SocketMode::new(
                 self.supervision_socket_mode.as_octal(),
             ),
             peer_sockets: self
@@ -800,11 +805,11 @@ impl ComponentSpawnEnvelope {
                 .iter()
                 .map(ComponentPeerSocket::signal_peer_socket)
                 .collect(),
-            manager_socket: signal_persona::WirePath::new(
+            manager_socket: signal_engine_management::WirePath::new(
                 self.manager_socket.to_string_lossy().into_owned(),
             ),
             engine_management_protocol_version:
-                signal_persona::EngineManagementProtocolVersion::new(1),
+                signal_engine_management::EngineManagementProtocolVersion::new(1),
         }
     }
 }
@@ -837,10 +842,10 @@ impl ComponentPeerSocket {
         self.domain_socket_path.as_path()
     }
 
-    pub fn signal_peer_socket(&self) -> signal_persona::PeerSocket {
-        signal_persona::PeerSocket {
+    pub fn signal_peer_socket(&self) -> signal_engine_management::PeerSocket {
+        signal_engine_management::PeerSocket {
             component_name: self.component.signal_name(),
-            domain_socket_path: signal_persona::WirePath::new(
+            domain_socket_path: signal_engine_management::WirePath::new(
                 self.domain_socket_path.to_string_lossy().into_owned(),
             ),
         }

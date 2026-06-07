@@ -1,9 +1,9 @@
-use persona::state::EngineState;
-use signal_persona::engine::Reply;
-use signal_persona::{
+use owner_signal_persona::Reply;
+use owner_signal_persona::{
     ActionRejectionReason, ComponentDesiredState, ComponentHealth, ComponentName,
     ComponentShutdown, ComponentStartup,
 };
+use persona::state::EngineState;
 
 #[test]
 fn default_catalog_names_engine_components() {

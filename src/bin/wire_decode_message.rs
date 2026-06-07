@@ -1,4 +1,4 @@
-//! Shim binary — decode a `signal-persona-message`
+//! Shim binary — decode a `signal-message`
 //! length-prefixed `Frame::Request` from stdin and assert
 //! on shape.
 //!
@@ -33,9 +33,8 @@
 
 use std::io::{Read, Write};
 
-use nota_codec::{Encoder, NotaEncode};
-use signal_core::RequestPayload;
-use signal_persona_message::{Frame, FrameBody, MessageRequest};
+use nota_next::NotaEncode;
+use signal_message::{Frame, FrameBody, MessageRequest};
 use signal_persona_origin::{
     ComponentName, ConnectionClass, MessageOrigin, NetworkPeer, UnixUserIdentifier,
 };
@@ -127,7 +126,7 @@ impl Expectations {
         }
     }
 
-    fn assert_submission(&self, submission: &signal_persona_message::MessageSubmission) {
+    fn assert_submission(&self, submission: &signal_message::MessageSubmission) {
         assert_eq!(
             submission.recipient.as_str(),
             self.recipient.as_str(),
@@ -151,11 +150,7 @@ impl Expectations {
 }
 
 fn write_nota(request: &MessageRequest, path: &str) {
-    let mut encoder = Encoder::new();
-    request
-        .encode(&mut encoder)
-        .expect("encode request as nota");
-    let text = encoder.into_string();
+    let text = request.to_nota();
     let mut file = std::fs::File::create(path).expect("create capture-nota file");
     file.write_all(text.as_bytes())
         .expect("write capture-nota text");
@@ -173,28 +168,16 @@ fn main() {
 
     match frame.into_body() {
         FrameBody::Request { request, .. } => {
-            let checked = request
-                .into_checked()
-                .map_err(|(error, _request)| error)
-                .expect("request passes signal-core receive checks");
-            let mut operations = checked.operations.into_vec();
+            let mut operations = request.payloads.into_vec();
             assert_eq!(operations.len(), 1, "expected one message operation");
             let operation = operations.remove(0);
-            let payload_verb = operation.payload.signal_verb();
-            assert_eq!(
-                operation.verb, payload_verb,
-                "wire verb does not match payload's declared verb"
-            );
 
             if let Some(path) = expect.capture_nota.as_deref() {
-                write_nota(&operation.payload, path);
+                write_nota(&operation, path);
             }
 
-            match (&expect.variant, &operation.payload) {
-                (
-                    Some(ExpectedVariant::Submission) | None,
-                    MessageRequest::MessageSubmission(submission),
-                ) => {
+            match (&expect.variant, &operation) {
+                (Some(ExpectedVariant::Submission) | None, MessageRequest::Submit(submission)) => {
                     expect.assert_submission(submission);
                     if expect.origin.is_some() {
                         panic!(
@@ -202,10 +185,7 @@ fn main() {
                         );
                     }
                 }
-                (
-                    Some(ExpectedVariant::Stamped) | None,
-                    MessageRequest::StampedMessageSubmission(stamped),
-                ) => {
+                (Some(ExpectedVariant::Stamped) | None, MessageRequest::SubmitStamped(stamped)) => {
                     expect.assert_submission(&stamped.submission);
                     if let Some(want_origin) = expect.origin.as_ref() {
                         assert_eq!(
@@ -218,7 +198,7 @@ fn main() {
                         eprintln!("decoded origin (unasserted): {:?}", stamped.origin);
                     }
                 }
-                (Some(ExpectedVariant::InboxQuery), MessageRequest::InboxQuery(query)) => {
+                (Some(ExpectedVariant::InboxQuery), MessageRequest::QueryInbox(query)) => {
                     assert_eq!(
                         query.recipient.as_str(),
                         expect.recipient.as_str(),

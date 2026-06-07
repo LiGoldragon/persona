@@ -1,10 +1,10 @@
-use persona::schema::{
-    ComponentDesiredState, ComponentHealth, ComponentKind, EnginePhase, EngineStatusReport,
-};
-use signal_persona::{
+use owner_signal_persona::{
     ComponentDesiredState as ContractDesiredState, ComponentHealth as ContractHealth,
     ComponentKind as ContractKind, ComponentName, ComponentStatus, EngineGeneration,
     EnginePhase as ContractPhase, EngineStatus,
+};
+use persona::schema::{
+    ComponentDesiredState, ComponentHealth, ComponentKind, EnginePhase, EngineStatusReport,
 };
 
 struct SchemaFixture {
@@ -50,11 +50,14 @@ impl SchemaFixture {
 #[test]
 fn engine_status_report_round_trips_as_nota() {
     let report = SchemaFixture::starting_engine().report();
-    let encoded = report.to_nota().unwrap();
+    let encoded = report.to_nota();
     let recovered = EngineStatusReport::from_nota(&encoded).unwrap();
 
     assert_eq!(recovered, report);
-    assert!(encoded.starts_with("(EngineStatusReport 3 Starting ["));
+    assert!(
+        encoded.starts_with("(3 Starting ["),
+        "encoded report: {encoded}"
+    );
 }
 
 #[test]
@@ -70,10 +73,10 @@ fn signal_persona_status_projects_to_nota_enums() {
 }
 
 #[test]
-fn signal_persona_message_kind_projects_to_nota() {
+fn signal_message_kind_projects_to_nota() {
     let report = SchemaFixture::message_engine().report();
     let component = report.components.first().unwrap();
-    let encoded = report.to_nota().unwrap();
+    let encoded = report.to_nota();
 
     assert_eq!(component.kind, ComponentKind::Message);
     assert!(encoded.contains("Message"));

@@ -13,24 +13,25 @@ behavior inside each engine.
 
 Component implementation belongs in the component repo that owns the behavior:
 
-- `signal-persona` owns the contract for talking to the top-level `persona`
-  engine manager: engine catalog, component lifecycle, connection class, and
-  inter-engine route records.
-- `persona-message` owns the NOTA message CLI and harness/human projection.
-- `persona-router` owns delivery routing and pending-delivery state.
-- `persona-system` owns OS/window/input observation abstractions.
-- `persona-harness` owns harness identity, lifecycle, transcripts, and adapter
+- `owner-signal-persona` currently owns the contract for talking to the
+  top-level `persona` engine manager: engine catalog, component lifecycle,
+  connection class, and inter-engine route records. This is the policy-signal
+  leg that will follow the workspace meta-signal naming track.
+- `message` owns the NOTA message CLI and harness/human projection.
+- `router` owns delivery routing and pending-delivery state.
+- `system` owns OS/window/input observation abstractions.
+- `harness` owns harness identity, lifecycle, transcripts, and adapter
   contracts.
-- `persona-terminal` owns durable PTY/session transport around
+- `terminal` owns durable PTY/session transport around
   `terminal-cell`; viewer implementations stay adapter-local inside that
   owner, not separate terminal-brand component repos.
-- `sema` is the typed database library used inside state-bearing components;
-  each component owns its own redb handle and transaction-ordering actor for
-  its own domain.
-- `persona-mind` owns central mind state: memory/work items, typed thoughts,
+- `sema-engine` is the database-operation boundary used inside state-bearing
+  components; components own `.sema` stores through engine objects, not raw
+  storage handles.
+- `mind` owns central mind state: memory/work items, typed thoughts,
   relations, dependencies, decisions, aliases, subscriptions, choreography
   policy, and ready-work views.
-- `persona-orchestrate` owns ordinary role claims, handoffs, role activity, and
+- `orchestrate` owns ordinary role claims, handoffs, role activity, and
   the orchestration machinery that carries out mind-authorized work.
 
 When adding a component to the system, wire it through `flake.nix` from a
@@ -50,7 +51,7 @@ their own right. Writes follow one shape only:
 - Build an `EngineEventDraft`.
 - Send `AppendEngineEvent` to the `ManagerStore` actor.
 - The actor stamps the next sequence, runs the reducer, writes the event row
-  and both snapshot rows in **one redb write transaction**.
+  and both snapshot rows in **one sema-engine storage transaction**.
 
 Reading flows the opposite way:
 

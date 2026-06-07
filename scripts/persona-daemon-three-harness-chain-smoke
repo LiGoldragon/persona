@@ -12,7 +12,7 @@ root="${PERSONA_STACK_ROOT:-$(mktemp -d -t persona-daemon-three-harness-chain.XX
 mkdir -p "$root/state" "$root/run" "$root/artifacts"
 manager_socket="$root/persona.sock"
 
-export PERSONA_MANAGER_STORE="$root/manager.redb"
+export PERSONA_MANAGER_STORE="$root/manager.sema"
 export PERSONA_STATE_ROOT="$root/state"
 export PERSONA_RUN_ROOT="$root/run"
 export PERSONA_ENGINE_TOPOLOGY=three-harness-chain

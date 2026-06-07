@@ -44,7 +44,7 @@ impl SupervisorFixture {
     }
 
     fn manager_store(&self) -> PathBuf {
-        self.root.join("manager.redb")
+        self.root.join("manager.sema")
     }
 
     fn component_capture(&self, component: EngineComponent) -> PathBuf {
@@ -401,8 +401,8 @@ async fn constraint_engine_supervisor_scopes_spirit_per_engine() {
     assert!(second_capture.contains("component=spirit"));
     assert!(first_capture.contains("state_path="));
     assert!(second_capture.contains("state_path="));
-    assert!(first_capture.contains("state/spirit-engine-one/spirit.redb"));
-    assert!(second_capture.contains("state/spirit-engine-two/spirit.redb"));
+    assert!(first_capture.contains("state/spirit-engine-one/spirit.sema"));
+    assert!(second_capture.contains("state/spirit-engine-two/spirit.sema"));
     assert!(first_capture.contains("domain_socket="));
     assert!(second_capture.contains("domain_socket="));
     assert!(first_capture.contains("run/spirit-engine-one/spirit.sock"));

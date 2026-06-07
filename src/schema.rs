@@ -1,6 +1,6 @@
-use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode, NotaEnum, NotaRecord};
-use owner_signal_upgrade::{ForceReason, QuarantineReason, RollbackReason};
-use signal_persona as contract;
+use meta_signal_upgrade::{ForceReason, QuarantineReason, RollbackReason};
+use nota_next::{NotaDecode, NotaEncode, NotaSource};
+use owner_signal_persona as contract;
 use signal_persona_origin::EngineIdentifier;
 
 pub use crate::engine_event::{EngineEventBodyKind, EngineEventSourceKind};
@@ -16,7 +16,7 @@ use crate::engine_event::{
 };
 use crate::upgrade::ActiveVersionChangeSource;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EngineEventReport {
     pub sequence: u64,
     pub engine: EngineIdentifier,
@@ -37,53 +37,12 @@ impl EngineEventReport {
         }
     }
 
-    pub fn from_nota(text: &str) -> nota_codec::Result<Self> {
-        let mut decoder = Decoder::new(text);
-        let report = Self::decode(&mut decoder)?;
-        if let Some(token) = decoder.peek_token()? {
-            return Err(nota_codec::Error::UnexpectedToken {
-                expected: "end of input",
-                got: token,
-            });
-        }
-        Ok(report)
+    pub fn from_nota(text: &str) -> Result<Self, nota_next::NotaDecodeError> {
+        NotaSource::new(text).parse::<Self>()
     }
 
-    pub fn to_nota(&self) -> nota_codec::Result<String> {
-        let mut encoder = Encoder::new();
-        self.encode(&mut encoder)?;
-        Ok(encoder.into_string())
-    }
-}
-
-impl NotaEncode for EngineEventReport {
-    fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
-        encoder.start_record("EngineEventReport")?;
-        self.sequence.encode(encoder)?;
-        self.engine.encode(encoder)?;
-        self.source.encode(encoder)?;
-        self.source_component.encode(encoder)?;
-        self.body.encode(encoder)?;
-        encoder.end_record()
-    }
-}
-
-impl NotaDecode for EngineEventReport {
-    fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
-        decoder.expect_record_head("EngineEventReport")?;
-        let sequence = u64::decode(decoder)?;
-        let engine = EngineIdentifier::decode(decoder)?;
-        let source = EngineEventSourceKind::decode(decoder)?;
-        let source_component = Option::<ComponentName>::decode(decoder)?;
-        let body = EngineEventBodyReport::decode(decoder)?;
-        decoder.expect_record_end()?;
-        Ok(Self {
-            sequence,
-            engine,
-            source,
-            source_component,
-            body,
-        })
+    pub fn to_nota(&self) -> String {
+        NotaEncode::to_nota(self)
     }
 }
 
@@ -105,76 +64,91 @@ impl EngineEventSourceComponent {
     }
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentLifecycleEventReport {
     pub component: ComponentName,
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentUnimplementedReport {
     pub component: ComponentName,
     pub operation: ComponentOperationReport,
     pub reason: UnimplementedReason,
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentExitedReport {
     pub component: ComponentName,
-    pub exit_code: Option<i32>,
+    pub exit_code: Option<u64>,
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentOrphanedReport {
     pub component: ComponentName,
     pub spawned_sequence: u64,
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct RestartScheduledReport {
     pub component: ComponentName,
-    pub attempt: u32,
+    pub attempt: u64,
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct RestartExhaustedReport {
     pub component: ComponentName,
-    pub attempts: u32,
+    pub attempts: u64,
 }
 
-#[derive(NotaRecord, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EngineStateChangedReport {
     pub phase: EnginePhase,
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct UpgradePreparedReport {
     pub component: ComponentName,
     pub current_version: String,
     pub next_version: String,
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ActiveVersionChangedReport {
     pub component: ComponentName,
     pub active_version: String,
     pub source: ActiveVersionChangeSourceReport,
 }
 
-#[derive(NotaEnum, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub enum ActiveVersionChangeSourceReport {
-    HandoverMarker { commit_sequence: u64 },
-    ForceFlip { reason: ForceReason },
-    Rollback { reason: RollbackReason },
+    HandoverMarker(HandoverMarkerSourceReport),
+    ForceFlip(ForceFlipSourceReport),
+    Rollback(RollbackSourceReport),
 }
 
-#[derive(NotaRecord, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+pub struct HandoverMarkerSourceReport {
+    pub state_sequence: u64,
+}
+
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+pub struct ForceFlipSourceReport {
+    pub reason: ForceReason,
+}
+
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+pub struct RollbackSourceReport {
+    pub reason: RollbackReason,
+}
+
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct VersionQuarantinedReport {
     pub component: ComponentName,
     pub version: String,
     pub reason: QuarantineReason,
 }
 
-#[derive(NotaEnum, Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub enum EngineEventBodyReport {
     ComponentSpawned(ComponentLifecycleEventReport),
     ComponentReady(ComponentLifecycleEventReport),
@@ -190,17 +164,17 @@ pub enum EngineEventBodyReport {
     VersionQuarantined(VersionQuarantinedReport),
 }
 
-#[derive(NotaEnum, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComponentOperationReport {
-    Engine { operation: EngineOperationKind },
-    Message { operation: MessageOperationKind },
-    Mind { operation: MindOperationKind },
-    System { operation: SystemOperationKind },
-    Harness { operation: HarnessOperationKind },
-    Terminal { operation: TerminalOperationKind },
+    Engine(EngineOperationKind),
+    Message(MessageOperationKind),
+    Mind(MindOperationKind),
+    System(SystemOperationKind),
+    Harness(HarnessOperationKind),
+    Terminal(TerminalOperationKind),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EngineStatusReport {
     pub generation: contract::EngineGeneration,
     pub phase: EnginePhase,
@@ -216,167 +190,40 @@ impl EngineStatusReport {
         }
     }
 
-    pub fn from_nota(text: &str) -> nota_codec::Result<Self> {
-        let mut decoder = Decoder::new(text);
-        let report = Self::decode(&mut decoder)?;
-        if let Some(token) = decoder.peek_token()? {
-            return Err(nota_codec::Error::UnexpectedToken {
-                expected: "end of input",
-                got: token,
-            });
-        }
-        Ok(report)
+    pub fn from_nota(text: &str) -> Result<Self, nota_next::NotaDecodeError> {
+        NotaSource::new(text).parse::<Self>()
     }
 
-    pub fn to_nota(&self) -> nota_codec::Result<String> {
-        let mut encoder = Encoder::new();
-        self.encode(&mut encoder)?;
-        Ok(encoder.into_string())
+    pub fn to_nota(&self) -> String {
+        NotaEncode::to_nota(self)
     }
 }
 
-impl NotaEncode for EngineStatusReport {
-    fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
-        encoder.start_record("EngineStatusReport")?;
-        self.generation.encode(encoder)?;
-        self.phase.encode(encoder)?;
-        self.components.encode(encoder)?;
-        encoder.end_record()
-    }
-}
-
-impl NotaDecode for EngineStatusReport {
-    fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
-        decoder.expect_record_head("EngineStatusReport")?;
-        let generation = contract::EngineGeneration::decode(decoder)?;
-        let phase = EnginePhase::decode(decoder)?;
-        let components = Vec::<contract::ComponentStatus>::decode(decoder)?;
-        decoder.expect_record_end()?;
-        Ok(Self {
-            generation,
-            phase,
-            components,
-        })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStatusReport {
     pub component: contract::ComponentStatus,
 }
 
-impl NotaEncode for ComponentStatusReport {
-    fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
-        encoder.start_record("ComponentStatusReport")?;
-        self.component.encode(encoder)?;
-        encoder.end_record()
-    }
-}
-
-impl NotaDecode for ComponentStatusReport {
-    fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
-        decoder.expect_record_head("ComponentStatusReport")?;
-        let component = contract::ComponentStatus::decode(decoder)?;
-        decoder.expect_record_end()?;
-        Ok(Self { component })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStatusMissingReport {
     pub component: ComponentName,
 }
 
-impl NotaEncode for ComponentStatusMissingReport {
-    fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
-        encoder.start_record("ComponentStatusMissingReport")?;
-        self.component.encode(encoder)?;
-        encoder.end_record()
-    }
-}
-
-impl NotaDecode for ComponentStatusMissingReport {
-    fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
-        decoder.expect_record_head("ComponentStatusMissingReport")?;
-        let component = ComponentName::decode(decoder)?;
-        decoder.expect_record_end()?;
-        Ok(Self { component })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct RetirementAcceptanceReport {
     pub engine: EngineIdentifier,
 }
 
-impl NotaEncode for RetirementAcceptanceReport {
-    fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
-        encoder.start_record("RetirementAcceptanceReport")?;
-        self.engine.encode(encoder)?;
-        encoder.end_record()
-    }
-}
-
-impl NotaDecode for RetirementAcceptanceReport {
-    fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
-        decoder.expect_record_head("RetirementAcceptanceReport")?;
-        let engine = EngineIdentifier::decode(decoder)?;
-        decoder.expect_record_end()?;
-        Ok(Self { engine })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ActionAcceptedReport {
     pub component: ComponentName,
     pub desired_state: ComponentDesiredState,
 }
 
-impl NotaEncode for ActionAcceptedReport {
-    fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
-        encoder.start_record("ActionAcceptedReport")?;
-        self.component.encode(encoder)?;
-        self.desired_state.encode(encoder)?;
-        encoder.end_record()
-    }
-}
-
-impl NotaDecode for ActionAcceptedReport {
-    fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
-        decoder.expect_record_head("ActionAcceptedReport")?;
-        let component = ComponentName::decode(decoder)?;
-        let desired_state = ComponentDesiredState::decode(decoder)?;
-        decoder.expect_record_end()?;
-        Ok(Self {
-            component,
-            desired_state,
-        })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ActionRejectedReport {
     pub component: ComponentName,
     pub reason: ActionRejectionReason,
-}
-
-impl NotaEncode for ActionRejectedReport {
-    fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
-        encoder.start_record("ActionRejectedReport")?;
-        self.component.encode(encoder)?;
-        self.reason.encode(encoder)?;
-        encoder.end_record()
-    }
-}
-
-impl NotaDecode for ActionRejectedReport {
-    fn decode(decoder: &mut Decoder<'_>) -> nota_codec::Result<Self> {
-        decoder.expect_record_head("ActionRejectedReport")?;
-        let component = ComponentName::decode(decoder)?;
-        let reason = ActionRejectionReason::decode(decoder)?;
-        decoder.expect_record_end()?;
-        Ok(Self { component, reason })
-    }
 }
 
 impl EngineEventBodyReport {
@@ -398,7 +245,7 @@ impl EngineEventBodyReport {
             EngineEventBody::ComponentExited(event) => {
                 Self::ComponentExited(ComponentExitedReport {
                     component: event.component().clone(),
-                    exit_code: event.exit_code(),
+                    exit_code: event.exit_code().and_then(|code| u64::try_from(code).ok()),
                 })
             }
             EngineEventBody::ComponentOrphaned(event) => {
@@ -410,13 +257,13 @@ impl EngineEventBodyReport {
             EngineEventBody::RestartScheduled(event) => {
                 Self::RestartScheduled(RestartScheduledReport {
                     component: event.component().clone(),
-                    attempt: event.attempt(),
+                    attempt: u64::from(event.attempt()),
                 })
             }
             EngineEventBody::RestartExhausted(event) => {
                 Self::RestartExhausted(RestartExhaustedReport {
                     component: event.component().clone(),
-                    attempts: event.attempts(),
+                    attempts: u64::from(event.attempts()),
                 })
             }
             EngineEventBody::ComponentStopped(event) => Self::ComponentStopped(
@@ -455,11 +302,17 @@ impl EngineEventBodyReport {
 impl ActiveVersionChangeSourceReport {
     fn from_source(source: &ActiveVersionChangeSource) -> Self {
         match source {
-            ActiveVersionChangeSource::HandoverMarker { commit_sequence } => Self::HandoverMarker {
-                commit_sequence: *commit_sequence,
-            },
-            ActiveVersionChangeSource::ForceFlip { reason } => Self::ForceFlip { reason: *reason },
-            ActiveVersionChangeSource::Rollback { reason } => Self::Rollback { reason: *reason },
+            ActiveVersionChangeSource::HandoverMarker { state_sequence } => {
+                Self::HandoverMarker(HandoverMarkerSourceReport {
+                    state_sequence: *state_sequence,
+                })
+            }
+            ActiveVersionChangeSource::ForceFlip { reason } => {
+                Self::ForceFlip(ForceFlipSourceReport { reason: *reason })
+            }
+            ActiveVersionChangeSource::Rollback { reason } => {
+                Self::Rollback(RollbackSourceReport { reason: *reason })
+            }
         }
     }
 }
@@ -475,12 +328,12 @@ impl ComponentLifecycleEventReport {
 impl ComponentOperationReport {
     pub fn from_operation(operation: &ComponentOperation) -> Self {
         match operation {
-            ComponentOperation::Engine(kind) => Self::Engine { operation: *kind },
-            ComponentOperation::Message(kind) => Self::Message { operation: *kind },
-            ComponentOperation::Mind(kind) => Self::Mind { operation: *kind },
-            ComponentOperation::System(kind) => Self::System { operation: *kind },
-            ComponentOperation::Harness(kind) => Self::Harness { operation: *kind },
-            ComponentOperation::Terminal(kind) => Self::Terminal { operation: *kind },
+            ComponentOperation::Engine(kind) => Self::Engine(*kind),
+            ComponentOperation::Message(kind) => Self::Message(*kind),
+            ComponentOperation::Mind(kind) => Self::Mind(*kind),
+            ComponentOperation::System(kind) => Self::System(*kind),
+            ComponentOperation::Harness(kind) => Self::Harness(*kind),
+            ComponentOperation::Terminal(kind) => Self::Terminal(*kind),
         }
     }
 }

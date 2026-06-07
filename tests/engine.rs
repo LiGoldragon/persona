@@ -3,7 +3,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use kameo::actor::Spawn;
 use kameo::error::SendError;
-use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
 use persona::engine::{
     ComponentInstanceName, EngineComponent, EngineTopology, PersonaDaemonPaths, SocketMode,
 };
@@ -179,13 +178,13 @@ fn constraint_engine_layout_uses_engine_id_scoped_paths() {
         layout.run_dir(),
         "run/engine-alpha"
     ));
-    assert!(layout.manager_store().ends_with("manager.redb"));
+    assert!(layout.manager_store().ends_with("manager.sema"));
     assert!(layout.manager_socket().ends_with("persona.sock"));
 
     let router = layout
         .component(EngineComponent::Router)
         .expect("router component layout exists");
-    assert!(router.state_path().ends_with("router.redb"));
+    assert!(router.state_path().ends_with("router.sema"));
     assert!(router.envelope_path().ends_with("router.envelope"));
     assert!(router.domain_socket().path().ends_with("router.sock"));
     assert!(
@@ -400,7 +399,7 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     assert_eq!(envelope.component(), EngineComponent::Router);
     assert_eq!(envelope.component_instance().as_str(), "router");
     assert!(envelope.state_dir().ends_with("engine-gamma"));
-    assert!(envelope.state_path().ends_with("router.redb"));
+    assert!(envelope.state_path().ends_with("router.sema"));
     assert!(envelope.domain_socket_path().ends_with("router.sock"));
     assert!(
         envelope
@@ -445,7 +444,7 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     assert_eq!(signal_envelope.engine_identifier.as_str(), "engine-gamma");
     assert_eq!(
         signal_envelope.component_kind,
-        signal_persona::ComponentKind::Router
+        signal_engine_management::ComponentKind::Router
     );
     assert_eq!(
         signal_envelope.component_name,
@@ -477,14 +476,11 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     );
     assert_eq!(signal_envelope.peer_sockets.len(), 7);
 
-    let mut encoder = Encoder::new();
-    signal_envelope
-        .encode(&mut encoder)
+    let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&signal_envelope)
         .expect("encode signal spawn envelope");
-    let text = encoder.into_string();
-    let mut decoder = Decoder::new(&text);
     let recovered =
-        signal_persona::SpawnEnvelope::decode(&mut decoder).expect("decode signal spawn envelope");
+        rkyv::from_bytes::<signal_engine_management::SpawnEnvelope, rkyv::rancor::Error>(&bytes)
+            .expect("decode signal spawn envelope");
     assert_eq!(recovered, signal_envelope);
 }
 
@@ -508,7 +504,7 @@ async fn constraint_mind_orchestrate_topology_spawn_envelope_has_one_peer_socket
 
     assert_eq!(envelope.component(), EngineComponent::Orchestrate);
     assert_eq!(envelope.component_instance().as_str(), "orchestrate");
-    assert!(envelope.state_path().ends_with("orchestrate.redb"));
+    assert!(envelope.state_path().ends_with("orchestrate.sema"));
     assert!(envelope.domain_socket_path().ends_with("orchestrate.sock"));
     assert!(
         envelope
@@ -526,7 +522,7 @@ async fn constraint_mind_orchestrate_topology_spawn_envelope_has_one_peer_socket
     let signal_envelope = envelope.signal_spawn_envelope();
     assert_eq!(
         signal_envelope.component_kind,
-        signal_persona::ComponentKind::Orchestrate
+        signal_engine_management::ComponentKind::Orchestrate
     );
     assert_eq!(
         signal_envelope.component_name,

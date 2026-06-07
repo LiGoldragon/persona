@@ -1,3 +1,7 @@
+use owner_signal_persona::{
+    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, Query,
+};
+use owner_signal_persona::{Operation as EngineRequest, Reply as EngineReply};
 use persona::engine_event::{
     ComponentLifecycleEvent, ComponentOperation, ComponentUnimplemented,
     ComponentUnimplementedInput, EngineEventBody, EngineEventDraft, EngineEventDraftInput,
@@ -15,10 +19,6 @@ use persona::schema::{
     ComponentOperationReport, EngineEventBodyReport, EngineEventReport, EngineEventSourceKind,
 };
 use persona::state::EngineState;
-use signal_persona::engine::{Operation as EngineRequest, Reply as EngineReply};
-use signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, Query,
-};
 use signal_persona_origin::EngineIdentifier;
 use signal_upgrade::{ComponentName as UpgradeComponentName, Date, HandoverMarker, Time};
 use version_projection::{ComponentName as ProjectionComponentName, ContractVersion};
@@ -38,7 +38,7 @@ impl StoreFixture {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("store fixture root created");
         Self {
-            location: ManagerStoreLocation::new(root.join("manager.redb")),
+            location: ManagerStoreLocation::new(root.join("manager.sema")),
             root,
         }
     }
@@ -91,13 +91,13 @@ impl StoreFixture {
         })
     }
 
-    fn spirit_handover_marker(commit_sequence: u64) -> HandoverMarker {
+    fn spirit_handover_marker(state_sequence: u64) -> HandoverMarker {
         HandoverMarker {
             component: ProjectionComponentName::new("persona-spirit"),
             schema_hash: ContractVersion::new([7; 32]),
-            commit_sequence,
-            write_counter: 99,
-            last_record_identifier: Some(210),
+            state_sequence,
+            mirrored_write_count: 99,
+            record_frontier: Some(210),
             recorded_at_date: Date::new(2026, 5, 22),
             recorded_at_time: Time::new(16, 0, 0),
         }
@@ -361,7 +361,7 @@ async fn constraint_manager_store_projects_active_component_version_from_event_l
         .expect("active version exists");
     assert_eq!(active.active_version().as_str(), "v0.1.1");
     assert_eq!(active.schema_hash(), ContractVersion::new([7; 32]));
-    assert_eq!(active.commit_sequence(), Some(45));
+    assert_eq!(active.state_sequence(), Some(45));
 
     store
         .ask(RebuildSnapshotsFromEventLog)
@@ -376,7 +376,7 @@ async fn constraint_manager_store_projects_active_component_version_from_event_l
         .expect("active version snapshot reads after rebuild")
         .expect("active version exists after rebuild");
     assert_eq!(rebuilt.active_version().as_str(), "v0.1.1");
-    assert_eq!(rebuilt.commit_sequence(), Some(45));
+    assert_eq!(rebuilt.state_sequence(), Some(45));
 
     store.stop_gracefully().await.expect("manager store stops");
     let _shutdown_completion = store.wait_for_shutdown().await;
@@ -400,7 +400,7 @@ async fn constraint_engine_event_log_nota_projection_is_view() {
         .await
         .expect("events read through store actor");
     let projection = EngineEventReport::from_event(&events[0]);
-    let nota = projection.to_nota().expect("event projection encodes");
+    let nota = projection.to_nota();
     let recovered = EngineEventReport::from_nota(&nota).expect("event projection decodes");
 
     assert_eq!(recovered, projection);
@@ -420,14 +420,12 @@ async fn constraint_engine_event_log_nota_projection_is_view() {
         EngineEventBodyReport::ComponentUnimplemented(ref unimplemented)
             if unimplemented.component.as_str() == "persona-harness"
                 && unimplemented.operation
-                    == (ComponentOperationReport::Harness {
-                        operation: HarnessOperationKind::MessageDelivery,
-                    })
+                    == ComponentOperationReport::Harness(HarnessOperationKind::MessageDelivery)
                 && unimplemented.reason == UnimplementedReason::NotBuiltYet
     ));
     assert!(
         nota.starts_with(
-            "(EngineEventReport 1 engine-event-projection Component (Some persona-harness) (ComponentUnimplemented"
+            "(1 [engine-event-projection] Component (Some [persona-harness]) (ComponentUnimplemented"
         ),
         "unexpected event projection: {nota}"
     );
@@ -472,7 +470,7 @@ async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables(
     assert_eq!(status_after_spawn[0].component().as_str(), "persona-router");
     assert_eq!(
         status_after_spawn[0].health(),
-        signal_persona::ComponentHealth::Starting
+        owner_signal_persona::ComponentHealth::Starting
     );
 
     let ready_draft = EngineEventDraft::from_input(EngineEventDraftInput {
@@ -503,7 +501,7 @@ async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables(
         .expect("status snapshot reads");
     assert_eq!(
         status_after_ready[0].health(),
-        signal_persona::ComponentHealth::Running
+        owner_signal_persona::ComponentHealth::Running
     );
 
     store.stop_gracefully().await.expect("manager store stops");
@@ -554,7 +552,10 @@ async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
     let EngineReply::ComponentStatus(status) = reply else {
         panic!("expected terminal component status, got {reply:?}");
     };
-    assert_eq!(status.health, signal_persona::ComponentHealth::Running);
+    assert_eq!(
+        status.health,
+        owner_signal_persona::ComponentHealth::Running
+    );
 
     EngineManager::stop(manager)
         .await
@@ -665,7 +666,7 @@ async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapsh
         .expect("router status row present");
     assert_eq!(
         router_status.health(),
-        signal_persona::ComponentHealth::Running
+        owner_signal_persona::ComponentHealth::Running
     );
 
     let terminal_lifecycle = lifecycle_after
@@ -682,20 +683,20 @@ async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapsh
         .expect("terminal status row present");
     assert_eq!(
         terminal_status.health(),
-        signal_persona::ComponentHealth::Starting
+        owner_signal_persona::ComponentHealth::Starting
     );
 
     store.stop_gracefully().await.expect("manager store stops");
     let _shutdown_completion = store.wait_for_shutdown().await;
 }
 
-/// Architectural-truth witness: `ManagerStore` owns an exclusive redb handle,
+/// Architectural-truth witness: `ManagerStore` owns an exclusive storage handle,
 /// and its close-then-stop protocol releases that handle before callers treat
 /// shutdown as complete. A new store opening the same path after
 /// `close_and_stop` must succeed and read the data written by the stopped
 /// actor.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn constraint_manager_store_close_protocol_releases_redb_lock_before_shutdown() {
+async fn constraint_manager_store_close_protocol_releases_storage_lock_before_shutdown() {
     let fixture = StoreFixture::new("persona-manager-store-release");
     let engine = EngineIdentifier::new("engine-store-release");
 
@@ -713,7 +714,7 @@ async fn constraint_manager_store_close_protocol_releases_redb_lock_before_shutd
         .expect("manager store close protocol completes");
 
     let reopened = ManagerStore::start(fixture.location())
-        .expect("manager store redb path reopens after graceful shutdown and wait_for_shutdown");
+        .expect("manager store sema path reopens after graceful shutdown and wait_for_shutdown");
     let events = reopened
         .ask(ReadEngineEvents::new(engine.clone()))
         .await
@@ -829,7 +830,7 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
         .expect("terminal status row present");
     assert_eq!(
         terminal_status.health(),
-        signal_persona::ComponentHealth::Failed
+        owner_signal_persona::ComponentHealth::Failed
     );
 
     // Router was ready before "crash"; it must not be marked orphaned.
@@ -847,7 +848,7 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
         .expect("router status row present");
     assert_eq!(
         router_status.health(),
-        signal_persona::ComponentHealth::Running
+        owner_signal_persona::ComponentHealth::Running
     );
 
     // Second orphan-scan must be idempotent: the orphan arc gained a
@@ -864,13 +865,13 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
 }
 
 /// Architectural-truth witness: the event-log append and the snapshot
-/// reduce land in one redb write transaction. A daemon crash between
+/// reduce land in one sema-kernel write transaction. A daemon crash between
 /// `ENGINE_EVENTS.insert` and the reducer's snapshot writes is
-/// structurally impossible — they share a transaction; redb commits or
+/// structurally impossible — they share a transaction; the kernel commits or
 /// rolls back both together. The source scan reads `manager_store.rs`
 /// and asserts that `write_engine_event`'s body contains both the
 /// `ENGINE_EVENTS.insert` and the `reduce_event_into_snapshots` call,
-/// in that order, inside one `self.database.write(` closure.
+/// in that order, inside one `self.engine.storage_kernel().write(` closure.
 #[test]
 fn constraint_event_append_and_snapshot_reduce_share_one_write_transaction() {
     let source = std::fs::read_to_string(
@@ -893,12 +894,12 @@ fn constraint_event_append_and_snapshot_reduce_share_one_write_transaction() {
     let body = &source[body_start..window_end];
 
     assert!(
-        body.contains("self.database.write("),
-        "write_engine_event must use a single `self.database.write(` closure"
+        body.contains("self.engine.storage_kernel().write("),
+        "write_engine_event must use a single `self.engine.storage_kernel().write(` closure"
     );
     let insert_position = body
-        .find("ENGINE_EVENTS.insert(transaction")
-        .expect("write_engine_event must call `ENGINE_EVENTS.insert(transaction, ...)`");
+        .find(".insert(transaction, event.key().to_string(), event)")
+        .expect("write_engine_event must insert the event log row");
     let reduce_position = body
         .find("Self::reduce_event_into_snapshots(transaction")
         .expect(
@@ -911,10 +912,10 @@ fn constraint_event_append_and_snapshot_reduce_share_one_write_transaction() {
     );
 
     // Confirm the call ordering really is inside one closure: between
-    // the `self.database.write(` opening and the matching `})?)` close,
+    // the `self.engine.storage_kernel().write(` opening and the matching `})?)` close,
     // both the insert and the reduce appear exactly once.
     let write_open = body
-        .find("self.database.write(")
+        .find("self.engine.storage_kernel().write(")
         .expect("write_engine_event opens one write transaction");
     let close_marker = "        })?)";
     let write_close_relative = body[write_open..]
@@ -924,7 +925,7 @@ fn constraint_event_append_and_snapshot_reduce_share_one_write_transaction() {
     let closure_body = &body[write_open..write_close];
     assert_eq!(
         closure_body
-            .matches("ENGINE_EVENTS.insert(transaction")
+            .matches(".insert(transaction, event.key().to_string(), event)")
             .count(),
         1,
         "exactly one event-log insert per call to write_engine_event"

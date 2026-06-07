@@ -22,8 +22,8 @@ message_socket="$root/message.sock"
 terminal_socket="$root/responder.terminal.control.sock"
 terminal_data_socket="$root/responder.terminal.data.sock"
 harness_socket="$root/responder.harness.sock"
-router_store="$root/router.redb"
-terminal_store="$root/terminal.redb"
+router_store="$root/router.sema"
+terminal_store="$root/terminal.sema"
 message_store="$root/message-store"
 router_bootstrap="$root/router-bootstrap.nota"
 router_daemon_configuration="$root/router-daemon.nota"
@@ -176,7 +176,7 @@ write_message_spawn_envelope() {
 write_router_daemon_configuration() {
   local owner_user_id
   owner_user_id="$(id -u)"
-  # RouterDaemonConfiguration per signal-persona-router:
+  # RouterDaemonConfiguration per signal-router:
   # router_socket_path router_socket_mode supervision_socket_path
   # supervision_socket_mode store_path bootstrap_path owner_identity
   # `Option<WirePath>` encodes as the inner value when Some.
@@ -192,7 +192,7 @@ write_router_daemon_configuration() {
 write_message_daemon_configuration() {
   local owner_user_id
   owner_user_id="$(id -u)"
-  # MessageDaemonConfiguration record per signal-persona-message:
+  # MessageDaemonConfiguration record per signal-message:
   # message_socket_path message_socket_mode supervision_socket_path
   # supervision_socket_mode router_socket_path component_ingresses owner_identity
   printf '(MessageDaemonConfiguration "%s" 432 "%s" 384 "%s" [] (UnixUser %s))\n' \

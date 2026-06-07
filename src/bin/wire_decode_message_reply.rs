@@ -1,4 +1,4 @@
-//! Shim binary — decode a `signal-persona-message`
+//! Shim binary — decode a `signal-message`
 //! `Frame::Reply` from stdin, assert on variant and per-variant
 //! fields, optionally dump decoded NOTA for inspection by a peer
 //! derivation.
@@ -23,9 +23,9 @@
 
 use std::io::{Read, Write};
 
-use nota_codec::{Encoder, NotaEncode};
-use signal_core::{Reply, SubReply};
-use signal_persona_message::{Frame, FrameBody, MessageOperationKind, MessageReply};
+use nota_next::NotaEncode;
+use signal_frame::{Reply, SubReply};
+use signal_message::{Frame, FrameBody, MessageOperationKind, MessageReply};
 
 #[derive(Debug)]
 enum Expectation {
@@ -44,9 +44,9 @@ enum Expectation {
 
 fn parse_operation(value: &str) -> MessageOperationKind {
     match value {
-        "submission" => MessageOperationKind::MessageSubmission,
-        "stamped" => MessageOperationKind::StampedMessageSubmission,
-        "inbox-query" => MessageOperationKind::InboxQuery,
+        "submission" => MessageOperationKind::Submit,
+        "stamped" => MessageOperationKind::SubmitStamped,
+        "inbox-query" => MessageOperationKind::QueryInbox,
         other => panic!("unknown operation: {other}"),
     }
 }
@@ -95,9 +95,7 @@ fn parse() -> (Expectation, Option<String>) {
 }
 
 fn write_nota(reply: &MessageReply, path: &str) {
-    let mut encoder = Encoder::new();
-    reply.encode(&mut encoder).expect("encode reply as nota");
-    let text = encoder.into_string();
+    let text = reply.to_nota();
     let mut file = std::fs::File::create(path).expect("create capture-nota file");
     file.write_all(text.as_bytes())
         .expect("write capture-nota text");
@@ -117,7 +115,7 @@ fn main() {
     let reply_payload = match frame.into_body() {
         FrameBody::Reply { reply, .. } => match reply {
             Reply::Accepted { per_operation, .. } => match per_operation.into_head() {
-                SubReply::Ok { payload, .. } => payload,
+                SubReply::Ok(payload) => payload,
                 other => panic!("expected SubReply::Ok payload, got {other:?}"),
             },
             other => panic!("expected accepted reply, got {other:?}"),

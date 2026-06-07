@@ -24,13 +24,13 @@ local socket/state boundaries, records origin context for audit, and gives
 operators and harnesses one place to ask whether the total system is up,
 healthy, and coherent.
 
-`signal-persona` is the management contract for Persona. It is the contract a
+`owner-signal-persona` is the management contract for Persona. It is the contract a
 client uses to ask for engine status, component health, engine-visible
 projections, and engine-management actions. Component-to-component behavior
-uses the relation-specific `signal-persona-*` contracts.
+uses the relation-specific `signal-*` contracts.
 
 The `persona` CLI is a thin daemon client. It decodes one NOTA request record,
-sends one length-prefixed `signal-persona` frame to `persona-daemon`, waits for one
+sends one length-prefixed `owner-signal-persona` frame to `persona-daemon`, waits for one
 typed reply frame, renders one NOTA reply record, and exits. `persona-daemon` owns
 the live Kameo `EngineManager` actor for the daemon lifetime.
 
@@ -40,8 +40,8 @@ choreography policy, and ready/blocked views. Ordinary role claims, handoffs,
 and role activity live in `persona-orchestrate`.
 
 The architecture is contract-first. A wire boundary is defined in a dedicated
-`signal-persona-*` repository before producer and consumer implementations
-move against it. Contract crates own typed records and rkyv frame behavior;
+`signal-*` or `meta-signal-*` repository before producer and consumer
+implementations move against it. Contract crates own typed records and rkyv frame behavior;
 runtime crates own actors, policy, storage, and side effects.
 
 `persona` is the apex repo and Persona's home. It owns architecture,
@@ -51,8 +51,8 @@ transitions, terminal adapters, storage table internals, actor logic, and
 relation-specific signal records.
 
 Sema belongs to the component that owns the state inside an engine:
-`mind` has mind Sema / `mind.redb`, `router` has router Sema /
-`router.redb`, and so on. Persona owns manager-level state: the engine
+`mind` has mind Sema / `mind.sema`, `router` has router Sema /
+`router.sema`, and so on. Persona owns manager-level state: the engine
 catalog, component desired state, health, lifecycle observations,
 startup/shutdown activity, inter-engine routes, and engine-level status.
 
@@ -72,8 +72,8 @@ graph TB
     engine_a --> terminal[persona terminal]
     agent[agent] --> mind_cli[mind CLI]
     mind_cli --> mind_daemon
-    mind_daemon --> mind_db[mind redb]
-    router --> router_db[router redb]
+    mind_daemon --> mind_db[mind sema]
+    router --> router_db[router sema]
 ```
 
 ## 0.5 · Persona — the durable agent
@@ -85,7 +85,7 @@ controllers.
 
 | Failure mode being rejected | Persona answer |
 |---|---|
-| Many sources of truth reconciled by polling | Each state-bearing component owns one redb file; producers push, consumers subscribe. |
+| Many sources of truth reconciled by polling | Each state-bearing component owns one `.sema` file; producers push, consumers subscribe. |
 | Hidden mutation under uncertainty | Every state transition has a typed input event, typed output event, durable record. Constraints become witness tests. |
 | State-machine controller spawning processes | Direct Kameo actors with named planes, supervised, traceable. |
 | Tmux-as-runtime-substrate | Terminal as adapter; harnesses as first-class records. |
@@ -99,7 +99,7 @@ live in `lojix-cli` / `CriomOS`; declarative cluster data lives in
 identity) lives in the criome ecosystem.
 
 > **Scope.** Today's Persona sits on today's stack — Rust on Linux,
-> direct Kameo, component-owned Sema/redb storage, signal-* wire. The
+> direct Kameo, component-owned sema-engine/Sema storage, signal-* wire. The
 > eventually-self-hosting stack is one Sema-on-Sema substrate that
 > subsumes these pieces; today's Persona is a realization step
 > toward it, built rightly for the scope it serves now. See
@@ -127,19 +127,19 @@ the edge.
   component set, so the manager can launch and observe it with the
   rest of the engine skeletons.
 - `introspect` does **not** directly open any other
-  component's redb. Live introspection asks the owning
+  component's `.sema` store. Live introspection asks the owning
   component daemon through a Signal relation; the component
   decides which records to expose, how to read consistent
   snapshots, and what to redact.
 - The contract layer split:
   - **Operational contracts** stay where they are
-    (`signal-persona-*` per existing pattern).
+    (`signal-*` per current pattern).
   - **Component-specific introspection records** live
-    inside the existing `signal-persona-<X>` crate at first;
-    they split to a sibling `signal-persona-<X>-introspect`
+    inside the existing `signal-<X>` crate at first;
+    they split to a sibling `signal-<X>-introspect`
     when they're heavy / high-churn / unrelated to
     operational consumers.
-  - **`signal-persona-introspect`** (planned) owns the
+  - **`signal-introspect`** owns the
     central query/projection envelope vocabulary
     (`IntrospectionRequest`, `IntrospectionReply`,
     `IntrospectionSubscription`, etc.).
@@ -151,7 +151,7 @@ has the largest existing gap between durable local Sema records
 `StoredSessionHealth`, `StoredSessionArchive`) and
 contract-owned inspectable vocabulary. Manager event-log
 records are the second slice (likely promoted into
-`signal-persona`); router trace/table readouts are the
+`owner-signal-persona`); router trace/table readouts are the
 third.
 
 ## 0.7 · Persona-system: paused (FocusTracker is real, plan is deferred)
@@ -165,7 +165,7 @@ plan substance does not grow until system is unpaused by a real
 consumer.
 
 - The Niri focus observer + `FocusTracker` actor are real and tested.
-- `signal-persona-system` keeps its current observation shape; no new
+- `signal-system` keeps its current observation shape; no new
   variants land until a real consumer surfaces.
 - The privileged-action surface (`SystemPrivilegedRequest` with
   `ForceFocus` / `SuppressDrift`) is deferred. When system
@@ -173,9 +173,9 @@ consumer.
 - Likely future consumers: window-focus-aware notifications,
   multi-engine UI coordination, multi-monitor layout observations.
 
-## 0.8 · Persona-orchestrate slot
+## 0.8 · Orchestrate slot
 
-`persona-orchestrate` is the orchestration-machinery component: ordinary role
+`orchestrate` is the orchestration-machinery component: ordinary role
 claims, handoffs, activity, agent spawning, supervision, scheduling,
 escalation, and executor lifecycle. `mind` remains the authority root
 for central mind state; orchestrate is the machinery that carries out mind's
@@ -194,35 +194,35 @@ when `PERSONA_ORCHESTRATE_EXECUTABLE` points at the launcher or daemon.
 | `persona` | Engine manager, `persona-daemon` home, apex Nix/deployment/test composition, and meta architecture. |
 | `mind` | Central mind-state component and command-line mind runtime: work graph, typed thoughts/relations, subscriptions, and choreography policy. |
 | `signal-mind` | Typed contract for central mind state, work graph operations, typed thoughts/relations, subscriptions, and channel choreography. |
-| `persona-orchestrate` | Orchestration machinery component: ordinary role claims, handoffs, activity, and future spawn/supervise/schedule/escalate execution under mind authority. |
-| `signal-persona-orchestrate` | Typed contract for ordinary role/activity orchestration records. |
+| `orchestrate` | Orchestration machinery component: ordinary role claims, handoffs, activity, and future spawn/supervise/schedule/escalate execution under mind authority. |
+| `signal-orchestrate` | Typed contract for ordinary role/activity orchestration records. |
 | `router` | Message routing, delivery state, gate state, and pending-delivery decisions. |
 | `message` | Message ingress component: `message` NOTA CLI plus supervised `message-daemon`; the daemon forwards typed message frames to the internal router socket. |
 | `system` | System/window focus observation adapters. |
 | `harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
 | `terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. It exposes an ordinary terminal communication surface, an owner-only terminal lifecycle surface, plus one engine-management socket. |
 | `terminal-cell` | Low-level PTY/transcript library consumed by `terminal`; standalone daemon form is a development/test harness. |
-| `sema` | Typed database kernel library over redb/rkyv. |
-| `signal-frame` | Signal wire kernel: frames, exchange identifiers, handshake, channel macro. (Renamed from `signal-core`.) |
+| `sema` | Typed database kernel library over redb/rkyv behind `.sema` files. |
+| `signal-frame` | Signal wire kernel: frames, exchange identifiers, handshake, channel macro. |
 | `signal-sema` | Universal payloadless Sema classification labels (`Assert` / `Mutate` / `Retract` / `Match` / `Subscribe` / `Validate`) used for observation only; `PatternField<T>`, `Slot<T>`, `Revision` primitives. |
-| `signal-persona` | Management contract for Persona. |
+| `owner-signal-persona` | Management contract for Persona. |
 | `signal-message` | Message ingress contract. |
-| `signal-persona-system` | System observation contract. |
-| `signal-persona-harness` | Router/harness delivery and observation contract. |
-| `signal-persona-terminal` | Ordinary terminal transport, prompt-gate, injection, session-registry-read, and worker-lifecycle contract. |
-| `owner-signal-persona-terminal` | Owner-only terminal session lifecycle mutation contract (`CreateSession`, `RetireSession`) used by the orchestrate/harness/terminal authority chain. |
+| `signal-system` | System observation contract. |
+| `signal-harness` | Router/harness delivery and observation contract. |
+| `signal-terminal` | Ordinary terminal transport, prompt-gate, injection, session-registry-read, and worker-lifecycle contract. |
+| `owner-signal-terminal` | Policy terminal session lifecycle mutation contract (`CreateSession`, `RetireSession`) used by the orchestrate/harness/terminal authority chain. |
 | `nexus` | Semantic text vocabulary written in NOTA syntax. |
-| `nota` / `nota-codec` / `nota-derive` | NOTA language, parser/codec, and derive support. |
+| `nota-next` | NOTA language, typed codec, and derive support. |
 
 ```mermaid
 graph LR
-    signal_core[signal core] --> mind_contract[signal persona mind]
-    signal_core --> orchestrate_contract[signal persona orchestrate]
-    signal_core --> message_contract[signal persona message]
-    signal_core --> system_contract[signal persona system]
-    signal_core --> harness_contract[signal persona harness]
-    signal_core --> terminal_contract[signal persona terminal]
-    signal_core --> owner_terminal_contract[owner signal persona terminal]
+    signal_frame[signal frame] --> mind_contract[signal mind]
+    signal_frame --> orchestrate_contract[signal orchestrate]
+    signal_frame --> message_contract[signal message]
+    signal_frame --> system_contract[signal system]
+    signal_frame --> harness_contract[signal harness]
+    signal_frame --> terminal_contract[signal terminal]
+    signal_frame --> owner_terminal_contract[owner signal terminal]
     mind_contract --> mind[persona mind]
     orchestrate_contract --> orchestrate[persona orchestrate]
     mind --> orchestrate
@@ -255,17 +255,17 @@ Per-engine resources are always scoped by engine id:
 | Resource | Shape |
 |---|---|
 | State directory | `/var/lib/persona/<engine-id>/` |
-| Component redb files | `/var/lib/persona/<engine-id>/{mind,orchestrate,router,harness,terminal,...}.redb` for active topology components |
+| Component Sema files | `/var/lib/persona/<engine-id>/{mind,orchestrate,router,harness,terminal,...}.sema` for active topology components |
 | Socket directory | `/var/run/persona/<engine-id>/` |
 | Component sockets | `/var/run/persona/<engine-id>/{mind,orchestrate,router,system,harness,terminal,message,...}.sock` for active topology components |
-| Manager redb | `/var/lib/persona/manager.redb` |
+| Manager Sema file | `/var/lib/persona/manager.sema` |
 | Manager socket | `/var/run/persona/persona.sock` |
 
 Exact host paths are deployment-owned, but the `<engine-id>` scoping is
 architectural. Components do not discover peers by scanning the filesystem;
 the manager passes peer sockets at spawn time.
 
-The manager redb owns the engine catalog: engine identities, owners,
+The manager Sema store owns the engine catalog: engine identities, owners,
 component desired state, lifecycle observations, and inter-engine route
 declarations. Every transition appends a typed event and reduces into the
 manager tables.
@@ -274,7 +274,7 @@ manager tables.
 
 **Pattern-based decision (per §1.5 engine-id-scoped resources): each
 engine has its own `persona-spirit` daemon, scoped under
-`/var/lib/persona/<engine-id>/spirit.redb`.** Spirit is part of the
+`/var/lib/persona/<engine-id>/spirit.sema`.** Spirit is part of the
 per-engine component federation alongside `mind`,
 `router`, and the others; it does not span engines. The
 implicit default that each engine owns its own component federation
@@ -287,7 +287,7 @@ Concrete resource shape (consistent with the table above):
 
 | Resource | Shape |
 |---|---|
-| Spirit redb | `/var/lib/persona/<engine-id>/spirit.redb` |
+| Spirit Sema file | `/var/lib/persona/<engine-id>/spirit.sema` |
 | Spirit ordinary socket | `/var/run/persona/<engine-id>/spirit.sock` |
 | Spirit owner socket | `/var/run/persona/<engine-id>/owner-spirit.sock` |
 
@@ -343,10 +343,10 @@ MessageOrigin (stamped on each accepted message):
 ```
 
 These live in the `signal-persona-origin` contract crate (the kernel
-extracted from `signal-persona` once cross-domain demand fired). Every
-domain contract (`signal-message`, `signal-mind`,
-`signal-persona-system`, `signal-persona-harness`,
-`signal-persona-terminal`) depends on it. `signal-persona` itself keeps
+extracted from the former Persona manager contract once cross-domain demand fired). Every
+domain contract (`signal-message`, `signal-mind`, `signal-system`,
+`signal-harness`, `signal-terminal`) depends on it. The Persona manager
+contract itself keeps
 its narrow surface — engine catalog operations — and no longer owns
 the auth vocabulary.
 
@@ -385,7 +385,7 @@ Mind's choreography ops (in `signal-mind`): `ChannelGrant`,
 
 **Structural channels** are pre-installed at engine setup. The
 federation can't function without them, so `persona-daemon` writes
-them into the router's redb at engine-creation time with
+them into the router's `.sema` store at engine-creation time with
 `GrantSource::EngineSetup`:
 
 | Source | Destination | Kinds | Duration |
@@ -450,14 +450,14 @@ second engine is demonstrated alive.
 
 ### 1.6.6 · Multi-engine as substrate for federation-level migration
 
-Per-engine resource scoping (every component redb and socket keyed by
+Per-engine resource scoping (every component `.sema` store and socket keyed by
 engine id; see §1.5) leaves room for a future federation-level
 migration path: `persona-daemon` could spawn engine v2 alongside
 engine v1; mind would grant temporary migration channels; typed
 records would migrate over the channels (not byte copies); when v2's
 health checks pass, the daemon would retire v1 via graceful
-shutdown. Engine-level migration sidesteps redb's
-single-writer-per-file constraint — v2 would own its own redb files
+shutdown. Engine-level migration sidesteps the storage-kernel
+single-writer-per-file constraint — v2 would own its own `.sema` files
 under `/var/lib/persona/<engine-id-v2>/`.
 
 This is the path for **federation-shaped** changes (topology,
@@ -475,7 +475,7 @@ Per the upgrade-triad merger in designer /318, Persona is no longer
 the owner-socket root for component upgrades. Upgrade orchestration
 belongs to the `upgrade` component triad: `upgrade` (runtime),
 `signal-upgrade` (ordinary working signal), and
-`owner-signal-upgrade` (owner-only policy signal). Persona's
+`meta-signal-upgrade` (meta policy signal). Persona's
 remaining upgrade role is process lifecycle: start, stop, restart,
 and observe versioned component units on behalf of the engine. The
 handover driver, owner commands, migration catalogue, and quarantine
@@ -528,7 +528,7 @@ daemon is missing or has not copied/replayed the main high-water mark.
 
 **Owner contract.** Administrative upgrade operations — `Register`,
 `Allow`, `Block`, `Query`, `ForceFlip`, `Rollback`, and `Quarantine`
-— are carried by `owner-signal-upgrade` and handled by the upgrade
+— are carried by `meta-signal-upgrade` and handled by the upgrade
 daemon. Persona does not expose a second owner handover socket.
 
 **Manager message.** `EngineManager` (`src/manager.rs`) keeps only the
@@ -593,7 +593,7 @@ connections already handed to the previous daemon continue on their
 existing descriptors until they finish.
 
 **Quarantine gate.** Quarantine and rollback policy live in the
-upgrade daemon through `owner-signal-upgrade`. Persona stores and
+upgrade daemon through `meta-signal-upgrade`. Persona stores and
 projects upgrade event records when they appear, but it no longer owns
 the policy gate.
 
@@ -617,7 +617,7 @@ sequenceDiagram
     participant current as target main upgrade socket
     participant next as target next upgrade socket
     psyche->>owner: AttemptHandover(Target)
-    owner->>upgrade: owner-signal-upgrade request
+    owner->>upgrade: meta-signal-upgrade request
     upgrade->>store: Read upgrade events (policy gate)
     upgrade->>persona: StartComponentUnit(component, next)
     persona-->>upgrade: UnitReceipt
@@ -670,7 +670,7 @@ Three positions in this ordering are load-bearing:
 - **`sema-upgrade` is first** among supervised components. Every
   other component needs the upgrade substrate available before its
   own startup can attempt a schema migration. A component coming up
-  against an existing redb must either find no schema drift or have
+  against an existing `.sema` store must either find no schema drift or have
   a migration path through sema-upgrade; without that path any
   contract edit after first deploy breaks the next restart.
 - **The infrastructure components precede the cognitive components.**
@@ -738,14 +738,14 @@ test. Omitted components use the Nix-provided default.
   `ResolvedComponentLaunch`, forks/execs the executable, and writes the
   embedded envelope to the per-component file. This record is
   operator's lane; it is not on the wire.
-- **`signal-persona::SpawnEnvelope`** — the **child-readable typed
+- **`signal-engine-management::SpawnEnvelope`** — the **child-readable typed
   wire form**. Carries engine_identifier, component_kind, component_name,
   owner_identity, state_dir, domain_socket_path, domain_socket_mode,
   engine_management_socket_path, engine_management_socket_mode,
   peer_sockets, manager_socket, and engine_management_protocol_version.
   The manager writes the envelope file at
   `/var/run/persona/<engine-id>/<component>.envelope` at spawn
-  time; the child reads it via `signal-persona`'s typed decoder
+  time; the child reads it via `signal-engine-management`'s typed decoder
   and proceeds. Per ESSENCE §"Infrastructure mints identity, time,
   and sender," the child does not invent its socket path or
   component name.
@@ -757,13 +757,13 @@ launch state — those stay inside `ResolvedComponentLaunch`.
 **State directory for stateless components**: every component
 receives a `state_dir` via its `SpawnEnvelope`. Stateless
 components (today: `message-daemon`, `system` in
-skeleton mode) leave the directory empty and do not open a redb
+skeleton mode) leave the directory empty and do not open a `.sema`
 file until they own durable state. The manager prepares the
 directory at spawn-envelope mint time; the child opens it only if
 it has state to persist.
 
 **Manager state — event log is authoritative; snapshots are acceleration**:
-the manager owns one append-only `engine-events` log inside `manager.redb`.
+the manager owns one append-only `engine-events` log inside `manager.sema`.
 The log is the only durable source of truth for engine lifecycle, component
 health, and active component versions. Three snapshot tables —
 `engine-lifecycle-snapshot`, `engine-status-snapshot`, and
@@ -783,7 +783,7 @@ event log, maintained by reducers:
   its schema hash and handover commit sequence. Snapshot table:
   `manager.active-version-snapshot`.
 
-The reducers run together. One redb write transaction appends the event
+The reducers run together. One sema-engine storage transaction appends the event
 and reduces it into all snapshot tables; the event log and the snapshots
 move together or not at all. A snapshot table can be deleted, truncated, or
 corrupted in any way without losing manager truth: the snapshot rebuilds from
@@ -795,7 +795,7 @@ snapshot after a successful handover. Audit/debug paths walk the event log
 directly. Snapshots accelerate reads; the event log decides truth.
 
 **Manager restore**: on daemon startup the manager loads the latest
-`StoredEngineRecord` per engine from `manager.redb`, then replays every
+`StoredEngineRecord` per engine from `manager.sema`, then replays every
 persisted `EngineEvent` through every reducer, overwriting any existing
 snapshot rows. The two-step open — schema-check + table-ensure, then
 event-log replay into snapshots — runs once per `ManagerStore::open`, so
@@ -916,7 +916,7 @@ The current executable inside-unit witness is still deliberately smaller than
 the final federation: it runs the existing Nix-built `persona-dev-stack-smoke`
 under `state/dev-stack`, starts real `router-daemon` and
 `harness-daemon` and `terminal-daemon` processes, drives them
-through the `message` and `persona-terminal-signal` CLIs, and writes
+through the `message` and terminal signal CLIs, and writes
 `dev-stack-run.nota`, `dev-stack-processes.nota`, and
 `dev-stack-sockets.nota` under `artifacts/`. This proves the sandbox envelope
 runs real component daemons inside the unit and carries a message through the
@@ -972,8 +972,8 @@ Wayland stays on the host for the Ghostty attach path.
 The first daemon-first apex slice is present: `persona-daemon` binds a Unix socket,
 starts the Kameo `EngineManager`, accepts one Signal frame per connection,
 dispatches through `HandleEngineRequest`, writes one Signal reply frame, and
-keeps manager state across CLI invocations. The manager redb path is present
-through a dedicated `ManagerStore` Kameo actor backed by Sema; manager
+keeps manager state across CLI invocations. The manager Sema path is present
+through a dedicated `ManagerStore` Kameo actor backed by sema-engine; manager
 mutations persist by sending typed messages to that actor.
 
 The first engine-management slice is also present. When the daemon receives an
@@ -982,7 +982,7 @@ explicit launch plan from environment, it starts the data-bearing
 `ComponentCommandResolver`, prepares EngineIdentifier-scoped state/run directories,
 creates spawn envelopes, launches every prototype-supervised component process through
 `DirectProcessLauncher`, and records typed `ComponentSpawned` events in
-`manager.redb`. The default manager-only mode remains available for tests and
+`manager.sema`. The default manager-only mode remains available for tests and
 for hosts that have not yet supplied component commands.
 
 `nix flake check
@@ -1018,7 +1018,7 @@ graph LR
     mind_cli --> contract[signal persona mind]
     contract --> daemon[persona mind daemon]
     daemon --> runtime[persona mind runtime]
-    runtime --> store[mind redb]
+    runtime --> store[mind sema]
 ```
 
 The target surface:
@@ -1035,7 +1035,7 @@ Output:
 
 `tools/orchestrate` may remain as external cutover glue while agents
 transition. It should lower ergonomic commands into
-`signal-persona-orchestrate` request records, send them through the
+`signal-orchestrate` request records, send them through the
 orchestrate client path, and stop treating lock files as authoritative state.
 
 ## 3 · Wire Vocabulary
@@ -1043,16 +1043,16 @@ orchestrate client path, and stop treating lock files as authoritative state.
 Rust-to-Rust traffic uses Signal frames: length-prefixed rkyv archives with
 channel-specific request/reply payloads.
 
-`signal-persona` is the contract for talking to Persona. A client uses it
+`owner-signal-persona` is the contract for talking to Persona. A client uses it
 to ask Persona for engine status, component health, engine-visible
 projections, and engine-management actions.
 It is also the home for engine catalog and lifecycle records: `EngineIdentifier`,
 component desired state, component health, socket layout, spawn envelopes, and
 shutdown/restart requests. Authorization/provenance vocabulary belongs in the
-auth/route contract layer when it is needed; `signal-persona` should not grow a
+auth/route contract layer when it is needed; `owner-signal-persona` should not grow a
 Persona-local in-band proof system.
 
-The `signal-persona-*` repos are relation-specific contracts between concrete
+The `signal-*` repos are relation-specific contracts between concrete
 components: mind, message, router, system, harness, terminal, and their
 neighbors. Runtime crates move against those contracts instead of reaching into
 another component's state.
@@ -1088,16 +1088,16 @@ process boundary for another component's state.
 Each state-bearing component owns:
 
 - its Kameo actor tree;
-- its durable redb file;
+- its durable `.sema` file;
 - its write-order actor;
 - its post-commit subscription behavior.
 
 ```mermaid
 graph TB
-    router_actor[router actor tree] --> router_db[router redb]
-    mind_actor[mind actor tree] --> mind_db[mind redb]
-    harness_actor[harness actor tree] --> harness_db[harness redb]
-    router_db --> sema[sema library]
+    router_actor[router actor tree] --> router_db[router sema]
+    mind_actor[mind actor tree] --> mind_db[mind sema]
+    harness_actor[harness actor tree] --> harness_db[harness sema]
+    router_db --> sema_engine[sema-engine]
     mind_db --> sema
     harness_db --> sema
 ```
@@ -1127,7 +1127,7 @@ Runtime authorization and origin handling are component-owned:
 | Component | Boundary behavior |
 |---|---|
 | `router` | Holds live authorized-channel state in `channels` sema-db table. Parked messages awaiting mind adjudication live in `adjudication_pending`. `OneShot` channels mark `Consumed` after delivery; `TimeBound` channels expire by deadline; `Retract` writes `Retracted` before re-adjudication. |
-| `system` | Currently paused (see §0.7). When active, exposes the observation surface as `signal-persona-system::SystemRequest` / `SystemEvent`. Privileged-action surface deferred. |
+| `system` | Currently paused (see §0.7). When active, exposes the observation surface as `signal_system::SystemRequest` / `SystemEvent`. Privileged-action surface deferred. |
 | `harness` | Owns harness identity and lifecycle records. **`HarnessKind` is a closed enum** — variants `Codex`, `Claude`, `Pi`, `Fixture`. No `Other` variant. New harness types are coordinated schema bumps. |
 | `terminal` | Owns terminal input safety, prompt cleanliness, and the lock-and-cache injection mechanism (§5.1). The gate is for non-interleaving, not auth. `MessageBody(String)` is the durable freeform body shape; typing grows by adding `MessageKind` variants additively, not by retroactive body migration. |
 | `mind` | Owns choreography (`ChannelGrant`/`Extend`/`Retract`/`Deny`). Non-`Owner` messages arrive as typed `ThirdPartySuggestion` records; the owner explicitly `AdoptSuggestion` for them to become claims. The `OwnerApprovalInbox` (formerly proposed as router-owned) lives in mind. |
@@ -1158,7 +1158,7 @@ Key pieces:
 
 This mechanism replaces the originally-proposed router-side join of
 `FocusObservation` + `InputBufferObservation` from
-`signal-persona-system`.
+`signal-system`.
 
 ### 5.2 · Transcript fanout: typed observations, not raw bytes
 
@@ -1173,9 +1173,9 @@ stream-shaped.
 ### 5.3 · terminal owns communication; terminal-cell owns the cell primitive
 
 `terminal` is the Persona component. It exposes the ordinary component
-communication socket that speaks `signal-persona-terminal` frames
-(length-prefixed rkyv), an owner-only terminal surface that speaks
-`owner-signal-persona-terminal` frames for session lifecycle mutation, and the
+communication socket that speaks `signal-terminal` frames
+(length-prefixed rkyv), a policy terminal surface that speaks
+`owner-signal-terminal` frames for session lifecycle mutation, and the
 component engine-management socket. The production daemon embeds `terminal-cell` as
 its low-level PTY/transcript library.
 
@@ -1211,10 +1211,10 @@ Destination:
 ```mermaid
 graph LR
     claim[RoleClaim] --> orchestrate[persona orchestrate]
-    orchestrate --> orchestrate_db[orchestrate redb]
+    orchestrate --> orchestrate_db[orchestrate sema]
     orchestrate_db --> role_view[RoleSnapshot]
     work[Opening / Thought] --> mind[persona mind]
-    mind --> mind_db[mind redb]
+    mind --> mind_db[mind sema]
     mind_db --> work_view[Ready work view]
 ```
 
@@ -1342,7 +1342,7 @@ Migration rules:
 - The `manager.engine-lifecycle-snapshot` and `manager.engine-status-snapshot`
   tables are materialised by reducer-on-append. Writers append events; no
   caller writes snapshot rows directly outside the reducer path.
-- Event append and snapshot reduce land in one redb write transaction. A
+- Event append and snapshot reduce land in one sema-engine storage transaction. A
   daemon crash cannot leave an event persisted without its snapshot reduction.
 - The snapshot tables can be deleted, truncated, or corrupted in any way
   without losing manager truth. `ManagerStore::open` rebuilds them from the
@@ -1354,7 +1354,7 @@ Migration rules:
 - `ManagerStore::close_and_stop` first sends a close request through the
   store actor mailbox, dropping the `ManagerTables` handle, then stops the
   actor. Plain `on_stop` also drops the handle as a fallback, but the
-  close-then-stop protocol is the path with a redb lock-release witness.
+  close-then-stop protocol is the path with a storage lock-release witness.
 - `ComponentReady` is appended only after Hello + ReadinessQuery + HealthQuery
   all return non-error replies over the child's engine-management socket. Filesystem
   socket existence alone does not promote a component to `Ready`.
@@ -1398,7 +1398,7 @@ Migration rules:
   `GrantDirectMessage` record definitions.
 - Cross-component tests prove boundaries by bytes, processes, dependency
   graphs, or durable files; they do not share in-process memory as the witness.
-- State-bearing components own separate redb files and separate Sema table
+- State-bearing components own separate `.sema` files and separate Sema table
   declarations.
 - Per-engine state and socket paths include the engine id; cross-engine state
   lives only in the manager catalog.
@@ -1425,10 +1425,10 @@ Migration rules:
   contract is deferred to the auth/route implementation wave.
 - Component spawn receives peer socket paths from the manager; components do
   not scan the filesystem to discover peers.
-- Components talk by Signal frames, not by opening another component's redb
+- Components talk by Signal frames, not by opening another component's `.sema`
   file.
 - The manager catalog is written through the `ManagerStore` actor; request
-  handling does not open `manager.redb` directly.
+  handling does not open `manager.sema` directly.
 - NOTA is the only text syntax; Nexus is semantic content written in NOTA.
 - The `mind` CLI is a daemon client: one NOTA request record in, one NOTA reply
   record out.
@@ -1486,12 +1486,13 @@ Migration rules:
 - Contract repos own types; runtime repos own behavior.
 - Runtime behavior lives in direct Kameo actors inside the owning component.
 - `mind` is Persona's central daemon-backed state component.
-- Each state-bearing component owns its own redb file.
+- Each state-bearing component owns its own `.sema` file.
 - Each state-bearing component owns its own Sema layer/table declarations.
   There is no shared `persona-sema` component in the current architecture.
-- The engine manager owns `manager.redb` through its own Sema table layer.
+- The engine manager owns `manager.sema` through sema-engine and its own Sema
+  table layer.
   The write path is a data-bearing Kameo `ManagerStore` actor, not a CLI
-  helper or direct redb call in request decoding.
+  helper or direct storage-kernel call in request decoding.
 - The engine manager event log is typed manager state; text logs are views.
 - The event log is authoritative for manager state. Snapshot tables
   (`engine-lifecycle-snapshot`, `engine-status-snapshot`) are materialised
@@ -1520,7 +1521,7 @@ Migration rules:
 - Command-line persona input is one NOTA request record; output is one NOTA
   reply record.
 - The `mind` CLI is a thin client. The long-lived `mind` daemon owns
-  `MindRoot` and `mind.redb`.
+  `MindRoot` and `mind.sema`.
 - Persona is the durable agent — long-lived, persistent, inspectable.
   One-shot agent CLIs and reconciliation-stack controllers are not
   persona-shaped. Auth/security/identity is criome-shaped, not
@@ -1544,11 +1545,11 @@ The apex repo owns tests that prove cross-component shape:
 | Invariant | Witness |
 |---|---|
 | `mind` uses the mind contract | CLI decodes into `signal-mind::MindRequest`. |
-| orchestrate owns ordinary role/activity state | lock files are absent and role claims route to `signal-persona-orchestrate`. |
+| orchestrate owns ordinary role/activity state | lock files are absent and role claims route to `signal-orchestrate`. |
 | mind owns central work state | work graph requests route to `signal-mind`. |
 | router commits before delivery | delivery trace follows durable router commit. |
 | router does not own terminal transport | router dependency graph excludes `terminal` and `terminal-cell`. |
-| component databases are separate | router/mind/harness open distinct redb files. |
+| component databases are separate | router/mind/harness open distinct `.sema` files. |
 | NOTA is the only text syntax | no CLI-only parser accepts non-NOTA command records. |
 | engine resources are scoped | generated state/socket paths include `EngineIdentifier`. |
 | in-band auth proof is not accepted as authority | request decoding and component handlers ignore agent-supplied proof/class fields for local authority. |
@@ -1565,12 +1566,12 @@ The apex repo owns tests that prove cross-component shape:
 | component unit names use the component+version systemd template instance shape | `nix build .#checks.x86_64-linux.persona-component-unit-name-is-component-version-template-instance` |
 | component unit manager dispatches start, stop, restart, and status through the controller boundary | `nix build .#checks.x86_64-linux.persona-component-unit-manager-dispatches-control-actions` |
 | transient unit definitions project component commands into systemd start properties | `nix build .#checks.x86_64-linux.persona-transient-unit-definition-projects-exec-start` |
-| manager store close protocol releases its redb lock before shutdown completion | `nix build .#checks.x86_64-linux.persona-manager-store-close-protocol-releases-redb-lock-before-shutdown` |
+| manager store close protocol releases its storage lock before shutdown completion | `nix build .#checks.x86_64-linux.persona-manager-store-close-protocol-releases-storage-lock-before-shutdown` |
 | manager startup detects orphans — `ComponentSpawned` without matching `ComponentReady` or `ComponentExited` — and appends `ComponentOrphaned` events | `nix build .#checks.x86_64-linux.persona-manager-startup-appends-orphaned-events-for-unfinished-spawn` |
-| event-log append and snapshot reduce land in one redb write transaction (no daemon crash can persist an event without its snapshot reduction) | `nix build .#checks.x86_64-linux.persona-manager-store-event-append-and-snapshot-reduce-share-one-transaction` |
+| event-log append and snapshot reduce land in one sema-engine storage transaction (no daemon crash can persist an event without its snapshot reduction) | `nix build .#checks.x86_64-linux.persona-manager-store-event-append-and-snapshot-reduce-share-one-transaction` |
 | direct process launcher observes natural child exit and appends `ComponentExited` to manager event log | `nix build .#checks.x86_64-linux.persona-component-launcher-observes-natural-child-exit` |
-| persona CLI mutation reaches manager.redb via daemon path | `nix build .#checks.x86_64-linux.persona-daemon-persists-cli-mutation-to-manager-store` |
-| engine supervisor scopes `persona-spirit-daemon` per engine with distinct process captures, sockets, and redb paths | `nix build .#checks.x86_64-linux.persona-engine-supervisor-scopes-spirit-per-engine` |
+| persona CLI mutation reaches manager.sema via daemon path | `nix build .#checks.x86_64-linux.persona-daemon-persists-cli-mutation-to-manager-store` |
+| engine supervisor scopes `persona-spirit-daemon` per engine with distinct process captures, sockets, and `.sema` paths | `nix build .#checks.x86_64-linux.persona-engine-supervisor-scopes-spirit-per-engine` |
 | persona test docs name live Nix witnesses rather than bare cargo review commands | `nix build .#checks.x86_64-linux.persona-engine-meta-testing-docs-are-nix-backed` |
 | sandbox runner is a Nix-owned app | `nix build .#checks.x86_64-linux.persona-engine-sandbox-script-builds` |
 | sandbox runner supports each first harness name | `nix build .#checks.x86_64-linux.persona-engine-sandbox-supports-all-harnesses` |
@@ -1764,8 +1765,8 @@ src/supervisor.rs  Kameo EngineSupervisor actor that starts/stops prototype-supe
 src/supervision_readiness.rs  Kameo actor for typed component engine-management probes (file pending rename to engine_management_readiness.rs per primary-u8vo)
 src/transport.rs Unix-socket Signal codec, client, daemon, endpoint, caller
 src/manager.rs   Kameo EngineManager actor scaffold and trace witness
-src/manager_store.rs  Kameo ManagerStore actor and manager.redb Sema tables
-src/request.rs   NOTA projection into signal-persona requests and replies
+src/manager_store.rs  Kameo ManagerStore actor and manager.sema Sema tables
+src/request.rs   NOTA projection into owner-signal-persona requests and replies
 src/state.rs     in-memory engine-state reducer
 src/bin/persona_component_fixture.rs  typed component/engine-management fixture for tests
 src/bin/wire_*   signal-message wire-test shims

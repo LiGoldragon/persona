@@ -1,3 +1,12 @@
+use nota_next::NotaSource;
+use owner_signal_persona::{
+    ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, ComponentStatus,
+    EngineGeneration, EnginePhase, EngineStatus, EngineStatusScope as ContractEngineStatusScope,
+    Query,
+};
+use owner_signal_persona::{
+    Frame as PersonaFrame, FrameBody, Operation as EngineRequest, Reply as EngineReply,
+};
 use persona::request::{
     CommandLine, EngineStatusQuery, EngineStatusScope, PersonaOutput, PersonaRequest,
 };
@@ -5,14 +14,6 @@ use persona::schema::EngineStatusReport;
 use persona::transport::PersonaFrameCodec;
 use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Request, SessionEpoch,
-};
-use signal_persona::engine::{
-    Frame as PersonaFrame, FrameBody, Operation as EngineRequest, Reply as EngineReply,
-};
-use signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, ComponentStatus,
-    EngineGeneration, EnginePhase, EngineStatus, EngineStatusScope as ContractEngineStatusScope,
-    Query,
 };
 
 struct RequestFixture {
@@ -22,7 +23,7 @@ struct RequestFixture {
 impl RequestFixture {
     fn inline_component_status_query() -> Self {
         Self {
-            arguments: ["(ComponentStatusQuery", "persona-router)"],
+            arguments: ["(ComponentStatusQuery", "([persona-router]))"],
         }
     }
 
@@ -117,8 +118,11 @@ fn engine_status_reply_renders_as_nota() {
     });
     let output = PersonaOutput::from_engine_reply(reply).to_nota().unwrap();
 
-    assert!(output.starts_with("(EngineStatusReport 2 Starting ["));
-    assert!(output.contains("(persona-mind Mind Running Starting)"));
+    assert!(
+        output.starts_with("(EngineStatusReport (2 Starting ["),
+        "output: {output}"
+    );
+    assert!(output.contains("([persona-mind] Mind Running Starting)"));
 }
 
 #[test]
@@ -134,8 +138,7 @@ fn output_round_trips_through_nota() {
         }],
     });
     let encoded = output.to_nota().unwrap();
-    let mut decoder = nota_codec::Decoder::new(&encoded);
-    let recovered = <PersonaOutput as nota_codec::NotaDecode>::decode(&mut decoder).unwrap();
+    let recovered = NotaSource::new(&encoded).parse::<PersonaOutput>().unwrap();
 
     assert_eq!(recovered, output);
 }

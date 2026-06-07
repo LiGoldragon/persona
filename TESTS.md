@@ -26,7 +26,7 @@ contract's or component's own `tests/` directory, not here.
 ### 0 · Component flake checks
 
 `persona` imports component and contract flakes, then exposes their
-checks under this meta repo. When a new `signal-persona-*` contract
+checks under this meta repo. When a new `signal-*` contract
 lands, the meta repo imports it so a single `nix flake check` sees
 the contract health alongside the runtime components.
 
@@ -45,7 +45,7 @@ Currently:
 - `tests/engine.rs` — engine layout, socket modes, topology, and
   spawn-envelope witnesses.
 - `tests/manager.rs` — Kameo actor-path constraints for the engine manager.
-- `tests/manager_store.rs` — manager.redb event log, snapshots,
+- `tests/manager_store.rs` — manager.sema event log, snapshots,
   restore, orphan detection, and shutdown lock-release witnesses.
 - `tests/meta_testing.rs` — meta-witnesses that architecture/test docs
   name live Nix checks and actor-test runtime exceptions stay narrow.
@@ -153,8 +153,8 @@ What each tier proves:
 | `constraint_three_harness_chain_writes_instance_specific_daemon_configurations` | Starts every three-harness-chain component launcher and decodes the generated daemon configuration files to prove message ingresses, terminal sockets/stores, and harness-terminal pairings belong to the named instance instead of only checking filenames. |
 | `constraint_engine_supervisor_launches_message_router_topology_without_full_stack` | Starts the `EngineSupervisor` actor with the focused topology, proves only `persona-message` and `persona-router` launch, and verifies each child sees one peer. |
 | `constraint_engine_supervisor_launches_three_harness_chain_instances` | Starts the `EngineSupervisor` actor with the three-harness-chain topology and proves eight distinct child instances launch: message, router, three terminals, and three harnesses. |
-| `constraint_engine_supervisor_launches_prototype_supervised_components_through_process_launcher` | Starts the `EngineSupervisor` actor with a component skeleton launch plan, proves all prototype-supervised component processes go through `DirectProcessLauncher`, verifies domain and supervision sockets, completes typed supervision identity/readiness/health round-trips, and reads typed spawn/ready/stop events back from `manager.redb`. |
-| `constraint_engine_supervisor_scopes_spirit_per_engine` | Starts two prototype engines under one manager root and proves each engine gets a distinct `persona-spirit` process, `/state/<engine>/spirit.redb`, and `/run/<engine>/spirit.sock`. |
+| `constraint_engine_supervisor_launches_prototype_supervised_components_through_process_launcher` | Starts the `EngineSupervisor` actor with a component skeleton launch plan, proves all prototype-supervised component processes go through `DirectProcessLauncher`, verifies domain and supervision sockets, completes typed supervision identity/readiness/health round-trips, and reads typed spawn/ready/stop events back from `manager.sema`. |
+| `constraint_engine_supervisor_scopes_spirit_per_engine` | Starts two prototype engines under one manager root and proves each engine gets a distinct `persona-spirit` process, `/state/<engine>/spirit.sema`, and `/run/<engine>/spirit.sock`. |
 | `constraint_persona_engine_drives_version_handover_over_component_upgrade_socket` | Binds fake main and next private upgrade sockets, proves Persona reads both markers, drives readiness/completion against the main socket, and records the active-version change from the finalized marker. |
 | `constraint_engine_manager_starts_next_component_unit_before_handover_socket_probe` | Injects a recording unit controller, drives a handover with missing upgrade sockets, and proves Persona starts the next version's component unit before any handover socket failure can abort the attempt. |
 | `constraint_component_unit_name_is_component_version_template_instance` | Proves a component unit projects to the template instance name `persona-component@<component>:<version>.service` while retaining the engine identifier in the typed value. |
@@ -165,11 +165,11 @@ What each tier proves:
 | `constraint_owner_attempt_handover_drives_component_upgrade_socket` | Sends owner `AttemptHandover` to the manager, proves it drives the same two-socket private upgrade protocol, and persists the marker-backed active selector. |
 | `constraint_engine_manager_refuses_handover_with_quarantined_version` | Records an owner `Quarantine` event, then proves normal handover refuses that component version before opening any private upgrade socket. |
 | `constraint_owner_attempt_handover_reports_quarantined_version` | Records an owner `Quarantine` event, then proves owner `AttemptHandover` returns a typed `Rejected(VersionQuarantined)` reply instead of closing the owner socket. |
-| `constraint_persona_daemon_owner_socket_drives_version_handover` | Starts the real `persona-daemon`, sends `AttemptHandover` over the daemon owner socket, serves fake main and next component private upgrade sockets, and verifies the active selector persists in `manager.redb`. |
+| `constraint_persona_daemon_owner_socket_drives_version_handover` | Starts the real `persona-daemon`, sends `AttemptHandover` over the daemon owner socket, serves fake main and next component private upgrade sockets, and verifies the active selector persists in `manager.sema`. |
 | `constraint_persona_daemon_owner_handover_uses_injected_unit_controller` | Starts an in-process `PersonaDaemon` with a recording unit controller, sends owner `AttemptHandover`, and proves the daemon path starts the next version's component unit before driving handover sockets. |
 | `constraint_persona_daemon_launches_message_router_topology_through_engine_supervisor` | Starts the real `persona-daemon` with `PERSONA_ENGINE_TOPOLOGY=message-router`, proves the launch plan reaches the supervisor, and proves no unrelated component capture appears. |
-| `constraint_persona_daemon_launches_three_harness_chain_topology_through_engine_supervisor` | Starts the real `persona-daemon` with `PERSONA_ENGINE_TOPOLOGY=three-harness-chain`, proves all eight named component instances launch through the supervisor, and reads their manager events back from `manager.redb`. |
-| `constraint_persona_daemon_launches_prototype_supervised_components_through_engine_supervisor` | Starts the real `persona-daemon` with `PERSONA_PROTOTYPE_STACK_EXECUTABLE`, proves all prototype-supervised spawn envelopes reached child processes, verifies supervision round-trips through the supervisor path, and verifies typed `ComponentSpawned`/`ComponentReady` events in `manager.redb`. |
+| `constraint_persona_daemon_launches_three_harness_chain_topology_through_engine_supervisor` | Starts the real `persona-daemon` with `PERSONA_ENGINE_TOPOLOGY=three-harness-chain`, proves all eight named component instances launch through the supervisor, and reads their manager events back from `manager.sema`. |
+| `constraint_persona_daemon_launches_prototype_supervised_components_through_engine_supervisor` | Starts the real `persona-daemon` with `PERSONA_PROTOTYPE_STACK_EXECUTABLE`, proves all prototype-supervised spawn envelopes reached child processes, verifies supervision round-trips through the supervisor path, and verifies typed `ComponentSpawned`/`ComponentReady` events in `manager.sema`. |
 | `constraint_persona_daemon_serves_owner_version_handover_socket` | Starts the real `persona-daemon`, sends `owner-signal-version-handover::Quarantine` through its derived owner socket, and proves the request reaches the manager owner-authority path. |
 | `constraint_persona_daemon_owner_socket_drives_real_spirit_upgrade_socket` | Starts the real `persona-daemon`, starts real main and next `persona-spirit` daemon upgrade sockets, sends owner `AttemptHandover`, and proves the manager receives next marker parity plus main `HandoverAccepted` / `HandoverFinalized` through actual Spirit upgrade boundaries. |
 | `constraint_persona_daemon_hands_over_between_copied_spirit_databases` | Starts in-process current and next `persona-spirit` daemons, records through current, copies the current store to next, drives `AttemptHandover` through the real `persona-daemon`, and proves next serves the copied state after the handover while current closes its ordinary socket. |
@@ -275,7 +275,7 @@ SO_PEERCRED before forwarding to the router.
 | Witness | What it proves |
 |---|---|
 | `message.envelope` is recorded in the process/socket manifests | The stateful stack starts `persona-message-daemon` through the same spawn-envelope owner path used by the managed engine, not the old daemon-uid fallback. |
-| `router.redb` is passed to `persona-router-daemon` and created during smoke | The stateful stack exercises durable router tables instead of the in-memory direct-run fallback. |
+| `router.sema` is passed to the router daemon and created during smoke | The stateful stack exercises durable router tables instead of the in-memory direct-run fallback. |
 | `message Send` returns `(SubmissionAccepted N)` | The CLI's `MessageSubmission` reaches `persona-message-daemon`, gets stamped, forwards to `persona-router`, and the router accepts at a slot. |
 | `message Inbox responder` omits the delivered body | The router accepted the message and delivered it through `persona-harness` to the terminal path; the recipient inbox no longer exposes the already-delivered body. |
 | `persona-harness-daemon` reports readiness | The harness delivery boundary is live in the smoke, not bypassed by direct terminal registration. |
@@ -423,7 +423,7 @@ The next load-bearing integration work is split by lane:
 
 | Lane | Current state | Next target |
 |---|---|---|
-| Router ingress | Landed for supervised `persona-message` + `persona-router` | Move accepted messages from in-memory pending state into router-owned Sema/redb. |
+| Router ingress | Landed for supervised `persona-message` + `persona-router` | Move accepted messages from in-memory pending state into router-owned `.sema` storage. |
 | Sandbox dev-stack | Landed through router -> harness -> terminal fixture delivery | Add mind adjudication and durable delivery traces. |
 | Sandbox terminal-cell | Landed for fixture and Pi | Add dedicated Codex/Claude auth smoke after sandbox credentials are provisioned. |
 | Full federation | Partly landed without mind | Route message through router/mind/harness/terminal with durable traces. |
@@ -432,14 +432,14 @@ The next router persistence witness targets the corrected prototype stack:
 
 ```mermaid
 flowchart LR
-    message["signal-persona-message MessageSubmission"]
+    message["signal-message MessageSubmission"]
     router["persona-router actor"]
     state["router-owned state actor"]
     sema["component-owned Sema layer"]
-    redb[("router redb")]
-    reply["signal-persona-message SubmissionAccepted"]
+    sema_file[("router sema")]
+    reply["signal-message SubmissionAccepted"]
 
-    message --> router --> state --> sema --> redb
+    message --> router --> state --> sema --> sema_file
     state --> reply
 ```
 
@@ -447,10 +447,10 @@ The intended Nix-chained witness is:
 
 | Step | Witness |
 |---|---|
-| Emit | A separate derivation writes a `signal-persona-message::MessageSubmission` frame. |
-| Commit | A router-shaped binary reads only those bytes, mints router-owned metadata, and writes through the router-owned Sema layer into a router-owned redb file. |
-| Read back | A separate reader opens the redb through the router-owned Sema layer and asserts the durable message exists. |
-| Reply | The router-shaped binary emits `signal-persona-message::SubmissionAccepted`. |
+| Emit | A separate derivation writes a `signal-message::MessageSubmission` frame. |
+| Commit | A router-shaped binary reads only those bytes, mints router-owned metadata, and writes through the router-owned Sema layer into a router-owned `.sema` file. |
+| Read back | A separate reader opens the `.sema` file through the router-owned Sema layer and asserts the durable message exists. |
+| Reply | The router-shaped binary emits `signal-message::SubmissionAccepted`. |
 
 That future test should prove the component path, not only the
 visible behavior.
@@ -459,7 +459,7 @@ visible behavior.
 
 ## When a new contract gets added
 
-Adding `signal-persona-<channel>` should also add a matching
+Adding `signal-<channel>` should also add a matching
 Nix-chained check in this repo when the contract participates in a
 cross-component behavior. Pattern:
 
@@ -478,10 +478,10 @@ can satisfy the test.
 
 ## Remaining gaps
 
-- It does NOT yet consume `signal-persona-system` in router code; the
+- It does NOT yet consume `signal-system` in router code; the
   meta repo currently verifies that contract through its own imported
   flake checks.
-- It does NOT write a redb file through a router-owned Sema layer.
+- It does NOT write a `.sema` file through a router-owned Sema layer.
 - It does NOT exercise terminal prompt/focus gates; the current terminal lane
   is a fixture transport witness.
 - `persona-dev-stack-smoke` registers the fixture recipient through
@@ -501,8 +501,8 @@ can satisfy the test.
   domain-owned state correction.
 - `~/primary/reports/operator/77-first-stack-channel-boundary-audit.md`
   — operator counter-plan for the earlier first-stack channel boundary.
-- `signal-persona-message/` — the message channel contract consumed
+- `signal-message/` — the message channel contract consumed
   here.
-- `signal-persona-system/` — the system observation contract imported
+- `signal-system/` — the system observation contract imported
   by the meta flake and consumed by the router next.
-- `signal-core/src/channel.rs` — the `signal_channel!` macro.
+- `signal-frame` — the current wire kernel.

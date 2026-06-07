@@ -22,22 +22,21 @@ path = "src/bin/persona_daemon.rs"
 [dependencies]
 kameo                  = { version = "0.20", default-features = false }
 libc                   = "0.2"
-nota-codec             = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }
-owner-signal-upgrade   = { git = "https://github.com/LiGoldragon/owner-signal-upgrade.git", branch = "main" }
-redb                   = "4"
+meta-signal-upgrade    = { git = "https://github.com/LiGoldragon/meta-signal-upgrade.git", branch = "main" }
+nota-next              = { git = "https://github.com/LiGoldragon/nota-next.git", branch = "main" }
+owner-signal-persona   = { git = "https://github.com/LiGoldragon/owner-signal-persona.git", branch = "main" }
 rkyv                   = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
-sema                   = { git = "https://github.com/LiGoldragon/sema.git" }
+sema-engine            = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
+signal-engine-management = { git = "https://github.com/LiGoldragon/signal-engine-management.git", branch = "main" }
 signal-frame           = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "main" }
-signal-core            = { git = "https://github.com/LiGoldragon/signal-core.git" }
-signal-persona          = { git = "https://github.com/LiGoldragon/signal-persona.git" }
-signal-persona-origin     = { git = "https://github.com/LiGoldragon/signal-persona-origin.git" }
-signal-persona-harness    = { git = "https://github.com/LiGoldragon/signal-persona-harness.git" }
-signal-persona-introspect = { git = "https://github.com/LiGoldragon/signal-persona-introspect.git" }
-signal-persona-mind       = { git = "https://github.com/LiGoldragon/signal-persona-mind.git" }
-signal-persona-message    = { git = "https://github.com/LiGoldragon/signal-persona-message.git" }
-signal-persona-router     = { git = "https://github.com/LiGoldragon/signal-persona-router.git" }
-signal-persona-system     = { git = "https://github.com/LiGoldragon/signal-persona-system.git" }
-signal-persona-terminal   = { git = "https://github.com/LiGoldragon/signal-persona-terminal.git" }
+signal-harness            = { git = "https://github.com/LiGoldragon/signal-harness.git", branch = "main" }
+signal-introspect         = { git = "https://github.com/LiGoldragon/signal-introspect.git", branch = "main" }
+signal-message            = { git = "https://github.com/LiGoldragon/signal-message.git", branch = "main" }
+signal-mind               = { git = "https://github.com/LiGoldragon/signal-mind.git", branch = "main" }
+signal-persona-origin     = { git = "https://github.com/LiGoldragon/signal-persona-origin.git", branch = "main" }
+signal-router             = { git = "https://github.com/LiGoldragon/signal-router.git", branch = "main" }
+signal-system             = { git = "https://github.com/LiGoldragon/signal-system.git", branch = "main" }
+signal-terminal           = { git = "https://github.com/LiGoldragon/signal-terminal.git", branch = "main" }
 strum                  = { version = "0.28", features = ["derive"] }
 thiserror              = "2"
 tokio                  = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "process", "time"] }
@@ -47,13 +46,11 @@ version-projection     = { git = "https://github.com/LiGoldragon/version-project
 zbus                   = { version = "5.15", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
-persona-spirit = { git = "https://github.com/LiGoldragon/persona-spirit.git", branch = "main" }
-signal-persona-spirit = { git = "https://github.com/LiGoldragon/signal-persona-spirit.git", branch = "main" }
 signal-sema = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "main" }
 signal-upgrade = { git = "https://github.com/LiGoldragon/signal-upgrade.git", branch = "main" }
 
 # ─── Wire-test shim binaries (for nix-chained tests) ──────
-# These exercise signal-persona-message end-to-end through
+# These exercise signal-message end-to-end through
 # real bytes on stdout/stdin.
 
 [[bin]]

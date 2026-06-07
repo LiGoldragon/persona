@@ -6,11 +6,11 @@ use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::os::unix::net::UnixStream as StandardUnixStream;
 
 use kameo::actor::ActorRef;
+use owner_signal_persona::{Frame, FrameBody, Operation as EngineRequest, Reply as EngineReply};
 use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
     SubReply,
 };
-use signal_persona::engine::{Frame, FrameBody, Operation as EngineRequest, Reply as EngineReply};
 use signal_persona_origin::EngineIdentifier;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
@@ -155,7 +155,7 @@ impl ComponentHandoffEndpoint {
 #[derive(Debug, Clone)]
 pub struct ManagerStoreActiveVersionReader {
     engine: EngineIdentifier,
-    component_name: signal_persona::ComponentName,
+    component_name: owner_signal_persona::ComponentName,
     store: ActorRef<ManagerStore>,
 }
 
@@ -175,7 +175,7 @@ impl ManagerStoreActiveVersionReader {
     ) -> Self {
         Self {
             engine,
-            component_name: signal_persona::ComponentName::new(component_name),
+            component_name: owner_signal_persona::ComponentName::new(component_name),
             store,
         }
     }
@@ -485,7 +485,7 @@ pub struct PersonaDaemon {
 impl PersonaDaemon {
     pub fn new(endpoint: PersonaEndpoint) -> Self {
         let manager_store = ManagerStoreLocation::from_endpoint(endpoint.as_path())
-            .unwrap_or_else(|_| ManagerStoreLocation::new("manager.redb"));
+            .unwrap_or_else(|_| ManagerStoreLocation::new("manager.sema"));
         Self::with_manager_store(endpoint, manager_store)
     }
 
@@ -598,7 +598,7 @@ impl PersonaDaemonCommand {
         let endpoint = PersonaEndpoint::from_argument_or_environment(std::env::args_os().nth(1));
         let manager_store = ManagerStoreLocation::from_environment().unwrap_or_else(|| {
             ManagerStoreLocation::from_endpoint(endpoint.as_path())
-                .unwrap_or_else(|_| ManagerStoreLocation::new("manager.redb"))
+                .unwrap_or_else(|_| ManagerStoreLocation::new("manager.sema"))
         });
         let launch_plan = PersonaLaunchPlan::from_environment(&endpoint)?;
         Ok(Self {
@@ -661,7 +661,7 @@ impl PersonaLaunchPlan {
             return Ok(EngineTopology::FullPrototype);
         };
         let text = value.to_string_lossy();
-        EngineTopology::from_str(text.as_ref()).ok_or_else(|| Error::UnknownEngineTopology {
+        EngineTopology::from_name(text.as_ref()).ok_or_else(|| Error::UnknownEngineTopology {
             got: text.into_owned(),
         })
     }

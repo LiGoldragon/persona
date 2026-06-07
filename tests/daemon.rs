@@ -20,7 +20,7 @@ impl DaemonFixture {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("test root created");
         let socket = root.join("persona.sock");
-        let manager_store = root.join("manager.redb");
+        let manager_store = root.join("manager.sema");
         let mut daemon = Command::new(env!("CARGO_BIN_EXE_persona-daemon"))
             .arg(&socket)
             .env("PERSONA_MANAGER_STORE", &manager_store)
@@ -66,7 +66,7 @@ impl DaemonFixture {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("test root created");
         let socket = root.join("persona.sock");
-        let manager_store = root.join("manager.redb");
+        let manager_store = root.join("manager.sema");
         let script = support::component_socket_fixture(root.as_path());
         let mut daemon = Command::new(env!("CARGO_BIN_EXE_persona-daemon"))
             .arg(&socket)
@@ -309,20 +309,26 @@ async fn constraint_persona_daemon_launches_message_router_topology_through_engi
 fn constraint_persona_cli_talks_to_persona_daemon_over_socket() {
     let fixture = DaemonFixture::start();
 
-    let shutdown = fixture.persona("(ComponentShutdown persona-terminal)");
-    assert!(shutdown.contains("(ActionAcceptedReport persona-terminal Stopped)"));
+    let shutdown = fixture.persona("(ComponentShutdown ([persona-terminal]))");
+    assert!(
+        shutdown.contains("(ActionAcceptedReport ([persona-terminal] Stopped))"),
+        "shutdown output: {shutdown}"
+    );
 
-    let status = fixture.persona("(ComponentStatusQuery persona-terminal)");
+    let status = fixture.persona("(ComponentStatusQuery ([persona-terminal]))");
     assert!(status.contains("(ComponentStatusReport "));
-    assert!(status.contains("(persona-terminal Terminal Stopped Stopped)"));
+    assert!(status.contains("([persona-terminal] Terminal Stopped Stopped)"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_persona_daemon_persists_cli_mutation_to_manager_store() {
     let mut fixture = DaemonFixture::start();
 
-    let shutdown = fixture.persona("(ComponentShutdown persona-terminal)");
-    assert!(shutdown.contains("(ActionAcceptedReport persona-terminal Stopped)"));
+    let shutdown = fixture.persona("(ComponentShutdown ([persona-terminal]))");
+    assert!(
+        shutdown.contains("(ActionAcceptedReport ([persona-terminal] Stopped))"),
+        "shutdown output: {shutdown}"
+    );
 
     fixture.stop_daemon();
 
@@ -345,7 +351,7 @@ async fn constraint_persona_daemon_persists_cli_mutation_to_manager_store() {
         .expect("terminal component stored");
     assert_eq!(
         terminal.desired_state,
-        signal_persona::ComponentDesiredState::Stopped
+        owner_signal_persona::ComponentDesiredState::Stopped
     );
 
     store.stop_gracefully().await.expect("manager store stops");

@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
+use owner_signal_persona::{
+    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, EngineStatusScope,
+    Query,
+};
+use owner_signal_persona::{Operation as EngineRequest, Reply as EngineReply};
 use persona::manager::{
     EngineManager, HandleEngineRequest, ManagerEvent, ReadTrace, StartComponentUnit,
 };
 use persona::manager_store::{ManagerStore, ManagerStoreLocation};
 use persona::unit::{ComponentUnit, UnitController, UnitFuture, UnitReceipt, UnitStatusReport};
 use persona::upgrade::Version;
-use signal_persona::engine::{Operation as EngineRequest, Reply as EngineReply};
-use signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, EngineStatusScope,
-    Query,
-};
 use signal_persona_origin::EngineIdentifier;
 
 struct StoreFixture {
@@ -28,7 +28,7 @@ impl StoreFixture {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("store fixture root created");
         Self {
-            location: ManagerStoreLocation::new(root.join("manager.redb")),
+            location: ManagerStoreLocation::new(root.join("manager.sema")),
             root,
         }
     }

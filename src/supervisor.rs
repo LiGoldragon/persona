@@ -59,8 +59,7 @@ impl EngineSupervisor {
     }
 
     pub fn start(input: EngineSupervisorInput) -> ActorRef<Self> {
-        let reference = Self::spawn(Self::new(input));
-        reference
+        Self::spawn(Self::new(input))
     }
 
     async fn start_prototype_supervision(

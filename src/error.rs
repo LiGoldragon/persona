@@ -7,11 +7,14 @@ pub enum Error {
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("nota: {0}")]
-    Nota(#[from] nota_codec::Error),
+    #[error("nota decode: {0}")]
+    NotaDecode(#[from] nota_next::NotaDecodeError),
 
-    #[error("sema: {0}")]
-    Sema(#[from] sema::Error),
+    #[error("sema engine: {0}")]
+    SemaEngine(#[from] sema_engine::Error),
+
+    #[error("sema kernel: {0}")]
+    SemaKernel(#[from] sema_engine::StorageKernelError),
 
     #[error("inline Nota argument must be UTF-8: {got:?}")]
     InvalidInlineNotaArgument { got: String },

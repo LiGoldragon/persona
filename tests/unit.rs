@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use owner_signal_persona::ComponentName;
 use persona::launch::{
     CommandArgument, ComponentCommand, ComponentCommandInput, EnvironmentVariable,
     EnvironmentVariableInput, EnvironmentVariableName, EnvironmentVariableValue, ExecutablePath,
@@ -10,7 +11,6 @@ use persona::unit::{
     UnitController, UnitFuture, UnitReceipt, UnitRestartPolicy, UnitStatus, UnitStatusReport,
 };
 use persona::upgrade::Version;
-use signal_persona::ComponentName;
 use signal_persona_origin::EngineIdentifier;
 
 #[derive(Debug, Clone, Default)]

@@ -8,9 +8,9 @@ use std::path::{Path, PathBuf};
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use nota_codec::{Encoder, NotaEncode};
+use rkyv::Serialize as RkyvSerialize;
 use signal_persona_origin::EngineIdentifier;
-use signal_persona_router::{
+use signal_router::{
     Actor as BootstrapActor, ActorIdentifier as BootstrapActorIdentifier,
     EndpointKind as RouterBootstrapEndpointKind,
     EndpointTransport as RouterBootstrapEndpointTransport,
@@ -29,8 +29,16 @@ use crate::engine_event::{
 };
 use crate::manager_store::{AppendEngineEvent, ManagerStore};
 
+type DirectProcessSerializer<'archive> = rkyv::api::high::HighSerializer<
+    rkyv::util::AlignedVec,
+    rkyv::ser::allocator::ArenaHandle<'archive>,
+    rkyv::rancor::Error,
+>;
+
 mod spirit_daemon_configuration {
-    #[derive(Debug, Clone, PartialEq, Eq, nota_codec::NotaRecord)]
+    use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
+
+    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq, Eq)]
     pub struct DaemonConfiguration {
         pub ordinary_socket_path: SocketPath,
         pub owner_socket_path: SocketPath,
@@ -43,16 +51,16 @@ mod spirit_daemon_configuration {
         pub engine_management_socket_mode: Option<SocketMode>,
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq, nota_codec::NotaTransparent)]
+    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq, Eq)]
     pub struct SocketPath(String);
 
-    #[derive(Debug, Clone, PartialEq, Eq, nota_codec::NotaTransparent)]
+    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq, Eq)]
     pub struct StorePath(String);
 
-    #[derive(Debug, Clone, PartialEq, Eq, nota_codec::NotaTransparent)]
+    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq, Eq)]
     pub struct BootstrapPolicyPath(String);
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, nota_codec::NotaTransparent)]
+    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, Copy, PartialEq, Eq)]
     pub struct SocketMode(u32);
 
     impl SocketPath {
@@ -232,6 +240,15 @@ impl ExitNotifier {
 }
 
 impl DirectProcessLauncher {
+    fn encode_archive<Value>(value: &Value) -> Result<Vec<u8>, DirectProcessFailure>
+    where
+        Value: rkyv::Archive + for<'archive> RkyvSerialize<DirectProcessSerializer<'archive>>,
+    {
+        rkyv::to_bytes::<rkyv::rancor::Error>(value)
+            .map(|bytes| bytes.to_vec())
+            .map_err(|_| DirectProcessFailure::ConfigurationArchiveEncode)
+    }
+
     pub fn new() -> Self {
         Self {
             children: HashMap::new(),
@@ -334,14 +351,8 @@ impl DirectProcessLauncher {
             operation: "create spawn envelope directory",
             source,
         })?;
-        let mut encoder = Encoder::new();
-        envelope
-            .signal_spawn_envelope()
-            .encode(&mut encoder)
-            .map_err(DirectProcessFailure::Nota)?;
-        let mut text = encoder.into_string();
-        text.push('\n');
-        std::fs::write(envelope.envelope_path(), text).map_err(|source| {
+        let bytes = Self::encode_archive(&envelope.signal_spawn_envelope())?;
+        std::fs::write(envelope.envelope_path(), bytes).map_err(|source| {
             DirectProcessFailure::Io {
                 operation: "write spawn envelope file",
                 source,
@@ -524,74 +535,51 @@ impl DirectProcessLauncher {
             .find(|peer| peer.component() == EngineComponent::Router)
             .ok_or(DirectProcessFailure::MissingRouterPeerForMessage)?
             .domain_socket_path();
-        let configuration = signal_persona_message::MessageDaemonConfiguration {
-            message_socket_path: signal_persona::WirePath::new(
+        let configuration = signal_message::MessageDaemonConfiguration {
+            message_socket_path: signal_engine_management::WirePath::new(
                 envelope.domain_socket_path().to_string_lossy().into_owned(),
             ),
-            message_socket_mode: signal_persona::SocketMode::new(
+            message_socket_mode: signal_engine_management::SocketMode::new(
                 envelope.domain_socket_mode().as_octal(),
             ),
-            supervision_socket_path: signal_persona::WirePath::new(
+            supervision_socket_path: signal_engine_management::WirePath::new(
                 envelope
                     .supervision_socket_path()
                     .to_string_lossy()
                     .into_owned(),
             ),
-            supervision_socket_mode: signal_persona::SocketMode::new(
+            supervision_socket_mode: signal_engine_management::SocketMode::new(
                 envelope.supervision_socket_mode().as_octal(),
             ),
-            router_socket_path: signal_persona::WirePath::new(
+            router_socket_path: signal_engine_management::WirePath::new(
                 router_socket_path.to_string_lossy().into_owned(),
             ),
             component_ingresses: Self::component_message_ingresses(envelope),
             owner_identity: envelope.owner_identity().clone(),
         };
-        let path = Self::daemon_configuration_path(envelope);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|source| DirectProcessFailure::Io {
-                operation: "create message daemon configuration directory",
-                source,
-            })?;
-        }
-        let mut encoder = Encoder::new();
-        configuration
-            .encode(&mut encoder)
-            .map_err(DirectProcessFailure::Nota)?;
-        let mut text = encoder.into_string();
-        text.push('\n');
-        std::fs::write(&path, text).map_err(|source| DirectProcessFailure::Io {
-            operation: "write message daemon configuration file",
-            source,
-        })?;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(
-            |source| DirectProcessFailure::Io {
-                operation: "set message daemon configuration file mode",
-                source,
-            },
-        )?;
-        Ok(path)
+        Self::write_configuration_binary_file(envelope, &configuration)
     }
 
     fn component_message_ingresses(
         envelope: &ComponentSpawnEnvelope,
-    ) -> Vec<signal_persona_message::ComponentMessageIngress> {
+    ) -> Vec<signal_message::ComponentMessageIngress> {
         envelope
             .peers()
             .iter()
             .filter(|peer| peer.component() == EngineComponent::Harness)
-            .map(|peer| signal_persona_message::ComponentMessageIngress {
+            .map(|peer| signal_message::ComponentMessageIngress {
                 origin: signal_persona_origin::InternalComponentInstanceOrigin::new(
                     signal_persona_origin::ComponentName::Harness,
                     signal_persona_origin::ComponentInstanceName::new(
                         peer.instance_name().as_str(),
                     ),
                 ),
-                socket_path: signal_persona::WirePath::new(
+                socket_path: signal_engine_management::WirePath::new(
                     Self::component_message_ingress_socket_path(envelope, peer.instance_name())
                         .to_string_lossy()
                         .into_owned(),
                 ),
-                socket_mode: signal_persona::SocketMode::new(0o600),
+                socket_mode: signal_engine_management::SocketMode::new(0o600),
             })
             .collect()
     }
@@ -613,51 +601,46 @@ impl DirectProcessLauncher {
         let bootstrap_path = ThreeHarnessRouterBootstrap::for_envelope(envelope)?
             .map(|document| document.write_next_to(envelope.envelope_path()))
             .transpose()?;
-        let configuration = signal_persona_router::RouterDaemonConfiguration {
-            router_socket_path: signal_persona::WirePath::new(
+        let configuration = signal_router::RouterDaemonConfiguration {
+            router_socket_path: signal_engine_management::WirePath::new(
                 envelope.domain_socket_path().to_string_lossy().into_owned(),
             ),
-            router_socket_mode: signal_persona::SocketMode::new(
+            router_socket_mode: signal_engine_management::SocketMode::new(
                 envelope.domain_socket_mode().as_octal(),
             ),
-            supervision_socket_path: signal_persona::WirePath::new(
+            meta_router_socket_path: signal_engine_management::WirePath::new(
+                Self::meta_socket_path(envelope)
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            meta_router_socket_mode: signal_engine_management::SocketMode::new(
+                envelope.domain_socket_mode().as_octal(),
+            ),
+            supervision_socket_path: signal_engine_management::WirePath::new(
                 envelope
                     .supervision_socket_path()
                     .to_string_lossy()
                     .into_owned(),
             ),
-            supervision_socket_mode: signal_persona::SocketMode::new(
+            supervision_socket_mode: signal_engine_management::SocketMode::new(
                 envelope.supervision_socket_mode().as_octal(),
             ),
-            store_path: signal_persona::WirePath::new(store_path.to_string_lossy().into_owned()),
-            bootstrap_path: bootstrap_path
-                .map(|path| signal_persona::WirePath::new(path.to_string_lossy().into_owned())),
+            store_path: signal_engine_management::WirePath::new(
+                store_path.to_string_lossy().into_owned(),
+            ),
+            bootstrap_path: bootstrap_path.map(|path| {
+                signal_engine_management::WirePath::new(path.to_string_lossy().into_owned())
+            }),
             owner_identity: envelope.owner_identity().clone(),
         };
-        let path = Self::daemon_configuration_path(envelope);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|source| DirectProcessFailure::Io {
-                operation: "create router daemon configuration directory",
-                source,
-            })?;
-        }
-        let mut encoder = Encoder::new();
-        configuration
-            .encode(&mut encoder)
-            .map_err(DirectProcessFailure::Nota)?;
-        let mut text = encoder.into_string();
-        text.push('\n');
-        std::fs::write(&path, text).map_err(|source| DirectProcessFailure::Io {
-            operation: "write router daemon configuration file",
-            source,
-        })?;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(
-            |source| DirectProcessFailure::Io {
-                operation: "set router daemon configuration file mode",
-                source,
-            },
-        )?;
-        Ok(path)
+        Self::write_configuration_binary_file(envelope, &configuration)
+    }
+
+    fn meta_socket_path(envelope: &ComponentSpawnEnvelope) -> PathBuf {
+        envelope.domain_socket_path().with_file_name(format!(
+            "meta-{}.sock",
+            envelope.component_instance().as_str()
+        ))
     }
 
     fn write_introspect_daemon_configuration_file(
@@ -677,87 +660,64 @@ impl DirectProcessLauncher {
             .ok_or(DirectProcessFailure::MissingTerminalPeerForIntrospect)?
             .domain_socket_path()
             .to_path_buf();
-        let configuration = signal_persona_introspect::IntrospectDaemonConfiguration {
-            introspect_socket_path: signal_persona::WirePath::new(
+        let configuration = signal_introspect::IntrospectDaemonConfiguration {
+            introspect_socket_path: signal_engine_management::WirePath::new(
                 envelope.domain_socket_path().to_string_lossy().into_owned(),
             ),
-            introspect_socket_mode: signal_persona::SocketMode::new(
+            introspect_socket_mode: signal_engine_management::SocketMode::new(
                 envelope.domain_socket_mode().as_octal(),
             ),
-            supervision_socket_path: signal_persona::WirePath::new(
+            supervision_socket_path: signal_engine_management::WirePath::new(
                 envelope
                     .supervision_socket_path()
                     .to_string_lossy()
                     .into_owned(),
             ),
-            supervision_socket_mode: signal_persona::SocketMode::new(
+            supervision_socket_mode: signal_engine_management::SocketMode::new(
                 envelope.supervision_socket_mode().as_octal(),
             ),
-            store_path: signal_persona::WirePath::new(
+            store_path: signal_engine_management::WirePath::new(
                 envelope.state_path().to_string_lossy().into_owned(),
             ),
-            manager_socket_path: signal_persona::WirePath::new(
+            manager_socket_path: signal_engine_management::WirePath::new(
                 envelope.manager_socket().to_string_lossy().into_owned(),
             ),
-            router_socket_path: signal_persona::WirePath::new(
+            router_socket_path: signal_engine_management::WirePath::new(
                 router_socket_path.to_string_lossy().into_owned(),
             ),
-            terminal_socket_path: signal_persona::WirePath::new(
+            terminal_socket_path: signal_engine_management::WirePath::new(
                 terminal_socket_path.to_string_lossy().into_owned(),
             ),
             owner_identity: envelope.owner_identity().clone(),
         };
-        let path = Self::daemon_configuration_path(envelope);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|source| DirectProcessFailure::Io {
-                operation: "create introspect daemon configuration directory",
-                source,
-            })?;
-        }
-        let mut encoder = Encoder::new();
-        configuration
-            .encode(&mut encoder)
-            .map_err(DirectProcessFailure::Nota)?;
-        let mut text = encoder.into_string();
-        text.push('\n');
-        std::fs::write(&path, text).map_err(|source| DirectProcessFailure::Io {
-            operation: "write introspect daemon configuration file",
-            source,
-        })?;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(
-            |source| DirectProcessFailure::Io {
-                operation: "set introspect daemon configuration file mode",
-                source,
-            },
-        )?;
-        Ok(path)
+        Self::write_configuration_binary_file(envelope, &configuration)
     }
 
     fn write_terminal_daemon_configuration_file(
         envelope: &ComponentSpawnEnvelope,
     ) -> Result<PathBuf, DirectProcessFailure> {
-        let configuration = signal_persona_terminal::TerminalDaemonConfiguration {
-            terminal_socket_path: signal_persona::WirePath::new(
+        let configuration = signal_terminal::TerminalDaemonConfiguration {
+            terminal_socket_path: signal_engine_management::WirePath::new(
                 envelope.domain_socket_path().to_string_lossy().into_owned(),
             ),
-            terminal_socket_mode: signal_persona::SocketMode::new(
+            terminal_socket_mode: signal_engine_management::SocketMode::new(
                 envelope.domain_socket_mode().as_octal(),
             ),
-            supervision_socket_path: signal_persona::WirePath::new(
+            supervision_socket_path: signal_engine_management::WirePath::new(
                 envelope
                     .supervision_socket_path()
                     .to_string_lossy()
                     .into_owned(),
             ),
-            supervision_socket_mode: signal_persona::SocketMode::new(
+            supervision_socket_mode: signal_engine_management::SocketMode::new(
                 envelope.supervision_socket_mode().as_octal(),
             ),
-            store_path: signal_persona::WirePath::new(
+            store_path: signal_engine_management::WirePath::new(
                 envelope.state_path().to_string_lossy().into_owned(),
             ),
             owner_identity: envelope.owner_identity().clone(),
         };
-        Self::write_configuration_nota_file(envelope, &configuration)
+        Self::write_configuration_binary_file(envelope, &configuration)
     }
 
     fn write_harness_daemon_configuration_file(
@@ -767,35 +727,38 @@ impl DirectProcessLauncher {
         // envelope carries a typed harness kind. The supervised
         // production stack will widen this; for the prototype path
         // every supervised harness is fixture-shaped.
-        let configuration = signal_persona_harness::HarnessDaemonConfiguration {
-            harness_socket_path: signal_persona::WirePath::new(
+        let configuration = signal_harness::HarnessDaemonConfiguration {
+            harness_socket_path: signal_engine_management::WirePath::new(
                 envelope.domain_socket_path().to_string_lossy().into_owned(),
             ),
-            harness_socket_mode: signal_persona::SocketMode::new(
+            harness_socket_mode: signal_engine_management::SocketMode::new(
                 envelope.domain_socket_mode().as_octal(),
             ),
-            supervision_socket_path: signal_persona::WirePath::new(
+            supervision_socket_path: signal_engine_management::WirePath::new(
                 envelope
                     .supervision_socket_path()
                     .to_string_lossy()
                     .into_owned(),
             ),
-            supervision_socket_mode: signal_persona::SocketMode::new(
+            supervision_socket_mode: signal_engine_management::SocketMode::new(
                 envelope.supervision_socket_mode().as_octal(),
             ),
-            harness_name: signal_persona_harness::HarnessName::new(
-                envelope.component_instance().as_str(),
-            ),
-            harness_kind: signal_persona_harness::HarnessKind::Fixture,
-            terminal_socket_path: Self::paired_terminal_socket_path(envelope),
             owner_identity: envelope.owner_identity().clone(),
+            harnesses: vec![signal_harness::HarnessInstanceConfiguration {
+                harness_name: signal_harness::HarnessName::new(
+                    envelope.component_instance().as_str(),
+                ),
+                harness_kind: signal_harness::HarnessKind::Fixture,
+                terminal_socket_path: Self::paired_terminal_socket_path(envelope),
+                pi_rpc_adapter: None,
+            }],
         };
-        Self::write_configuration_nota_file(envelope, &configuration)
+        Self::write_configuration_binary_file(envelope, &configuration)
     }
 
     fn paired_terminal_socket_path(
         envelope: &ComponentSpawnEnvelope,
-    ) -> Option<signal_persona::WirePath> {
+    ) -> Option<signal_engine_management::WirePath> {
         let paired_terminal_instance = ComponentInstanceName::new(format!(
             "{}-terminal",
             envelope.component_instance().as_str()
@@ -810,7 +773,7 @@ impl DirectProcessLauncher {
                     .iter()
                     .find(|peer| peer.component() == EngineComponent::Terminal)
             })?;
-        Some(signal_persona::WirePath::new(
+        Some(signal_engine_management::WirePath::new(
             terminal_peer
                 .domain_socket_path()
                 .to_string_lossy()
@@ -821,26 +784,26 @@ impl DirectProcessLauncher {
     fn write_system_daemon_configuration_file(
         envelope: &ComponentSpawnEnvelope,
     ) -> Result<PathBuf, DirectProcessFailure> {
-        let configuration = signal_persona_system::SystemDaemonConfiguration {
-            system_socket_path: signal_persona::WirePath::new(
+        let configuration = signal_system::SystemDaemonConfiguration {
+            system_socket_path: signal_engine_management::WirePath::new(
                 envelope.domain_socket_path().to_string_lossy().into_owned(),
             ),
-            system_socket_mode: signal_persona::SocketMode::new(
+            system_socket_mode: signal_engine_management::SocketMode::new(
                 envelope.domain_socket_mode().as_octal(),
             ),
-            supervision_socket_path: signal_persona::WirePath::new(
+            supervision_socket_path: signal_engine_management::WirePath::new(
                 envelope
                     .supervision_socket_path()
                     .to_string_lossy()
                     .into_owned(),
             ),
-            supervision_socket_mode: signal_persona::SocketMode::new(
+            supervision_socket_mode: signal_engine_management::SocketMode::new(
                 envelope.supervision_socket_mode().as_octal(),
             ),
-            backend: signal_persona_system::SystemBackend::Niri,
+            backend: signal_system::SystemBackend::Niri,
             owner_identity: envelope.owner_identity().clone(),
         };
-        Self::write_configuration_nota_file(envelope, &configuration)
+        Self::write_configuration_binary_file(envelope, &configuration)
     }
 
     fn write_spirit_daemon_configuration_file(
@@ -881,13 +844,16 @@ impl DirectProcessLauncher {
                 envelope.supervision_socket_mode().as_octal(),
             )),
         };
-        Self::write_configuration_nota_file(envelope, &configuration)
+        Self::write_configuration_binary_file(envelope, &configuration)
     }
 
-    fn write_configuration_nota_file<C: NotaEncode>(
+    fn write_configuration_binary_file<C>(
         envelope: &ComponentSpawnEnvelope,
         configuration: &C,
-    ) -> Result<PathBuf, DirectProcessFailure> {
+    ) -> Result<PathBuf, DirectProcessFailure>
+    where
+        C: rkyv::Archive + for<'archive> RkyvSerialize<DirectProcessSerializer<'archive>>,
+    {
         let path = Self::daemon_configuration_path(envelope);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|source| DirectProcessFailure::Io {
@@ -895,13 +861,8 @@ impl DirectProcessLauncher {
                 source,
             })?;
         }
-        let mut encoder = Encoder::new();
-        configuration
-            .encode(&mut encoder)
-            .map_err(DirectProcessFailure::Nota)?;
-        let mut text = encoder.into_string();
-        text.push('\n');
-        std::fs::write(&path, text).map_err(|source| DirectProcessFailure::Io {
+        let bytes = Self::encode_archive(configuration)?;
+        std::fs::write(&path, bytes).map_err(|source| DirectProcessFailure::Io {
             operation: "write daemon configuration file",
             source,
         })?;
@@ -916,7 +877,7 @@ impl DirectProcessLauncher {
 
     fn daemon_configuration_path(envelope: &ComponentSpawnEnvelope) -> PathBuf {
         envelope.envelope_path().with_file_name(format!(
-            "{}-daemon.nota",
+            "{}-daemon.rkyv",
             envelope.component_instance().as_str()
         ))
     }
@@ -1108,12 +1069,11 @@ impl ThreeHarnessRouterBootstrap {
     }
 
     fn write_next_to(&self, envelope_path: &Path) -> Result<PathBuf, DirectProcessFailure> {
-        let path = envelope_path.with_file_name("router-bootstrap.nota");
-        let text = self
-            .document
-            .to_nota_lines()
-            .map_err(DirectProcessFailure::Nota)?;
-        std::fs::write(&path, text).map_err(|source| DirectProcessFailure::Io {
+        let path = envelope_path.with_file_name("router-bootstrap.rkyv");
+        let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&self.document)
+            .map(|bytes| bytes.to_vec())
+            .map_err(|_| DirectProcessFailure::ConfigurationArchiveEncode)?;
+        std::fs::write(&path, bytes).map_err(|source| DirectProcessFailure::Io {
             operation: "write router bootstrap file",
             source,
         })?;
@@ -1318,8 +1278,8 @@ pub enum DirectProcessFailure {
     MissingRouterPeerForIntrospect,
     #[error("introspect daemon spawn envelope has no Terminal peer socket")]
     MissingTerminalPeerForIntrospect,
-    #[error("spawn envelope nota: {0}")]
-    Nota(#[from] nota_codec::Error),
+    #[error("failed to encode binary component configuration archive")]
+    ConfigurationArchiveEncode,
     #[error("{operation}: {source}")]
     Io {
         operation: &'static str,

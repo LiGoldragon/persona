@@ -75,36 +75,6 @@
         "type": "github"
       }
     },
-    "crane_6": {
-      "locked": {
-        "lastModified": 1778106249,
-        "narHash": "sha256-cM/AuKy5tMhwOOQIbha8ZRRMHVfNf7cv2aljIw+qoCg=",
-        "owner": "ipetkov",
-        "repo": "crane",
-        "rev": "6d015ea29630b7ad2402841386da2cb617a470a7",
-        "type": "github"
-      },
-      "original": {
-        "owner": "ipetkov",
-        "repo": "crane",
-        "type": "github"
-      }
-    },
-    "crane_7": {
-      "locked": {
-        "lastModified": 1778106249,
-        "narHash": "sha256-cM/AuKy5tMhwOOQIbha8ZRRMHVfNf7cv2aljIw+qoCg=",
-        "owner": "ipetkov",
-        "repo": "crane",
-        "rev": "6d015ea29630b7ad2402841386da2cb617a470a7",
-        "type": "github"
-      },
-      "original": {
-        "owner": "ipetkov",
-        "repo": "crane",
-        "type": "github"
-      }
-    },
     "fenix": {
       "inputs": {
         "nixpkgs": [
@@ -206,50 +176,6 @@
         "owner": "nix-community",
         "repo": "fenix",
         "rev": "3abc2d5559f4dc30c710ab152abcb4cb60b561ba",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nix-community",
-        "repo": "fenix",
-        "type": "github"
-      }
-    },
-    "fenix_6": {
-      "inputs": {
-        "nixpkgs": [
-          "signal-persona",
-          "nixpkgs"
-        ],
-        "rust-analyzer-src": "rust-analyzer-src_6"
-      },
-      "locked": {
-        "lastModified": 1778401511,
-        "narHash": "sha256-QMHQy1xiNUug/xig3/BgZkNG/9t5HTOJsSd+376GIA8=",
-        "owner": "nix-community",
-        "repo": "fenix",
-        "rev": "1f07645938873d7027855d2564faaac36c4ceb76",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nix-community",
-        "repo": "fenix",
-        "type": "github"
-      }
-    },
-    "fenix_7": {
-      "inputs": {
-        "nixpkgs": [
-          "signal-persona-mind",
-          "nixpkgs"
-        ],
-        "rust-analyzer-src": "rust-analyzer-src_7"
-      },
-      "locked": {
-        "lastModified": 1778314245,
-        "narHash": "sha256-a8p3JMunVzj0o86V9CNTyEFw7z4105QWl+bEz6Du8Jw=",
-        "owner": "nix-community",
-        "repo": "fenix",
-        "rev": "f54d645218048a7abe226983a922cdaca63cd845",
         "type": "github"
       },
       "original": {
@@ -518,39 +444,7 @@
         "type": "github"
       }
     },
-    "nixpkgs_6": {
-      "locked": {
-        "lastModified": 1778274207,
-        "narHash": "sha256-I4puXmX1iovcCHZlRmztO3vW0mAbbRvq4F8wgIMQ1MM=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "b3da656039dc7a6240f27b2ef8cc6a3ef3bccae7",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixpkgs-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs_7": {
-      "locked": {
-        "lastModified": 1778124196,
-        "narHash": "sha256-pYEytCNic/czazbV9r3tbQ6BZzqRBg/41x2dIC5ymOo=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "68a8af93ff4297686cb68880845e61e5e2e41d92",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixpkgs-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "owner-signal-persona-terminal": {
+    "owner-signal-persona": {
       "inputs": {
         "crane": [
           "crane"
@@ -564,16 +458,43 @@
         ]
       },
       "locked": {
-        "lastModified": 1779053382,
-        "narHash": "sha256-nt2MAG+EkYBbG1QNQV5cTBzb15LLMuXBDatkiztjWPc=",
+        "lastModified": 1780865430,
+        "narHash": "sha256-rCnH0YvPeYRfr2VnrxO4iJT7O/S80yJkC2lERZN85bM=",
         "owner": "LiGoldragon",
-        "repo": "owner-signal-persona-terminal",
-        "rev": "9753806fdcb43c62bb863e5094b7347dfa79bd41",
+        "repo": "owner-signal-persona",
+        "rev": "c2557469aa4df14c3c480274989d159f9fedd19a",
         "type": "github"
       },
       "original": {
         "owner": "LiGoldragon",
-        "repo": "owner-signal-persona-terminal",
+        "repo": "owner-signal-persona",
+        "type": "github"
+      }
+    },
+    "owner-signal-terminal": {
+      "inputs": {
+        "crane": [
+          "crane"
+        ],
+        "fenix": [
+          "fenix"
+        ],
+        "flake-utils": "flake-utils_2",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1780855974,
+        "narHash": "sha256-jxy8WmVHETgT+a7Rc0dhkbFfbADqDD52OosRw3meGP4=",
+        "owner": "LiGoldragon",
+        "repo": "owner-signal-terminal",
+        "rev": "e69f22ba22b23a84abf59da4381804960a01d730",
+        "type": "github"
+      },
+      "original": {
+        "owner": "LiGoldragon",
+        "repo": "owner-signal-terminal",
         "type": "github"
       }
     },
@@ -612,7 +533,7 @@
         "fenix": [
           "fenix"
         ],
-        "flake-utils": "flake-utils_2",
+        "flake-utils": "flake-utils_3",
         "nixpkgs": [
           "nixpkgs"
         ]
@@ -657,7 +578,7 @@
       "inputs": {
         "crane": "crane_3",
         "fenix": "fenix_3",
-        "flake-utils": "flake-utils_3",
+        "flake-utils": "flake-utils_4",
         "nixpkgs": "nixpkgs_3"
       },
       "locked": {
@@ -683,7 +604,7 @@
         "fenix": [
           "fenix"
         ],
-        "flake-utils": "flake-utils_4",
+        "flake-utils": "flake-utils_5",
         "nixpkgs": [
           "nixpkgs"
         ]
@@ -731,7 +652,7 @@
         "fenix": [
           "fenix"
         ],
-        "flake-utils": "flake-utils_5",
+        "flake-utils": "flake-utils_6",
         "nixpkgs": [
           "nixpkgs"
         ]
@@ -804,7 +725,8 @@
         "crane": "crane",
         "fenix": "fenix",
         "nixpkgs": "nixpkgs",
-        "owner-signal-persona-terminal": "owner-signal-persona-terminal",
+        "owner-signal-persona": "owner-signal-persona",
+        "owner-signal-terminal": "owner-signal-terminal",
         "persona-harness": "persona-harness",
         "persona-introspect": "persona-introspect",
         "persona-message": "persona-message",
@@ -814,11 +736,10 @@
         "persona-spirit": "persona-spirit",
         "persona-system": "persona-system",
         "persona-terminal": "persona-terminal",
-        "signal-persona": "signal-persona",
-        "signal-persona-mind": "signal-persona-mind",
-        "signal-persona-orchestrate": "signal-persona-orchestrate",
-        "signal-persona-system": "signal-persona-system",
-        "signal-persona-terminal": "signal-persona-terminal",
+        "signal-mind": "signal-mind",
+        "signal-orchestrate": "signal-orchestrate",
+        "signal-system": "signal-system",
+        "signal-terminal": "signal-terminal",
         "terminal-cell": "terminal-cell"
       }
     },
@@ -907,85 +828,34 @@
         "type": "github"
       }
     },
-    "rust-analyzer-src_6": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1778369049,
-        "narHash": "sha256-HvNEoAqcd7+VNyesjsy32pFjKdADd5dpTn4iV2teKDY=",
-        "owner": "rust-lang",
-        "repo": "rust-analyzer",
-        "rev": "e708e55b949b9c1a181d77b6fe62ab4e5b141526",
-        "type": "github"
-      },
-      "original": {
-        "owner": "rust-lang",
-        "ref": "nightly",
-        "repo": "rust-analyzer",
-        "type": "github"
-      }
-    },
-    "rust-analyzer-src_7": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1778246258,
-        "narHash": "sha256-RUZuOfzouSaK/VjcOCU/P5Nb3EhpM8qGnIcHWIIo4Sw=",
-        "owner": "rust-lang",
-        "repo": "rust-analyzer",
-        "rev": "73ca1d4ef136e2367627d698f00db94882b49440",
-        "type": "github"
-      },
-      "original": {
-        "owner": "rust-lang",
-        "ref": "nightly",
-        "repo": "rust-analyzer",
-        "type": "github"
-      }
-    },
-    "signal-persona": {
+    "signal-mind": {
       "inputs": {
-        "crane": "crane_6",
-        "fenix": "fenix_6",
-        "flake-utils": "flake-utils_6",
-        "nixpkgs": "nixpkgs_6"
-      },
-      "locked": {
-        "lastModified": 1779527527,
-        "narHash": "sha256-WMySVu1NSDC073wzmUJTnuygbSbvhle86N4m6Pw71WE=",
-        "ref": "refs/heads/main",
-        "rev": "4e6d22b3a000cc461a441f157fb87bcedd685470",
-        "revCount": 60,
-        "type": "git",
-        "url": "https://github.com/LiGoldragon/signal-persona.git"
-      },
-      "original": {
-        "owner": "LiGoldragon",
-        "repo": "signal-persona",
-        "type": "github"
-      }
-    },
-    "signal-persona-mind": {
-      "inputs": {
-        "crane": "crane_7",
-        "fenix": "fenix_7",
+        "crane": [
+          "crane"
+        ],
+        "fenix": [
+          "fenix"
+        ],
         "flake-utils": "flake-utils_7",
-        "nixpkgs": "nixpkgs_7"
+        "nixpkgs": [
+          "nixpkgs"
+        ]
       },
       "locked": {
-        "lastModified": 1779536255,
-        "narHash": "sha256-/EMRnBsJpoiYQaFJ/4fdTuywkRT9uTotdKgk5SLFdBg=",
-        "ref": "refs/heads/main",
-        "rev": "e0397520b6a8fd18cf7ac2c1fdac08bfed21d52b",
-        "revCount": 54,
-        "type": "git",
-        "url": "https://github.com/LiGoldragon/signal-persona-mind.git"
+        "lastModified": 1780853990,
+        "narHash": "sha256-NiOACgNOczLI4ZarnXcyeiQDYZpv3FQ8Jo/XMqI02h0=",
+        "owner": "LiGoldragon",
+        "repo": "signal-mind",
+        "rev": "bd55edb2ebfcc07297806821ddd07b6c415a2921",
+        "type": "github"
       },
       "original": {
         "owner": "LiGoldragon",
-        "repo": "signal-persona-mind",
+        "repo": "signal-mind",
         "type": "github"
       }
     },
-    "signal-persona-orchestrate": {
+    "signal-orchestrate": {
       "inputs": {
         "crane": [
           "crane"
@@ -999,20 +869,20 @@
         ]
       },
       "locked": {
-        "lastModified": 1779124207,
-        "narHash": "sha256-Ij0Z7sOMMn07kngsE2sXTWJIsuRYfMiY4aR+F9uHepI=",
+        "lastModified": 1780859237,
+        "narHash": "sha256-/fu9vAYhBBCZgtpZUXKSIi0QVzD0RkGdp0xqRo2Cq60=",
         "owner": "LiGoldragon",
-        "repo": "signal-persona-orchestrate",
-        "rev": "0251c8881a0f014c5bdf8ce7cef092112a4ba697",
+        "repo": "signal-orchestrate",
+        "rev": "9679f824ad8b5b8e23f4ca97e5d1f720b0de65a6",
         "type": "github"
       },
       "original": {
         "owner": "LiGoldragon",
-        "repo": "signal-persona-orchestrate",
+        "repo": "signal-orchestrate",
         "type": "github"
       }
     },
-    "signal-persona-system": {
+    "signal-system": {
       "inputs": {
         "crane": [
           "crane"
@@ -1026,21 +896,20 @@
         ]
       },
       "locked": {
-        "lastModified": 1779536419,
-        "narHash": "sha256-RcTLJ+zSrhY1Inieb0eL8L1+XEj3/pdv5yYHoaEE+Z8=",
-        "ref": "refs/heads/main",
-        "rev": "e2244170ab24f7746e404e3744206758c34eb79e",
-        "revCount": 34,
-        "type": "git",
-        "url": "https://github.com/LiGoldragon/signal-persona-system.git"
+        "lastModified": 1780857403,
+        "narHash": "sha256-iOlzKUn7kRFYJScgSnYR8hku0AOMfgzblkapRnkawk4=",
+        "owner": "LiGoldragon",
+        "repo": "signal-system",
+        "rev": "fda203e11df97a9090640a5243ae19bbed209f31",
+        "type": "github"
       },
       "original": {
         "owner": "LiGoldragon",
-        "repo": "signal-persona-system",
+        "repo": "signal-system",
         "type": "github"
       }
     },
-    "signal-persona-terminal": {
+    "signal-terminal": {
       "inputs": {
         "crane": [
           "crane"
@@ -1054,17 +923,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1779536419,
-        "narHash": "sha256-xQBW5Dk3opMpqnV/QDATGwKrstXLQLfeuUAXBUcfI/M=",
-        "ref": "refs/heads/main",
-        "rev": "db6e9cd15c483213f1223d9eb21f1643ee724d57",
-        "revCount": 39,
-        "type": "git",
-        "url": "https://github.com/LiGoldragon/signal-persona-terminal.git"
+        "lastModified": 1780855413,
+        "narHash": "sha256-juKDeeO5qWCdowYEpdyupTBsXMygpKx1O5GuildW1NU=",
+        "owner": "LiGoldragon",
+        "repo": "signal-terminal",
+        "rev": "42766e8bc71d3f6f4a61794c73e7304e2dbf7b88",
+        "type": "github"
       },
       "original": {
         "owner": "LiGoldragon",
-        "repo": "signal-persona-terminal",
+        "repo": "signal-terminal",
         "type": "github"
       }
     },

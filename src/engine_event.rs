@@ -1,12 +1,12 @@
-use nota_codec::NotaEnum;
-pub use signal_persona::engine::OperationKind as EngineOperationKind;
-use signal_persona::{ComponentName, EnginePhase};
-pub use signal_persona_harness::HarnessOperationKind;
-pub use signal_persona_message::MessageOperationKind;
-pub use signal_persona_mind::MindOperationKind;
+use nota_next::{NotaDecode, NotaEncode};
+pub use owner_signal_persona::OperationKind as EngineOperationKind;
+use owner_signal_persona::{ComponentName, EnginePhase};
+pub use signal_harness::HarnessOperationKind;
+pub use signal_message::MessageOperationKind;
+pub use signal_mind::MindOperationKind;
 use signal_persona_origin::EngineIdentifier;
-pub use signal_persona_system::SystemOperationKind;
-pub use signal_persona_terminal::TerminalOperationKind;
+pub use signal_system::SystemOperationKind;
+pub use signal_terminal::TerminalOperationKind;
 use strum::EnumDiscriminants;
 
 use crate::upgrade::{ActiveVersionChanged, PreparedEvent, VersionQuarantined};
@@ -14,7 +14,7 @@ use crate::upgrade::{ActiveVersionChanged, PreparedEvent, VersionQuarantined};
 /// Monotonic event key scoped to one manager catalog.
 ///
 /// The sequence is not per engine. It gives the manager log one total order
-/// across every engine whose events are stored in the same `manager.redb`.
+/// across every engine whose events are stored in the same `manager.sema`.
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EngineEventSequence(u64);
 
@@ -131,7 +131,7 @@ pub struct EngineEventDraftInput {
     __C::Error: rkyv::rancor::Source
 )))]
 #[strum_discriminants(name(EngineEventSourceKind))]
-#[strum_discriminants(derive(NotaEnum))]
+#[strum_discriminants(derive(NotaEncode, NotaDecode))]
 pub enum EngineEventSource {
     Manager,
     /// Manager-observed component fact. The component does not write the log.
@@ -153,7 +153,7 @@ pub enum EngineEventSource {
     __C::Error: rkyv::rancor::Source
 )))]
 #[strum_discriminants(name(EngineEventBodyKind))]
-#[strum_discriminants(derive(NotaEnum))]
+#[strum_discriminants(derive(NotaEncode, NotaDecode))]
 pub enum EngineEventBody {
     ComponentSpawned(ComponentLifecycleEvent),
     ComponentReady(ComponentLifecycleEvent),
@@ -249,7 +249,16 @@ pub enum ComponentOperation {
 }
 
 #[derive(
-    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, NotaEnum, Debug, Clone, Copy, PartialEq, Eq,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+    NotaEncode,
+    NotaDecode,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
 )]
 pub enum UnimplementedReason {
     NotBuiltYet,
