@@ -6,7 +6,7 @@ use std::sync::Arc;
 use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use owner_signal_persona::ComponentName;
+use meta_signal_persona::ComponentName;
 use signal_persona_origin::EngineIdentifier;
 use thiserror::Error;
 use tokio::process::Command;

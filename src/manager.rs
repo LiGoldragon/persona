@@ -1,12 +1,12 @@
 use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use owner_signal_persona::{
+use meta_signal_persona::{
     ActionRejection, ActionRejectionReason, ComponentName, ComponentShutdown, ComponentStartup,
     EngineCatalog, EngineCatalogEntry, LaunchRejection, LaunchRejectionReason, Query,
     RetirementRejection, RetirementRejectionReason,
 };
-use owner_signal_persona::{Operation, Reply};
+use meta_signal_persona::{Operation, Reply};
 use signal_persona_origin::EngineIdentifier;
 use std::sync::Arc;
 
@@ -185,7 +185,7 @@ impl EngineManager {
             Operation::Query(Query::Catalog(_)) => Reply::Catalog(EngineCatalog {
                 engines: vec![EngineCatalogEntry {
                     engine: self.engine.clone(),
-                    label: owner_signal_persona::EngineLabel::new(self.engine.as_str()),
+                    label: meta_signal_persona::EngineLabel::new(self.engine.as_str()),
                     phase: self.state.snapshot().phase,
                 }],
             }),

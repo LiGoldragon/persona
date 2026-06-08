@@ -1,5 +1,5 @@
-use owner_signal_persona::Reply;
-use owner_signal_persona::{
+use meta_signal_persona::Reply;
+use meta_signal_persona::{
     ActionRejectionReason, ComponentDesiredState, ComponentHealth, ComponentName,
     ComponentShutdown, ComponentStartup,
 };

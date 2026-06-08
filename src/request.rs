@@ -1,8 +1,8 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
+use meta_signal_persona as contract;
 use nota_next::{NotaDecode, NotaEncode, NotaSource};
-use owner_signal_persona as contract;
 
 use crate::error::Error;
 use crate::schema::{

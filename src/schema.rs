@@ -1,6 +1,6 @@
+use meta_signal_persona as contract;
 use meta_signal_upgrade::{ForceReason, QuarantineReason, RollbackReason};
 use nota_next::{NotaDecode, NotaEncode, NotaSource};
-use owner_signal_persona as contract;
 use signal_persona_origin::EngineIdentifier;
 
 pub use crate::engine_event::{EngineEventBodyKind, EngineEventSourceKind};

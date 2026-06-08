@@ -1,7 +1,7 @@
-use owner_signal_persona::{
+use meta_signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, Query,
 };
-use owner_signal_persona::{Operation as EngineRequest, Reply as EngineReply};
+use meta_signal_persona::{Operation as EngineRequest, Reply as EngineReply};
 use persona::engine_event::{
     ComponentLifecycleEvent, ComponentOperation, ComponentUnimplemented,
     ComponentUnimplementedInput, EngineEventBody, EngineEventDraft, EngineEventDraftInput,
@@ -470,7 +470,7 @@ async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables(
     assert_eq!(status_after_spawn[0].component().as_str(), "persona-router");
     assert_eq!(
         status_after_spawn[0].health(),
-        owner_signal_persona::ComponentHealth::Starting
+        meta_signal_persona::ComponentHealth::Starting
     );
 
     let ready_draft = EngineEventDraft::from_input(EngineEventDraftInput {
@@ -501,7 +501,7 @@ async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables(
         .expect("status snapshot reads");
     assert_eq!(
         status_after_ready[0].health(),
-        owner_signal_persona::ComponentHealth::Running
+        meta_signal_persona::ComponentHealth::Running
     );
 
     store.stop_gracefully().await.expect("manager store stops");
@@ -552,10 +552,7 @@ async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
     let EngineReply::ComponentStatus(status) = reply else {
         panic!("expected terminal component status, got {reply:?}");
     };
-    assert_eq!(
-        status.health,
-        owner_signal_persona::ComponentHealth::Running
-    );
+    assert_eq!(status.health, meta_signal_persona::ComponentHealth::Running);
 
     EngineManager::stop(manager)
         .await
@@ -666,7 +663,7 @@ async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapsh
         .expect("router status row present");
     assert_eq!(
         router_status.health(),
-        owner_signal_persona::ComponentHealth::Running
+        meta_signal_persona::ComponentHealth::Running
     );
 
     let terminal_lifecycle = lifecycle_after
@@ -683,7 +680,7 @@ async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapsh
         .expect("terminal status row present");
     assert_eq!(
         terminal_status.health(),
-        owner_signal_persona::ComponentHealth::Starting
+        meta_signal_persona::ComponentHealth::Starting
     );
 
     store.stop_gracefully().await.expect("manager store stops");
@@ -830,7 +827,7 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
         .expect("terminal status row present");
     assert_eq!(
         terminal_status.health(),
-        owner_signal_persona::ComponentHealth::Failed
+        meta_signal_persona::ComponentHealth::Failed
     );
 
     // Router was ready before "crash"; it must not be marked orphaned.
@@ -848,7 +845,7 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
         .expect("router status row present");
     assert_eq!(
         router_status.health(),
-        owner_signal_persona::ComponentHealth::Running
+        meta_signal_persona::ComponentHealth::Running
     );
 
     // Second orphan-scan must be idempotent: the orphan arc gained a

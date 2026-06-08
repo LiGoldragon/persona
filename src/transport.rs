@@ -6,7 +6,7 @@ use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::os::unix::net::UnixStream as StandardUnixStream;
 
 use kameo::actor::ActorRef;
-use owner_signal_persona::{Frame, FrameBody, Operation as EngineRequest, Reply as EngineReply};
+use meta_signal_persona::{Frame, FrameBody, Operation as EngineRequest, Reply as EngineReply};
 use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
     SubReply,
@@ -155,7 +155,7 @@ impl ComponentHandoffEndpoint {
 #[derive(Debug, Clone)]
 pub struct ManagerStoreActiveVersionReader {
     engine: EngineIdentifier,
-    component_name: owner_signal_persona::ComponentName,
+    component_name: meta_signal_persona::ComponentName,
     store: ActorRef<ManagerStore>,
 }
 
@@ -175,7 +175,7 @@ impl ManagerStoreActiveVersionReader {
     ) -> Self {
         Self {
             engine,
-            component_name: owner_signal_persona::ComponentName::new(component_name),
+            component_name: meta_signal_persona::ComponentName::new(component_name),
             store,
         }
     }

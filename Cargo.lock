@@ -50,9 +50,9 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "bitflags"
-version = "2.11.1"
+version = "2.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
+checksum = "b4388bee8683e3d04af747c73422af53102d2bd24d9eadb6cbc100baef4b43f8"
 
 [[package]]
 name = "bumpalo"
@@ -422,15 +422,15 @@ checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
 name = "log"
-version = "0.4.29"
+version = "0.4.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
+checksum = "953f07c43838f8e6f9758cab68bf5bed85465e7587ebe0b823f1bcd81978ad3a"
 
 [[package]]
 name = "memchr"
-version = "2.8.0"
+version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
+checksum = "6b947ae49db0d222b1dbc6b113ce7248a3fc3a6ca21b696717bfc000ba4484d8"
 
 [[package]]
 name = "memoffset"
@@ -442,9 +442,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "meta-signal-persona"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/meta-signal-persona.git?branch=main#485229aba467e525c4ee780d8fb43ca7be719421"
+dependencies = [
+ "nota-next",
+ "rkyv",
+ "signal-engine-management",
+ "signal-frame",
+ "signal-persona-origin",
+]
+
+[[package]]
 name = "meta-signal-upgrade"
-version = "0.2.1"
-source = "git+https://github.com/LiGoldragon/meta-signal-upgrade.git?branch=main#73ed4371f4401f57efc51fa79117f6ead74d3212"
+version = "0.2.2"
+source = "git+https://github.com/LiGoldragon/meta-signal-upgrade.git?branch=main#2ee978d33e907998966709b49a41db3ef9befe86"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -490,7 +502,7 @@ dependencies = [
 [[package]]
 name = "nota-next"
 version = "0.3.0"
-source = "git+https://github.com/LiGoldragon/nota-next.git?branch=main#f0e435a629f8312b173b0f8564c17ee0a4001561"
+source = "git+https://github.com/LiGoldragon/nota-next.git?branch=main#ae5c25cd42b65512be941b274922c9e17bf67176"
 dependencies = [
  "nota-next-derive",
  "rkyv",
@@ -499,7 +511,7 @@ dependencies = [
 [[package]]
 name = "nota-next-derive"
 version = "0.2.0"
-source = "git+https://github.com/LiGoldragon/nota-next.git?branch=main#f0e435a629f8312b173b0f8564c17ee0a4001561"
+source = "git+https://github.com/LiGoldragon/nota-next.git?branch=main#ae5c25cd42b65512be941b274922c9e17bf67176"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -523,18 +535,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "owner-signal-persona"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/owner-signal-persona.git?branch=main#c2557469aa4df14c3c480274989d159f9fedd19a"
-dependencies = [
- "nota-next",
- "rkyv",
- "signal-engine-management",
- "signal-frame",
- "signal-persona-origin",
-]
-
-[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -552,9 +552,9 @@ version = "0.1.0"
 dependencies = [
  "kameo",
  "libc",
+ "meta-signal-persona",
  "meta-signal-upgrade",
  "nota-next",
- "owner-signal-persona",
  "rkyv",
  "sema-engine",
  "signal-engine-management",
@@ -734,8 +734,8 @@ dependencies = [
 
 [[package]]
 name = "schema-rust-next"
-version = "0.3.0"
-source = "git+https://github.com/LiGoldragon/schema-rust-next.git?branch=main#a35eff74419d03e36720765e09c9e53fe87a3089"
+version = "0.5.1"
+source = "git+https://github.com/LiGoldragon/schema-rust-next.git?branch=main#83f1ee1f91a67e8728ad0fdc657b4cbd7d3d48dc"
 dependencies = [
  "prettyplease",
  "proc-macro2",
@@ -757,8 +757,8 @@ dependencies = [
 
 [[package]]
 name = "sema-engine"
-version = "0.2.2"
-source = "git+https://github.com/LiGoldragon/sema-engine.git?branch=main#5cee99380c4dbc22eba7615b15168f382f568751"
+version = "0.2.3"
+source = "git+https://github.com/LiGoldragon/sema-engine.git?branch=main#ebee6e44ba6ee4afcb26998007bcfd128641b54c"
 dependencies = [
  "rkyv",
  "sema",
@@ -841,7 +841,7 @@ dependencies = [
 [[package]]
 name = "signal-executor"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-executor.git?branch=main#c34b9b93619b67082a1638b6b457c56c0f82be24"
+source = "git+https://github.com/LiGoldragon/signal-executor.git?branch=main#6446b3f5ef58ac8fd28aa25bb7bdce5f4e59982f"
 dependencies = [
  "rkyv",
  "signal-frame",
@@ -851,8 +851,8 @@ dependencies = [
 
 [[package]]
 name = "signal-frame"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#904bb2fdb0210bbeec9f9f4edc9f8b88341522a3"
+version = "0.2.1"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#8b128d3648935d9d322d5c4985d5b347aaeecddd"
 dependencies = [
  "nota-next",
  "paste",
@@ -863,8 +863,8 @@ dependencies = [
 
 [[package]]
 name = "signal-frame-macros"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#904bb2fdb0210bbeec9f9f4edc9f8b88341522a3"
+version = "0.1.1"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#8b128d3648935d9d322d5c4985d5b347aaeecddd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -874,7 +874,7 @@ dependencies = [
 [[package]]
 name = "signal-harness"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-harness.git?branch=main#39d38ea2e4576ee19849133ba1e7b6646b038afc"
+source = "git+https://github.com/LiGoldragon/signal-harness.git?branch=main#6f303d21e6918cfe154ee97c314d31be8decc1cc"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -911,7 +911,7 @@ dependencies = [
 [[package]]
 name = "signal-message"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-message.git?branch=main#f84ec07b7339dc155170efbcbbfe49e974ff4f76"
+source = "git+https://github.com/LiGoldragon/signal-message.git?branch=main#ec09bd6455dae7e0a1adbdce34da68b1fddb25bb"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -924,13 +924,12 @@ dependencies = [
 [[package]]
 name = "signal-mind"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-mind.git?branch=main#bd55edb2ebfcc07297806821ddd07b6c415a2921"
+source = "git+https://github.com/LiGoldragon/signal-mind.git?branch=main#acf3c01453b25379239f48471cd101c403757ac9"
 dependencies = [
  "nota-next",
  "rkyv",
  "signal-frame",
  "signal-persona-origin",
- "signal-sema",
  "thiserror",
 ]
 
@@ -944,22 +943,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-persona-spirit"
-version = "0.5.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#9fbaf41a66882bc25c0ebdb44196b750e157b8df"
-dependencies = [
- "nota-next",
- "rkyv",
- "signal-frame",
- "signal-sema",
- "thiserror",
- "version-projection",
-]
-
-[[package]]
 name = "signal-router"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-router.git?branch=main#8f8c849e92d9560f454927d6bb3edb66474c084d"
+source = "git+https://github.com/LiGoldragon/signal-router.git?branch=main#ba69959e76c2a7650873d3628b94b24b62af51d4"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -972,18 +958,28 @@ dependencies = [
 
 [[package]]
 name = "signal-sema"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-sema.git?branch=main#4f75d1c31b7481e3f212e1885b98939a5172ce1a"
+version = "0.2.0"
+source = "git+https://github.com/LiGoldragon/signal-sema.git?branch=main#33f62840678530289e9b96485453f7d86e343182"
 dependencies = [
- "nota-next",
  "rkyv",
  "thiserror",
 ]
 
 [[package]]
+name = "signal-spirit"
+version = "0.5.0"
+source = "git+https://github.com/LiGoldragon/signal-spirit.git?branch=main#3c6fd6c3b18cead6f3585cfaec5ca73b7531c359"
+dependencies = [
+ "rkyv",
+ "signal-frame",
+ "thiserror",
+ "version-projection",
+]
+
+[[package]]
 name = "signal-system"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-system.git?branch=main#fda203e11df97a9090640a5243ae19bbed209f31"
+source = "git+https://github.com/LiGoldragon/signal-system.git?branch=main#62733a78112a73a1a771859cd863fce33c0597b7"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -996,7 +992,7 @@ dependencies = [
 [[package]]
 name = "signal-terminal"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-terminal.git?branch=main#42766e8bc71d3f6f4a61794c73e7304e2dbf7b88"
+source = "git+https://github.com/LiGoldragon/signal-terminal.git?branch=main#9ed60fbe17ee58a30d94146ecda11ae0ef85fd09"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -1008,8 +1004,8 @@ dependencies = [
 
 [[package]]
 name = "signal-upgrade"
-version = "0.2.1"
-source = "git+https://github.com/LiGoldragon/signal-upgrade.git?branch=main#d8d9192c2f710d889535398a6e506089945af79a"
+version = "0.2.2"
+source = "git+https://github.com/LiGoldragon/signal-upgrade.git?branch=main#a8a66bb0a0e45e50337ebd19241aa79300475b62"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -1034,9 +1030,9 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "socket2"
-version = "0.6.3"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
+checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
  "windows-sys",
@@ -1161,9 +1157,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.25.11+spec-1.1.0"
+version = "0.25.12+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b59c4d22ed448339746c59b905d24568fcbb3ab65a500494f7b8c3e97739f2b"
+checksum = "d2153edc6955a6c354fad8f5efd38b6a8769bdccf9fe50f8e1329f81b0baa5d7"
 dependencies = [
  "indexmap",
  "toml_datetime",
@@ -1213,8 +1209,8 @@ dependencies = [
 
 [[package]]
 name = "triad-runtime"
-version = "0.5.0"
-source = "git+https://github.com/LiGoldragon/triad-runtime.git?branch=main#0b1746d47b4f569413e41772eae3aefe6981385b"
+version = "0.6.0"
+source = "git+https://github.com/LiGoldragon/triad-runtime.git?branch=main#1210391f3f99914ca79abbc50b9eba4df9946a83"
 dependencies = [
  "kameo",
  "rustix",
@@ -1257,19 +1253,18 @@ dependencies = [
 
 [[package]]
 name = "upgrade"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/upgrade.git?branch=main#365f4859bc1c7c265f828cc8b2b0837647c1a57b"
+version = "0.1.1"
+source = "git+https://github.com/LiGoldragon/upgrade.git?branch=main#fb864a13bc6ae94f49ff8eef97a082a507d08d68"
 dependencies = [
  "meta-signal-upgrade",
- "nota-next",
  "rkyv",
  "schema-next",
  "schema-rust-next",
  "sema-engine",
  "signal-executor",
  "signal-frame",
- "signal-persona-spirit",
  "signal-sema",
+ "signal-spirit",
  "signal-upgrade",
  "thiserror",
  "tokio",
@@ -1279,9 +1274,9 @@ dependencies = [
 
 [[package]]
 name = "uuid"
-version = "1.23.1"
+version = "1.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddd74a9687298c6858e9b88ec8935ec45d22e8fd5e6394fa1bd4e99a87789c76"
+checksum = "d258b83ceec21034727ecee8c382cfa6c3e133699b0742c64571814fb420c9f7"
 dependencies = [
  "js-sys",
  "serde_core",
@@ -1291,7 +1286,7 @@ dependencies = [
 [[package]]
 name = "version-projection"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/version-projection.git?branch=main#51e85b51a7d6be37d8f0c840659cefbb0e526a47"
+source = "git+https://github.com/LiGoldragon/version-projection.git?branch=main#e40fd1493236b4506260a9e53a15e7bbda96951d"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -1521,9 +1516,9 @@ dependencies = [
 
 [[package]]
 name = "zbus"
-version = "5.15.0"
+version = "5.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3bcbf15c8708d7fc1be0c993622e0a5cbd5e8b52bfa40afa4c3e0cd8d724ac1"
+checksum = "eee682d202a77e4a9f3b2c2bdf48a7b28af5c08c34ddf66f98c93e5e39464285"
 dependencies = [
  "async-broadcast",
  "async-recursion",
@@ -1551,9 +1546,9 @@ dependencies = [
 
 [[package]]
 name = "zbus_macros"
-version = "5.15.0"
+version = "5.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51fa5406ad9175a8c825a931f8cf347116b531b3634fcb0b627c290f1f2516ff"
+checksum = "adf1bd45a81a103745b1757754762a26e8cd01e4532e4d6c8ec431624b80d1d6"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -1583,9 +1578,9 @@ checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 
 [[package]]
 name = "zvariant"
-version = "5.11.0"
+version = "5.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c1567a6ec68df868cbbfde844cfc6d81649fe5109a62b116b19fabd53e618ee"
+checksum = "a192a0bde63360d77a7523c833d4b4ce6070a927e2c53246e4c540b1a3e27be0"
 dependencies = [
  "endi",
  "enumflags2",
@@ -1597,9 +1592,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant_derive"
-version = "5.11.0"
+version = "5.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7d5b780599bbde114e39d9a0799577fad1ced5105d38515745f7b3099d8ceda"
+checksum = "90bc6cde9c01c511074be97f7ccb6c19d0da89e3f8662e812e999dcfd4638737"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -1610,9 +1605,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant_utils"
-version = "3.3.1"
+version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d464f5733ffa07a3164d656f18533caace9d0638596721355d73256a410d691"
+checksum = "1e8535915cfa75547e559d8c68e8139909a4aeee076831e4ef7fc59d8172c4d6"
 dependencies = [
  "proc-macro2",
  "quote",

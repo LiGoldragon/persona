@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use kameo::actor::{ActorRef, Spawn};
 use kameo::error::SendError;
-use owner_signal_persona::{
+use meta_signal_persona::{
     EngineStatusScope, Operation as EngineRequest, Query, Reply as EngineReply,
 };
 use persona::direct_process::{

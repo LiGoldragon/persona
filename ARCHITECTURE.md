@@ -24,13 +24,13 @@ local socket/state boundaries, records origin context for audit, and gives
 operators and harnesses one place to ask whether the total system is up,
 healthy, and coherent.
 
-`owner-signal-persona` is the management contract for Persona. It is the contract a
+`meta-signal-persona` is the management contract for Persona. It is the contract a
 client uses to ask for engine status, component health, engine-visible
 projections, and engine-management actions. Component-to-component behavior
 uses the relation-specific `signal-*` contracts.
 
 The `persona` CLI is a thin daemon client. It decodes one NOTA request record,
-sends one length-prefixed `owner-signal-persona` frame to `persona-daemon`, waits for one
+sends one length-prefixed `meta-signal-persona` frame to `persona-daemon`, waits for one
 typed reply frame, renders one NOTA reply record, and exits. `persona-daemon` owns
 the live Kameo `EngineManager` actor for the daemon lifetime.
 
@@ -151,7 +151,7 @@ has the largest existing gap between durable local Sema records
 `StoredSessionHealth`, `StoredSessionArchive`) and
 contract-owned inspectable vocabulary. Manager event-log
 records are the second slice (likely promoted into
-`owner-signal-persona`); router trace/table readouts are the
+`meta-signal-persona`); router trace/table readouts are the
 third.
 
 ## 0.7 · Persona-system: paused (FocusTracker is real, plan is deferred)
@@ -205,7 +205,7 @@ when `PERSONA_ORCHESTRATE_EXECUTABLE` points at the launcher or daemon.
 | `sema` | Typed database kernel library over redb/rkyv behind `.sema` files. |
 | `signal-frame` | Signal wire kernel: frames, exchange identifiers, handshake, channel macro. |
 | `signal-sema` | Universal payloadless Sema classification labels (`Assert` / `Mutate` / `Retract` / `Match` / `Subscribe` / `Validate`) used for observation only; `PatternField<T>`, `Slot<T>`, `Revision` primitives. |
-| `owner-signal-persona` | Management contract for Persona. |
+| `meta-signal-persona` | Management contract for Persona. |
 | `signal-message` | Message ingress contract. |
 | `signal-system` | System observation contract. |
 | `signal-harness` | Router/harness delivery and observation contract. |
@@ -1043,13 +1043,13 @@ orchestrate client path, and stop treating lock files as authoritative state.
 Rust-to-Rust traffic uses Signal frames: length-prefixed rkyv archives with
 channel-specific request/reply payloads.
 
-`owner-signal-persona` is the contract for talking to Persona. A client uses it
+`meta-signal-persona` is the contract for talking to Persona. A client uses it
 to ask Persona for engine status, component health, engine-visible
 projections, and engine-management actions.
 It is also the home for engine catalog and lifecycle records: `EngineIdentifier`,
 component desired state, component health, socket layout, spawn envelopes, and
 shutdown/restart requests. Authorization/provenance vocabulary belongs in the
-auth/route contract layer when it is needed; `owner-signal-persona` should not grow a
+auth/route contract layer when it is needed; `meta-signal-persona` should not grow a
 Persona-local in-band proof system.
 
 The `signal-*` repos are relation-specific contracts between concrete
@@ -1766,7 +1766,7 @@ src/supervision_readiness.rs  Kameo actor for typed component engine-management 
 src/transport.rs Unix-socket Signal codec, client, daemon, endpoint, caller
 src/manager.rs   Kameo EngineManager actor scaffold and trace witness
 src/manager_store.rs  Kameo ManagerStore actor and manager.sema Sema tables
-src/request.rs   NOTA projection into owner-signal-persona requests and replies
+src/request.rs   NOTA projection into meta-signal-persona requests and replies
 src/state.rs     in-memory engine-state reducer
 src/bin/persona_component_fixture.rs  typed component/engine-management fixture for tests
 src/bin/wire_*   signal-message wire-test shims

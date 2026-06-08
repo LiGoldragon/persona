@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use owner_signal_persona::{ComponentHealth, EngineStatus};
+use meta_signal_persona::{ComponentHealth, EngineStatus};
 use sema_engine::{
     Engine, EngineOpen, QueryPlan, RecordKey, SchemaVersion, StorageKernelResult,
     StorageKernelTable, StorageWriteTransaction, TableDescriptor, TableName, TableReference,
@@ -133,7 +133,7 @@ impl ComponentLifecycleSnapshotRow {
 
 /// Snapshot row stored in `manager.engine-status-snapshot`, keyed by
 /// `engine_identifier::component_name`. Carries the same closed-enum
-/// `ComponentHealth` that `owner_signal_persona::EngineStatus` reports to CLI
+/// `ComponentHealth` that `meta_signal_persona::EngineStatus` reports to CLI
 /// status queries, with no extra ARCH-aspirational variants.
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStatusSnapshotRow {

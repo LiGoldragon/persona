@@ -1,6 +1,6 @@
+pub use meta_signal_persona::OperationKind as EngineOperationKind;
+use meta_signal_persona::{ComponentName, EnginePhase};
 use nota_next::{NotaDecode, NotaEncode};
-pub use owner_signal_persona::OperationKind as EngineOperationKind;
-use owner_signal_persona::{ComponentName, EnginePhase};
 pub use signal_harness::HarnessOperationKind;
 pub use signal_message::MessageOperationKind;
 pub use signal_mind::MindOperationKind;

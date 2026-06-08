@@ -246,7 +246,7 @@ forward.
 - `/home/li/primary/repos/persona/ARCHITECTURE.md` — the
   structural shape; §1.7 "Startup Strategy" details the systemd
   template units and the spawn order.
-- `/home/li/primary/repos/owner-signal-persona/ARCHITECTURE.md` — the
+- `/home/li/primary/repos/meta-signal-persona/ARCHITECTURE.md` — the
   engine-management contract Persona owns; the skeleton-honesty
   rule that every supervised component answers.
 - Spirit intent records under topic `persona` (208, 209, 215,

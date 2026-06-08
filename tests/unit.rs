@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use owner_signal_persona::ComponentName;
+use meta_signal_persona::ComponentName;
 use persona::launch::{
     CommandArgument, ComponentCommand, ComponentCommandInput, EnvironmentVariable,
     EnvironmentVariableInput, EnvironmentVariableName, EnvironmentVariableValue, ExecutablePath,

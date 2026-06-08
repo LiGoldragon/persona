@@ -351,7 +351,7 @@ async fn constraint_persona_daemon_persists_cli_mutation_to_manager_store() {
         .expect("terminal component stored");
     assert_eq!(
         terminal.desired_state,
-        owner_signal_persona::ComponentDesiredState::Stopped
+        meta_signal_persona::ComponentDesiredState::Stopped
     );
 
     store.stop_gracefully().await.expect("manager store stops");

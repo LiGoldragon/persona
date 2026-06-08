@@ -13,7 +13,7 @@ behavior inside each engine.
 
 Component implementation belongs in the component repo that owns the behavior:
 
-- `owner-signal-persona` currently owns the contract for talking to the
+- `meta-signal-persona` currently owns the contract for talking to the
   top-level `persona` engine manager: engine catalog, component lifecycle,
   connection class, and inter-engine route records. This is the policy-signal
   leg that will follow the workspace meta-signal naming track.

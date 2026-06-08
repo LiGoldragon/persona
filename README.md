@@ -7,7 +7,7 @@ It supervises the Persona component ecosystem, wires the component
 repositories together through Nix, and keeps the high-level architecture
 visible. Component implementation belongs in the component repos:
 
-- `owner-signal-persona` for the engine-manager contract;
+- `meta-signal-persona` for the engine-manager contract;
 - `sema-engine` for typed database-operation support inside state-bearing components;
 - `router` for delivery routing;
 - `system` for OS and window-manager observations;

@@ -1,4 +1,4 @@
-use owner_signal_persona::{
+use meta_signal_persona::{
     ComponentDesiredState as ContractDesiredState, ComponentHealth as ContractHealth,
     ComponentKind as ContractKind, ComponentName, ComponentStatus, EngineGeneration,
     EnginePhase as ContractPhase, EngineStatus,

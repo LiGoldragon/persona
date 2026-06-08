@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use owner_signal_persona::{
+use meta_signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, EngineStatusScope,
     Query,
 };
-use owner_signal_persona::{Operation as EngineRequest, Reply as EngineReply};
+use meta_signal_persona::{Operation as EngineRequest, Reply as EngineReply};
 use persona::manager::{
     EngineManager, HandleEngineRequest, ManagerEvent, ReadTrace, StartComponentUnit,
 };

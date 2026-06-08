@@ -1,12 +1,12 @@
-use nota_next::NotaSource;
-use owner_signal_persona::{
+use meta_signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, ComponentStatus,
     EngineGeneration, EnginePhase, EngineStatus, EngineStatusScope as ContractEngineStatusScope,
     Query,
 };
-use owner_signal_persona::{
+use meta_signal_persona::{
     Frame as PersonaFrame, FrameBody, Operation as EngineRequest, Reply as EngineReply,
 };
+use nota_next::NotaSource;
 use persona::request::{
     CommandLine, EngineStatusQuery, EngineStatusScope, PersonaOutput, PersonaRequest,
 };

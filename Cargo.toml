@@ -22,9 +22,9 @@ path = "src/bin/persona_daemon.rs"
 [dependencies]
 kameo                  = { version = "0.20", default-features = false }
 libc                   = "0.2"
-meta-signal-upgrade    = { git = "https://github.com/LiGoldragon/meta-signal-upgrade.git", branch = "main" }
+meta-signal-upgrade    = { git = "https://github.com/LiGoldragon/meta-signal-upgrade.git", branch = "main", features = ["nota-text"] }
 nota-next              = { git = "https://github.com/LiGoldragon/nota-next.git", branch = "main" }
-owner-signal-persona   = { git = "https://github.com/LiGoldragon/owner-signal-persona.git", branch = "main" }
+meta-signal-persona   = { git = "https://github.com/LiGoldragon/meta-signal-persona.git", branch = "main" }
 rkyv                   = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
 sema-engine            = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
 signal-engine-management = { git = "https://github.com/LiGoldragon/signal-engine-management.git", branch = "main" }
