@@ -136,7 +136,7 @@ proxy; systemd socket activation): *"in /155 I go with your leans
 for first prototype. file beads and lets do it."*
 
 Persona-restart resilience and EngineManagement-channel handling
-are separate from this — owner sockets stay direct-bind per-version;
+are separate from this — meta sockets stay direct-bind per-version;
 the FD-handoff applies to public ordinary sockets only.
 
 ## Multi-engine supervision

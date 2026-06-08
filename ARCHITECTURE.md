@@ -200,7 +200,7 @@ when `PERSONA_ORCHESTRATE_EXECUTABLE` points at the launcher or daemon.
 | `message` | Message ingress component: `message` NOTA CLI plus supervised `message-daemon`; the daemon forwards typed message frames to the internal router socket. |
 | `system` | System/window focus observation adapters. |
 | `harness` | Harness identity, lifecycle, transcripts, and delivery adapter boundary. |
-| `terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. It exposes an ordinary terminal communication surface, an owner-only terminal lifecycle surface, plus one engine-management socket. |
+| `terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. It exposes an ordinary terminal communication surface, a meta terminal lifecycle surface, plus one engine-management socket. |
 | `terminal-cell` | Low-level PTY/transcript library consumed by `terminal`; standalone daemon form is a development/test harness. |
 | `sema` | Typed database kernel library over redb/rkyv behind `.sema` files. |
 | `signal-frame` | Signal wire kernel: frames, exchange identifiers, handshake, channel macro. |
@@ -210,7 +210,7 @@ when `PERSONA_ORCHESTRATE_EXECUTABLE` points at the launcher or daemon.
 | `signal-system` | System observation contract. |
 | `signal-harness` | Router/harness delivery and observation contract. |
 | `signal-terminal` | Ordinary terminal transport, prompt-gate, injection, session-registry-read, and worker-lifecycle contract. |
-| `owner-signal-terminal` | Policy terminal session lifecycle mutation contract (`CreateSession`, `RetireSession`) used by the orchestrate/harness/terminal authority chain. |
+| `meta-signal-terminal` | Policy terminal session lifecycle mutation contract (`CreateSession`, `RetireSession`) used by the orchestrate/harness/terminal authority chain. |
 | `nexus` | Semantic text vocabulary written in NOTA syntax. |
 | `nota-next` | NOTA language, typed codec, and derive support. |
 
@@ -222,7 +222,7 @@ graph LR
     signal_frame --> system_contract[signal system]
     signal_frame --> harness_contract[signal harness]
     signal_frame --> terminal_contract[signal terminal]
-    signal_frame --> owner_terminal_contract[owner signal terminal]
+    signal_frame --> meta_terminal_contract[meta signal terminal]
     mind_contract --> mind[persona mind]
     orchestrate_contract --> orchestrate[persona orchestrate]
     mind --> orchestrate
@@ -233,7 +233,7 @@ graph LR
     harness_contract --> router
     harness_contract --> harness[persona harness]
     terminal_contract --> terminal[persona terminal]
-    owner_terminal_contract --> terminal
+    meta_terminal_contract --> terminal
 ```
 
 ## 1.5 · Engine Manager Model
@@ -289,7 +289,7 @@ Concrete resource shape (consistent with the table above):
 |---|---|
 | Spirit Sema file | `/var/lib/persona/<engine-id>/spirit.sema` |
 | Spirit ordinary socket | `/var/run/persona/<engine-id>/spirit.sock` |
-| Spirit owner socket | `/var/run/persona/<engine-id>/owner-spirit.sock` |
+| Spirit meta socket | `/var/run/persona/<engine-id>/meta-spirit.sock` |
 
 ## 1.6 · Local Boundary and Routes
 
@@ -416,19 +416,19 @@ sequenceDiagram
     router->>src: delivery or rejection
 ```
 
-### 1.6.4 · Owner sockets and downstream mutation
+### 1.6.4 · Meta sockets and downstream mutation
 
-Some component relations have an owner-scoped ingress surface in addition to
+Some component relations have a meta-scoped ingress surface in addition to
 ordinary communication. The socket that accepts the frame determines the
-authority lane. An owner socket may accept a `Mutate` order; a non-owner
+authority lane. A meta socket may accept a `Mutate` order; a non-meta
 socket for the same relation does not know that `Mutate` variant and replies
 with a typed error. This makes "who is allowed to command" a property of the
 listening actor and contract surface, not a string inside the payload.
 
-`persona-orchestrate` uses this shape. A mind-authored or owner-socket
+`persona-orchestrate` uses this shape. A mind-authored or meta-socket
 accepted `Mutate` order can sequence downstream `Mutate` orders, such as
 router channel grants, but the downstream component still accepts them only on
-its owner-scoped relation. Ordinary communication sockets remain for
+its meta-scoped relation. Ordinary communication sockets remain for
 assertions, matches, subscriptions, and typed denials.
 
 The prototype does not need to enforce final Unix user/group permission
@@ -513,9 +513,9 @@ labels. The upgrade daemon, not Persona, drives those sockets.
 
 | Socket | Used by |
 |---|---|
-| `current_owner_socket_path` (main owner socket) | Recorded for audit; not driven by Persona's manager today. |
+| `current_owner_socket_path` (main meta socket) | Recorded for audit; not driven by Persona's manager today. |
 | `current_upgrade_socket_path` (main private upgrade socket) | The upgrade daemon opens a client to this path and walks `AskHandoverMarker -> ReadyToHandover -> HandoverCompleted`. |
-| `next_owner_socket_path` (next owner socket) | Recorded for audit; the next daemon's owner-authority surface for follow-on operations. |
+| `next_owner_socket_path` (next meta socket) | Recorded for audit; the next daemon's meta-authority surface for follow-on operations. |
 | `next_upgrade_socket_path` (next private upgrade socket) | The upgrade daemon opens this path before readiness and requires the next daemon's marker to match the main high-water mark before it can flip the active selector. |
 
 The handover protocol per `signal-upgrade` is driven against both
@@ -526,10 +526,10 @@ then does it ask the main daemon to enter readiness and complete. This
 keeps the workspace from persisting `v_next` as active when the next
 daemon is missing or has not copied/replayed the main high-water mark.
 
-**Owner contract.** Administrative upgrade operations — `Register`,
+**Meta contract.** Administrative upgrade operations — `Register`,
 `Allow`, `Block`, `Query`, `ForceFlip`, `Rollback`, and `Quarantine`
 — are carried by `meta-signal-upgrade` and handled by the upgrade
-daemon. Persona does not expose a second owner handover socket.
+daemon. Persona does not expose a second meta handover socket.
 
 **Manager message.** `EngineManager` (`src/manager.rs`) keeps only the
 versioned process-lifecycle message needed by the upgrade daemon:
@@ -1175,7 +1175,7 @@ stream-shaped.
 `terminal` is the Persona component. It exposes the ordinary component
 communication socket that speaks `signal-terminal` frames
 (length-prefixed rkyv), a policy terminal surface that speaks
-`owner-signal-terminal` frames for session lifecycle mutation, and the
+`meta-signal-terminal` frames for session lifecycle mutation, and the
 component engine-management socket. The production daemon embeds `terminal-cell` as
 its low-level PTY/transcript library.
 

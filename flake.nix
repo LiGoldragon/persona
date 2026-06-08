@@ -48,10 +48,10 @@
     signal-terminal.inputs.nixpkgs.follows = "nixpkgs";
     signal-terminal.inputs.fenix.follows = "fenix";
     signal-terminal.inputs.crane.follows = "crane";
-    owner-signal-terminal.url = "github:LiGoldragon/owner-signal-terminal";
-    owner-signal-terminal.inputs.nixpkgs.follows = "nixpkgs";
-    owner-signal-terminal.inputs.fenix.follows = "fenix";
-    owner-signal-terminal.inputs.crane.follows = "crane";
+    meta-signal-terminal.url = "github:LiGoldragon/meta-signal-terminal";
+    meta-signal-terminal.inputs.nixpkgs.follows = "nixpkgs";
+    meta-signal-terminal.inputs.fenix.follows = "fenix";
+    meta-signal-terminal.inputs.crane.follows = "crane";
     persona-system.url = "github:LiGoldragon/persona-system";
     persona-system.inputs.nixpkgs.follows = "nixpkgs";
     persona-system.inputs.fenix.follows = "fenix";
@@ -568,7 +568,7 @@
           signal-orchestrate = inputs.signal-orchestrate.packages.${system}.default;
           signal-system = inputs.signal-system.packages.${system}.default;
           signal-terminal = inputs.signal-terminal.packages.${system}.default;
-          owner-signal-terminal = inputs.owner-signal-terminal.packages.${system}.default;
+          meta-signal-terminal = inputs.meta-signal-terminal.packages.${system}.default;
           persona-system = inputs.persona-system.packages.${system}.default;
           persona-terminal = inputs.persona-terminal.packages.${system}.default;
           terminal-cell = context.terminalCellBinaries;
@@ -629,7 +629,7 @@
           signal-system-fmt = inputs.signal-system.checks.${system}.fmt;
           signal-system-clippy = inputs.signal-system.checks.${system}.clippy;
           signal-terminal = inputs.signal-terminal.checks.${system}.test;
-          owner-signal-terminal = inputs.owner-signal-terminal.checks.${system}.test;
+          meta-signal-terminal = inputs.meta-signal-terminal.checks.${system}.test;
           persona-system = inputs.persona-system.checks.${system}.default;
           persona-terminal = inputs.persona-terminal.checks.${system}.default;
 

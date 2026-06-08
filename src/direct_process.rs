@@ -41,7 +41,7 @@ mod spirit_daemon_configuration {
     #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq, Eq)]
     pub struct DaemonConfiguration {
         pub ordinary_socket_path: SocketPath,
-        pub owner_socket_path: SocketPath,
+        pub meta_socket_path: SocketPath,
         pub upgrade_socket_path: SocketPath,
         pub store_path: StorePath,
         pub socket_mode: SocketMode,
@@ -812,9 +812,9 @@ impl DirectProcessLauncher {
         use spirit_daemon_configuration as spirit;
 
         let instance = envelope.component_instance().as_str();
-        let owner_socket_path = envelope
+        let meta_socket_path = envelope
             .domain_socket_path()
-            .with_file_name(format!("owner-{instance}.sock"));
+            .with_file_name(format!("meta-{instance}.sock"));
         let upgrade_socket_path = envelope
             .domain_socket_path()
             .with_file_name(format!("{instance}-upgrade.sock"));
@@ -822,8 +822,8 @@ impl DirectProcessLauncher {
             ordinary_socket_path: spirit::SocketPath::new(
                 envelope.domain_socket_path().to_string_lossy().into_owned(),
             ),
-            owner_socket_path: spirit::SocketPath::new(
-                owner_socket_path.to_string_lossy().into_owned(),
+            meta_socket_path: spirit::SocketPath::new(
+                meta_socket_path.to_string_lossy().into_owned(),
             ),
             upgrade_socket_path: spirit::SocketPath::new(
                 upgrade_socket_path.to_string_lossy().into_owned(),

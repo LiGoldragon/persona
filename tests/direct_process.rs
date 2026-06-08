@@ -34,7 +34,7 @@ use signal_terminal::TerminalDaemonConfiguration;
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
 struct SpiritDaemonConfiguration {
     ordinary_socket_path: SpiritSocketPath,
-    owner_socket_path: SpiritSocketPath,
+    meta_socket_path: SpiritSocketPath,
     upgrade_socket_path: SpiritSocketPath,
     store_path: SpiritStorePath,
     socket_mode: SpiritSocketMode,
@@ -757,9 +757,9 @@ async fn constraint_spirit_launch_writes_engine_scoped_daemon_configuration() {
     );
     assert!(
         configuration
-            .owner_socket_path
+            .meta_socket_path
             .as_str()
-            .contains("owner-spirit.sock")
+            .contains("meta-spirit.sock")
     );
     assert!(
         configuration

@@ -444,7 +444,7 @@
         "type": "github"
       }
     },
-    "owner-signal-persona": {
+    "meta-signal-persona": {
       "inputs": {
         "crane": [
           "crane"
@@ -458,20 +458,20 @@
         ]
       },
       "locked": {
-        "lastModified": 1780865430,
-        "narHash": "sha256-rCnH0YvPeYRfr2VnrxO4iJT7O/S80yJkC2lERZN85bM=",
+        "lastModified": 1780885615,
+        "narHash": "sha256-Mn2+fu8USj2bm3pXjb+l8YyW+0JDzq70FObZ1kMqf+Q=",
         "owner": "LiGoldragon",
-        "repo": "owner-signal-persona",
-        "rev": "c2557469aa4df14c3c480274989d159f9fedd19a",
+        "repo": "meta-signal-persona",
+        "rev": "485229aba467e525c4ee780d8fb43ca7be719421",
         "type": "github"
       },
       "original": {
         "owner": "LiGoldragon",
-        "repo": "owner-signal-persona",
+        "repo": "meta-signal-persona",
         "type": "github"
       }
     },
-    "owner-signal-terminal": {
+    "meta-signal-terminal": {
       "inputs": {
         "crane": [
           "crane"
@@ -485,16 +485,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1780855974,
-        "narHash": "sha256-jxy8WmVHETgT+a7Rc0dhkbFfbADqDD52OosRw3meGP4=",
+        "lastModified": 1780886641,
+        "narHash": "sha256-O+41/rMx26nga7lfxbOSFF8gfKyVWSKSMAoVEZFaPhM=",
         "owner": "LiGoldragon",
-        "repo": "owner-signal-terminal",
-        "rev": "e69f22ba22b23a84abf59da4381804960a01d730",
+        "repo": "meta-signal-terminal",
+        "rev": "fc86c5fea137397d0d0ec1d13866cf9cbd20536d",
         "type": "github"
       },
       "original": {
         "owner": "LiGoldragon",
-        "repo": "owner-signal-terminal",
+        "repo": "meta-signal-terminal",
         "type": "github"
       }
     },
@@ -725,8 +725,8 @@
         "crane": "crane",
         "fenix": "fenix",
         "nixpkgs": "nixpkgs",
-        "owner-signal-persona": "owner-signal-persona",
-        "owner-signal-terminal": "owner-signal-terminal",
+        "meta-signal-persona": "meta-signal-persona",
+        "meta-signal-terminal": "meta-signal-terminal",
         "persona-harness": "persona-harness",
         "persona-introspect": "persona-introspect",
         "persona-message": "persona-message",
