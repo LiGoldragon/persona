@@ -4,6 +4,8 @@
 //! manager actor that accepts `meta-signal-persona` management requests and renders
 //! NOTA projections for the command-line surface.
 
+pub mod configuration;
+pub mod daemon;
 pub mod direct_process;
 pub mod engine;
 pub mod engine_event;
@@ -21,4 +23,6 @@ pub mod transport;
 pub mod unit;
 pub mod upgrade;
 
+pub use configuration::{ConfigurationError, PersonaDaemonConfiguration};
+pub use daemon::{PersonaDaemon, PersonaEngine};
 pub use error::{Error, Result};

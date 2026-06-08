@@ -556,6 +556,8 @@ dependencies = [
  "meta-signal-upgrade",
  "nota-next",
  "rkyv",
+ "schema-next",
+ "schema-rust-next",
  "sema-engine",
  "signal-engine-management",
  "signal-frame",
@@ -572,6 +574,7 @@ dependencies = [
  "strum",
  "thiserror",
  "tokio",
+ "triad-runtime",
  "unix-ancillary",
  "upgrade",
  "version-projection",
@@ -735,7 +738,7 @@ dependencies = [
 [[package]]
 name = "schema-rust-next"
 version = "0.5.1"
-source = "git+https://github.com/LiGoldragon/schema-rust-next.git?branch=main#83f1ee1f91a67e8728ad0fdc657b4cbd7d3d48dc"
+source = "git+https://github.com/LiGoldragon/schema-rust-next.git?branch=main#7282446ed3f41663d9e9ef1753a9a2b3514cf829"
 dependencies = [
  "prettyplease",
  "proc-macro2",
@@ -852,7 +855,7 @@ dependencies = [
 [[package]]
 name = "signal-frame"
 version = "0.2.1"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#8b128d3648935d9d322d5c4985d5b347aaeecddd"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#166bda84dc63bf8461fff11a41c43d6a1c92a941"
 dependencies = [
  "nota-next",
  "paste",
@@ -864,7 +867,7 @@ dependencies = [
 [[package]]
 name = "signal-frame-macros"
 version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#8b128d3648935d9d322d5c4985d5b347aaeecddd"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#166bda84dc63bf8461fff11a41c43d6a1c92a941"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1210,7 +1213,7 @@ dependencies = [
 [[package]]
 name = "triad-runtime"
 version = "0.6.0"
-source = "git+https://github.com/LiGoldragon/triad-runtime.git?branch=main#1210391f3f99914ca79abbc50b9eba4df9946a83"
+source = "git+https://github.com/LiGoldragon/triad-runtime.git?branch=main#ae2e81755f8f1536329f372bdcc78dbbcd065999"
 dependencies = [
  "kameo",
  "rustix",

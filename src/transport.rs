@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::os::unix::net::UnixStream as StandardUnixStream;
@@ -18,11 +17,8 @@ use unix_ancillary::UnixStreamExt;
 
 use crate::engine::{ComponentLayout, EngineComponent, EngineTopology, PersonaDaemonPaths};
 use crate::error::{Error, Result};
-use crate::launch::{ComponentCommandCatalog, EngineLaunchConfiguration};
-use crate::manager::{EngineManager, HandleEngineRequest};
-use crate::manager_store::{ManagerStore, ManagerStoreLocation, ReadActiveVersion};
-use crate::supervisor::{EngineSupervisor, EngineSupervisorInput, StartPrototypeSupervision};
-use crate::unit::{ManualUnitController, UnitController};
+use crate::launch::ComponentCommandCatalog;
+use crate::manager_store::{ManagerStore, ReadActiveVersion};
 use crate::upgrade::Version;
 
 fn unlink_existing_socket_path(path: &Path) -> Result<()> {
@@ -72,20 +68,6 @@ impl PersonaEndpoint {
 
     pub fn as_path(&self) -> &Path {
         self.path.as_path()
-    }
-
-    fn unlink_existing_socket(&self) -> Result<()> {
-        match std::fs::symlink_metadata(&self.path) {
-            Ok(metadata) if metadata.file_type().is_socket() => {
-                std::fs::remove_file(&self.path)?;
-                Ok(())
-            }
-            Ok(_) => Err(Error::SocketPathOccupied {
-                path: self.path.clone(),
-            }),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(error.into()),
-        }
     }
 }
 
@@ -473,149 +455,6 @@ impl PersonaClient {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct PersonaDaemon {
-    endpoint: PersonaEndpoint,
-    manager_store: ManagerStoreLocation,
-    launch_plan: Option<PersonaLaunchPlan>,
-    unit_controller: Arc<dyn UnitController>,
-    codec: PersonaFrameCodec,
-}
-
-impl PersonaDaemon {
-    pub fn new(endpoint: PersonaEndpoint) -> Self {
-        let manager_store = ManagerStoreLocation::from_endpoint(endpoint.as_path())
-            .unwrap_or_else(|_| ManagerStoreLocation::new("manager.sema"));
-        Self::with_manager_store(endpoint, manager_store)
-    }
-
-    pub fn with_manager_store(
-        endpoint: PersonaEndpoint,
-        manager_store: ManagerStoreLocation,
-    ) -> Self {
-        Self {
-            endpoint,
-            manager_store,
-            launch_plan: None,
-            unit_controller: Arc::new(ManualUnitController),
-            codec: PersonaFrameCodec::default(),
-        }
-    }
-
-    pub fn with_launch_plan(mut self, launch_plan: Option<PersonaLaunchPlan>) -> Self {
-        self.launch_plan = launch_plan;
-        self
-    }
-
-    pub fn with_unit_controller(mut self, unit_controller: Arc<dyn UnitController>) -> Self {
-        self.unit_controller = unit_controller;
-        self
-    }
-
-    pub async fn serve(self) -> Result<()> {
-        self.endpoint.unlink_existing_socket()?;
-        let listener = UnixListener::bind(self.endpoint.as_path())?;
-        let store = ManagerStore::start(self.manager_store.clone())?;
-        let manager = EngineManager::start_with_store_and_unit_controller(
-            EngineIdentifier::new("default"),
-            store.clone(),
-            self.unit_controller.clone(),
-        )
-        .await?;
-        let supervisor = self.start_supervisor(store).await?;
-
-        println!(
-            "persona-daemon socket={}",
-            self.endpoint.as_path().display()
-        );
-
-        let _supervisor_lifetime = supervisor;
-        loop {
-            let (stream, _) = listener.accept().await?;
-            if let Err(error) = self.handle_stream(stream, &manager).await {
-                eprintln!("persona-daemon connection error: {error}");
-            }
-        }
-    }
-
-    async fn start_supervisor(
-        &self,
-        store: kameo::actor::ActorRef<ManagerStore>,
-    ) -> Result<Option<kameo::actor::ActorRef<EngineSupervisor>>> {
-        let Some(launch_plan) = &self.launch_plan else {
-            return Ok(None);
-        };
-        let supervisor = EngineSupervisor::start(EngineSupervisorInput {
-            layout: launch_plan.layout(),
-            command_catalog: launch_plan.command_catalog.clone(),
-            launch_configuration: EngineLaunchConfiguration::empty(),
-            store: Some(store),
-        });
-        match supervisor.ask(StartPrototypeSupervision).await {
-            Ok(_) => {}
-            Err(kameo::error::SendError::HandlerError(error)) => {
-                return Err(Error::engine_supervisor(
-                    "start prototype supervision",
-                    error,
-                ));
-            }
-            Err(error) => {
-                return Err(Error::actor(
-                    "start prototype supervision supervisor",
-                    error,
-                ));
-            }
-        }
-        Ok(Some(supervisor))
-    }
-
-    async fn handle_stream(
-        &self,
-        mut stream: UnixStream,
-        manager: &ActorRef<EngineManager>,
-    ) -> Result<()> {
-        let frame = self.codec.read_frame(&mut stream).await?;
-        let received = self.codec.request_from_frame(frame)?;
-        let exchange = received.exchange();
-        let reply = manager
-            .ask(HandleEngineRequest::new(received.into_request()))
-            .await
-            .map_err(|error| Error::actor("handle daemon engine request", error))?;
-        let frame = self.codec.reply_frame(exchange, reply);
-        self.codec.write_frame(&mut stream, &frame).await
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PersonaDaemonCommand {
-    endpoint: PersonaEndpoint,
-    manager_store: ManagerStoreLocation,
-    launch_plan: Option<PersonaLaunchPlan>,
-}
-
-impl PersonaDaemonCommand {
-    pub fn from_environment() -> Result<Self> {
-        let endpoint = PersonaEndpoint::from_argument_or_environment(std::env::args_os().nth(1));
-        let manager_store = ManagerStoreLocation::from_environment().unwrap_or_else(|| {
-            ManagerStoreLocation::from_endpoint(endpoint.as_path())
-                .unwrap_or_else(|_| ManagerStoreLocation::new("manager.sema"))
-        });
-        let launch_plan = PersonaLaunchPlan::from_environment(&endpoint)?;
-        Ok(Self {
-            endpoint,
-            manager_store,
-            launch_plan,
-        })
-    }
-
-    pub async fn run(self) -> Result<()> {
-        PersonaDaemon::with_manager_store(self.endpoint, self.manager_store)
-            .with_launch_plan(self.launch_plan)
-            .serve()
-            .await
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaLaunchPlan {
     engine: EngineIdentifier,
@@ -689,6 +528,10 @@ impl PersonaLaunchPlan {
             self.manager_socket.clone(),
             self.topology,
         )
+    }
+
+    pub fn command_catalog(&self) -> ComponentCommandCatalog {
+        self.command_catalog.clone()
     }
 }
 

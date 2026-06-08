@@ -6,6 +6,7 @@ rust-version = "1.88"
 license      = "MIT OR Apache-2.0"
 repository   = "https://github.com/LiGoldragon/persona"
 description  = "Engine manager and apex integration repo for multi-harness AI systems."
+build        = "build.rs"
 
 [lib]
 name = "persona"
@@ -40,12 +41,17 @@ signal-terminal           = { git = "https://github.com/LiGoldragon/signal-termi
 strum                  = { version = "0.28", features = ["derive"] }
 thiserror              = "2"
 tokio                  = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "process", "time"] }
+triad-runtime          = { git = "https://github.com/LiGoldragon/triad-runtime.git", branch = "main" }
 unix-ancillary         = "0.2"
 upgrade                = { git = "https://github.com/LiGoldragon/upgrade.git", branch = "main" }
 version-projection     = { git = "https://github.com/LiGoldragon/version-projection.git", branch = "main" }
 zbus                   = { version = "5.15", default-features = false, features = ["tokio"] }
 
+[build-dependencies]
+schema-rust-next = { git = "https://github.com/LiGoldragon/schema-rust-next.git", branch = "main" }
+
 [dev-dependencies]
+schema-next = { git = "https://github.com/LiGoldragon/schema-next.git", branch = "main" }
 signal-sema = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "main" }
 signal-upgrade = { git = "https://github.com/LiGoldragon/signal-upgrade.git", branch = "main" }
 

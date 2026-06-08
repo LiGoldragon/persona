@@ -86,7 +86,7 @@ fn signal_message_kind_projects_to_nota() {
 #[test]
 fn persona_meta_schema_cannot_restore_system_prompt_gate_operations() {
     let engine_event_source = include_str!("../src/engine_event.rs");
-    let schema_source = include_str!("../src/schema.rs");
+    let schema_source = include_str!("../src/schema/reports.rs");
 
     for forbidden in [
         "InputBuffer",
