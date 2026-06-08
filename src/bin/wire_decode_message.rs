@@ -33,10 +33,9 @@
 
 use std::io::{Read, Write};
 
-use nota_next::NotaEncode;
-use signal_message::{Frame, FrameBody, MessageRequest};
-use signal_persona_origin::{
-    ComponentName, ConnectionClass, MessageOrigin, NetworkPeer, UnixUserIdentifier,
+use signal_message::{
+    ComponentName, ConnectionClass, Frame, FrameBody, Input, MessageOrigin, NetworkPeer,
+    UnixUserIdentifier,
 };
 
 struct Expectations {
@@ -86,11 +85,13 @@ fn parse_origin(spec: &str) -> MessageOrigin {
         }
         if let Some(uid) = rest.strip_prefix("non-owner-user:") {
             return MessageOrigin::External(ConnectionClass::NonOwnerUser(
-                UnixUserIdentifier::new(uid.parse::<u32>().expect("uid u32")),
+                UnixUserIdentifier::new(uid.parse::<u64>().expect("uid u64")),
             ));
         }
         if let Some(peer) = rest.strip_prefix("network:") {
-            return MessageOrigin::External(ConnectionClass::Network(NetworkPeer::new(peer)));
+            return MessageOrigin::External(ConnectionClass::Network(NetworkPeer::new(
+                peer.to_owned(),
+            )));
         }
     }
     panic!("unknown origin spec: {spec}");
@@ -128,28 +129,28 @@ impl Expectations {
 
     fn assert_submission(&self, submission: &signal_message::MessageSubmission) {
         assert_eq!(
-            submission.recipient.as_str(),
+            submission.recipient.payload().as_str(),
             self.recipient.as_str(),
             "recipient mismatch (expected {}, got {})",
             self.recipient,
-            submission.recipient.as_str()
+            submission.recipient.payload().as_str()
         );
         assert_eq!(
-            submission.body.as_str(),
+            submission.body.payload().as_str(),
             self.body.as_str(),
             "body mismatch (expected {}, got {})",
             self.body,
-            submission.body.as_str()
+            submission.body.payload().as_str()
         );
         eprintln!(
             "decoded MessageSubmission {{ recipient: {}, body: {} }}",
-            submission.recipient.as_str(),
-            submission.body.as_str()
+            submission.recipient.payload().as_str(),
+            submission.body.payload().as_str()
         );
     }
 }
 
-fn write_nota(request: &MessageRequest, path: &str) {
+fn write_nota(request: &Input, path: &str) {
     let text = request.to_nota();
     let mut file = std::fs::File::create(path).expect("create capture-nota file");
     file.write_all(text.as_bytes())
@@ -177,7 +178,7 @@ fn main() {
             }
 
             match (&expect.variant, &operation) {
-                (Some(ExpectedVariant::Submission) | None, MessageRequest::Submit(submission)) => {
+                (Some(ExpectedVariant::Submission) | None, Input::Submit(submission)) => {
                     expect.assert_submission(submission);
                     if expect.origin.is_some() {
                         panic!(
@@ -185,7 +186,7 @@ fn main() {
                         );
                     }
                 }
-                (Some(ExpectedVariant::Stamped) | None, MessageRequest::SubmitStamped(stamped)) => {
+                (Some(ExpectedVariant::Stamped) | None, Input::SubmitStamped(stamped)) => {
                     expect.assert_submission(&stamped.submission);
                     if let Some(want_origin) = expect.origin.as_ref() {
                         assert_eq!(
@@ -198,15 +199,15 @@ fn main() {
                         eprintln!("decoded origin (unasserted): {:?}", stamped.origin);
                     }
                 }
-                (Some(ExpectedVariant::InboxQuery), MessageRequest::QueryInbox(query)) => {
+                (Some(ExpectedVariant::InboxQuery), Input::QueryInbox(query)) => {
                     assert_eq!(
-                        query.recipient.as_str(),
+                        query.payload().payload().as_str(),
                         expect.recipient.as_str(),
                         "inbox-query recipient mismatch"
                     );
                     eprintln!(
                         "decoded InboxQuery {{ recipient: {} }}",
-                        query.recipient.as_str()
+                        query.payload().payload().as_str()
                     );
                 }
                 (expected, got) => {

@@ -25,8 +25,8 @@ use signal_frame::{
 };
 use signal_message::{
     DependencyKind, Frame, FrameBody, InboxEntry, InboxListing, MessageBody, MessageOperationKind,
-    MessageReply, MessageRequestUnimplemented, MessageSender, MessageSlot,
-    MessageUnimplementedReason, ResourceKind, SubmissionAcceptance,
+    MessageRequestUnimplemented, MessageSender, MessageSlot, MessageUnimplementedReason, Output,
+    ResourceKind, SubmissionAcceptance,
 };
 
 enum Variant {
@@ -140,21 +140,16 @@ fn parse() -> Variant {
     }
 }
 
-fn build_reply(variant: Variant) -> MessageReply {
+fn build_reply(variant: Variant) -> Output {
     match variant {
         Variant::SubmissionAccepted { slot } => {
-            MessageReply::SubmissionAccepted(SubmissionAcceptance {
-                message_slot: MessageSlot::new(slot),
-            })
+            Output::SubmissionAccepted(SubmissionAcceptance(MessageSlot::new(slot)))
         }
-        Variant::InboxListing { entries } => MessageReply::InboxListing(InboxListing {
-            messages: entries.into_iter().map(EntrySpec::into_entry).collect(),
-        }),
+        Variant::InboxListing { entries } => Output::InboxListing(InboxListing(
+            entries.into_iter().map(EntrySpec::into_entry).collect(),
+        )),
         Variant::Unimplemented { operation, reason } => {
-            MessageReply::MessageRequestUnimplemented(MessageRequestUnimplemented {
-                operation,
-                reason,
-            })
+            Output::MessageRequestUnimplemented(MessageRequestUnimplemented { operation, reason })
         }
     }
 }

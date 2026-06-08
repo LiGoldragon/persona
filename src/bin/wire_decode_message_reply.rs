@@ -23,9 +23,8 @@
 
 use std::io::{Read, Write};
 
-use nota_next::NotaEncode;
 use signal_frame::{Reply, SubReply};
-use signal_message::{Frame, FrameBody, MessageOperationKind, MessageReply};
+use signal_message::{Frame, FrameBody, MessageOperationKind, Output};
 
 #[derive(Debug)]
 enum Expectation {
@@ -94,7 +93,7 @@ fn parse() -> (Expectation, Option<String>) {
     (expectation, capture_nota)
 }
 
-fn write_nota(reply: &MessageReply, path: &str) {
+fn write_nota(reply: &Output, path: &str) {
     let text = reply.to_nota();
     let mut file = std::fs::File::create(path).expect("create capture-nota file");
     file.write_all(text.as_bytes())
@@ -130,9 +129,9 @@ fn main() {
     match (expect, &reply_payload) {
         (
             Expectation::SubmissionAccepted { slot: want },
-            MessageReply::SubmissionAccepted(acceptance),
+            Output::SubmissionAccepted(acceptance),
         ) => {
-            let got = acceptance.message_slot.into_u64();
+            let got = *acceptance.0.payload();
             assert_eq!(
                 got, want,
                 "submission-accepted slot mismatch (expected {want}, got {got})"
@@ -145,10 +144,10 @@ fn main() {
                 body: want_body,
                 sender: want_sender,
             },
-            MessageReply::InboxListing(listing),
+            Output::InboxListing(listing),
         ) => {
             if let Some(want) = want_count {
-                let got = listing.messages.len();
+                let got = listing.0.len();
                 assert_eq!(
                     got, want,
                     "inbox-listing entry count mismatch (expected {want}, got {got})"
@@ -156,39 +155,39 @@ fn main() {
             }
             if let Some(want) = want_body.as_deref() {
                 let found = listing
-                    .messages
+                    .0
                     .iter()
-                    .any(|entry| entry.body.as_str() == want);
+                    .any(|entry| entry.body.payload().as_str() == want);
                 assert!(
                     found,
                     "inbox-listing missing entry with body={want:?}; entries={:?}",
-                    listing.messages
+                    listing.0
                 );
             }
             if let Some(want) = want_sender.as_deref() {
                 let found = listing
-                    .messages
+                    .0
                     .iter()
-                    .any(|entry| entry.sender.as_str() == want);
+                    .any(|entry| entry.sender.payload().as_str() == want);
                 assert!(
                     found,
                     "inbox-listing missing entry with sender={want:?}; entries={:?}",
-                    listing.messages
+                    listing.0
                 );
             }
             eprintln!(
                 "decoded InboxListing entries={} bodies={:?}",
-                listing.messages.len(),
+                listing.0.len(),
                 listing
-                    .messages
+                    .0
                     .iter()
-                    .map(|e| e.body.as_str())
+                    .map(|e| e.body.payload().as_str())
                     .collect::<Vec<_>>()
             );
         }
         (
             Expectation::Unimplemented { operation: want },
-            MessageReply::MessageRequestUnimplemented(unimplemented),
+            Output::MessageRequestUnimplemented(unimplemented),
         ) => {
             assert_eq!(
                 unimplemented.operation, want,

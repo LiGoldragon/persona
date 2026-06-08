@@ -14,7 +14,7 @@ use persona::launch::{
     EnvironmentVariableName, EnvironmentVariableValue, ExecutablePath,
     ReadCommandResolutionAttemptCount, ResolveComponentCommands, ResolvedComponentCommands,
 };
-use signal_persona_origin::{EngineIdentifier, OwnerIdentity, UnixUserIdentifier};
+use signal_persona::origin::{EngineIdentifier, OwnerIdentity, UnixUserIdentifier};
 
 struct TemporaryEngineRoot {
     root: PathBuf,
@@ -444,11 +444,11 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
     assert_eq!(signal_envelope.engine_identifier.as_str(), "engine-gamma");
     assert_eq!(
         signal_envelope.component_kind,
-        signal_engine_management::ComponentKind::Router
+        signal_persona::ComponentKind::Router
     );
     assert_eq!(
         signal_envelope.component_name,
-        signal_persona_origin::ComponentName::Router
+        signal_persona::origin::ComponentName::Router
     );
     assert_eq!(signal_envelope.owner_identity, owner_identity);
     assert!(
@@ -478,9 +478,8 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
 
     let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&signal_envelope)
         .expect("encode signal spawn envelope");
-    let recovered =
-        rkyv::from_bytes::<signal_engine_management::SpawnEnvelope, rkyv::rancor::Error>(&bytes)
-            .expect("decode signal spawn envelope");
+    let recovered = rkyv::from_bytes::<signal_persona::SpawnEnvelope, rkyv::rancor::Error>(&bytes)
+        .expect("decode signal spawn envelope");
     assert_eq!(recovered, signal_envelope);
 }
 
@@ -522,11 +521,11 @@ async fn constraint_mind_orchestrate_topology_spawn_envelope_has_one_peer_socket
     let signal_envelope = envelope.signal_spawn_envelope();
     assert_eq!(
         signal_envelope.component_kind,
-        signal_engine_management::ComponentKind::Orchestrate
+        signal_persona::ComponentKind::Orchestrate
     );
     assert_eq!(
         signal_envelope.component_name,
-        signal_persona_origin::ComponentName::Orchestrate
+        signal_persona::origin::ComponentName::Orchestrate
     );
 }
 

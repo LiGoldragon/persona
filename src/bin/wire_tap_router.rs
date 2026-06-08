@@ -33,8 +33,8 @@ use std::path::PathBuf;
 
 use signal_frame::{ExchangeIdentifier, NonEmpty, Reply, SubReply};
 use signal_message::{
-    Frame, FrameBody, MessageOperationKind, MessageReply, MessageRequestUnimplemented, MessageSlot,
-    MessageUnimplementedReason, SubmissionAcceptance,
+    Frame, FrameBody, MessageOperationKind, MessageRequestUnimplemented, MessageSlot,
+    MessageUnimplementedReason, Output, SubmissionAcceptance,
 };
 
 enum CannedReply {
@@ -91,24 +91,22 @@ impl Cli {
 fn build_reply_frame(canned: CannedReply, request_exchange: ExchangeIdentifier) -> Frame {
     let payload = match canned {
         CannedReply::SubmissionAcceptedSlot(slot) => {
-            MessageReply::SubmissionAccepted(SubmissionAcceptance {
-                message_slot: MessageSlot::new(slot),
-            })
+            Output::SubmissionAccepted(SubmissionAcceptance(MessageSlot::new(slot)))
         }
         CannedReply::UnimplementedSubmission => {
-            MessageReply::MessageRequestUnimplemented(MessageRequestUnimplemented {
+            Output::MessageRequestUnimplemented(MessageRequestUnimplemented {
                 operation: MessageOperationKind::Submit,
                 reason: MessageUnimplementedReason::NotInPrototypeScope,
             })
         }
         CannedReply::UnimplementedStamped => {
-            MessageReply::MessageRequestUnimplemented(MessageRequestUnimplemented {
+            Output::MessageRequestUnimplemented(MessageRequestUnimplemented {
                 operation: MessageOperationKind::SubmitStamped,
                 reason: MessageUnimplementedReason::NotInPrototypeScope,
             })
         }
         CannedReply::UnimplementedInboxQuery => {
-            MessageReply::MessageRequestUnimplemented(MessageRequestUnimplemented {
+            Output::MessageRequestUnimplemented(MessageRequestUnimplemented {
                 operation: MessageOperationKind::QueryInbox,
                 reason: MessageUnimplementedReason::NotInPrototypeScope,
             })

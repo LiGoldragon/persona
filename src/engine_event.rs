@@ -4,7 +4,7 @@ use nota_next::{NotaDecode, NotaEncode};
 pub use signal_harness::HarnessOperationKind;
 pub use signal_message::MessageOperationKind;
 pub use signal_mind::MindOperationKind;
-use signal_persona_origin::EngineIdentifier;
+use signal_persona::origin::EngineIdentifier;
 pub use signal_system::SystemOperationKind;
 pub use signal_terminal::TerminalOperationKind;
 use strum::EnumDiscriminants;

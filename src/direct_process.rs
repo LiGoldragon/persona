@@ -9,13 +9,11 @@ use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use rkyv::Serialize as RkyvSerialize;
-use signal_persona_origin::EngineIdentifier;
+use signal_persona::origin::EngineIdentifier;
 use signal_router::{
-    Actor as BootstrapActor, ActorIdentifier as BootstrapActorIdentifier,
-    EndpointKind as RouterBootstrapEndpointKind,
+    Actor as BootstrapActor, EndpointKind as RouterBootstrapEndpointKind,
     EndpointTransport as RouterBootstrapEndpointTransport,
-    GrantDirectMessage as RouterBootstrapGrantDirectMessage,
-    RegisterActor as RouterBootstrapRegisterActor, RouterBootstrapDocument,
+    GrantDirectMessage as RouterBootstrapGrantDirectMessage, RouterBootstrapDocument,
     RouterBootstrapOperation,
 };
 use thiserror::Error;
@@ -536,28 +534,45 @@ impl DirectProcessLauncher {
             .ok_or(DirectProcessFailure::MissingRouterPeerForMessage)?
             .domain_socket_path();
         let configuration = signal_message::MessageDaemonConfiguration {
-            message_socket_path: signal_engine_management::WirePath::new(
+            message_socket_path: signal_message::WirePath::new(
                 envelope.domain_socket_path().to_string_lossy().into_owned(),
             ),
-            message_socket_mode: signal_engine_management::SocketMode::new(
+            message_socket_mode: signal_message::SocketMode::new(u64::from(
                 envelope.domain_socket_mode().as_octal(),
-            ),
-            supervision_socket_path: signal_engine_management::WirePath::new(
+            )),
+            supervision_socket_path: signal_message::WirePath::new(
                 envelope
                     .supervision_socket_path()
                     .to_string_lossy()
                     .into_owned(),
             ),
-            supervision_socket_mode: signal_engine_management::SocketMode::new(
+            supervision_socket_mode: signal_message::SocketMode::new(u64::from(
                 envelope.supervision_socket_mode().as_octal(),
-            ),
-            router_socket_path: signal_engine_management::WirePath::new(
+            )),
+            router_socket_path: signal_message::WirePath::new(
                 router_socket_path.to_string_lossy().into_owned(),
             ),
             component_ingresses: Self::component_message_ingresses(envelope),
-            owner_identity: envelope.owner_identity().clone(),
+            owner_identity: Self::message_owner_identity(envelope.owner_identity()),
         };
         Self::write_configuration_binary_file(envelope, &configuration)
+    }
+
+    fn message_owner_identity(
+        owner: &signal_persona::origin::OwnerIdentity,
+    ) -> signal_message::OwnerIdentity {
+        match owner {
+            signal_persona::origin::OwnerIdentity::UnixUser(user) => {
+                signal_message::OwnerIdentity::UnixUser(signal_message::UnixUserIdentifier::new(
+                    u64::from(user.as_u32()),
+                ))
+            }
+            signal_persona::origin::OwnerIdentity::System(principal) => {
+                signal_message::OwnerIdentity::System(signal_message::SystemPrincipal::new(
+                    principal.as_str().to_owned(),
+                ))
+            }
+        }
     }
 
     fn component_message_ingresses(
@@ -568,18 +583,18 @@ impl DirectProcessLauncher {
             .iter()
             .filter(|peer| peer.component() == EngineComponent::Harness)
             .map(|peer| signal_message::ComponentMessageIngress {
-                origin: signal_persona_origin::InternalComponentInstanceOrigin::new(
-                    signal_persona_origin::ComponentName::Harness,
-                    signal_persona_origin::ComponentInstanceName::new(
-                        peer.instance_name().as_str(),
+                origin: signal_message::InternalComponentInstanceOrigin {
+                    component: signal_message::ComponentName::Harness,
+                    instance: signal_message::ComponentInstanceName::new(
+                        peer.instance_name().as_str().to_owned(),
                     ),
-                ),
-                socket_path: signal_engine_management::WirePath::new(
+                },
+                socket_path: signal_message::WirePath::new(
                     Self::component_message_ingress_socket_path(envelope, peer.instance_name())
                         .to_string_lossy()
                         .into_owned(),
                 ),
-                socket_mode: signal_engine_management::SocketMode::new(0o600),
+                socket_mode: signal_message::SocketMode::new(0o600),
             })
             .collect()
     }
@@ -602,38 +617,35 @@ impl DirectProcessLauncher {
             .map(|document| document.write_next_to(envelope.envelope_path()))
             .transpose()?;
         let configuration = signal_router::RouterDaemonConfiguration {
-            router_socket_path: signal_engine_management::WirePath::new(
-                envelope.domain_socket_path().to_string_lossy().into_owned(),
-            ),
-            router_socket_mode: signal_engine_management::SocketMode::new(
-                envelope.domain_socket_mode().as_octal(),
-            ),
-            meta_router_socket_path: signal_engine_management::WirePath::new(
-                Self::meta_socket_path(envelope)
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
-            meta_router_socket_mode: signal_engine_management::SocketMode::new(
-                envelope.domain_socket_mode().as_octal(),
-            ),
-            supervision_socket_path: signal_engine_management::WirePath::new(
-                envelope
-                    .supervision_socket_path()
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
-            supervision_socket_mode: signal_engine_management::SocketMode::new(
-                envelope.supervision_socket_mode().as_octal(),
-            ),
-            store_path: signal_engine_management::WirePath::new(
-                store_path.to_string_lossy().into_owned(),
-            ),
-            bootstrap_path: bootstrap_path.map(|path| {
-                signal_engine_management::WirePath::new(path.to_string_lossy().into_owned())
-            }),
-            owner_identity: envelope.owner_identity().clone(),
+            router_socket_path: envelope.domain_socket_path().to_string_lossy().into_owned(),
+            router_socket_mode: u64::from(envelope.domain_socket_mode().as_octal()),
+            meta_router_socket_path: Self::meta_socket_path(envelope)
+                .to_string_lossy()
+                .into_owned(),
+            meta_router_socket_mode: u64::from(envelope.domain_socket_mode().as_octal()),
+            supervision_socket_path: envelope
+                .supervision_socket_path()
+                .to_string_lossy()
+                .into_owned(),
+            supervision_socket_mode: u64::from(envelope.supervision_socket_mode().as_octal()),
+            store_path: store_path.to_string_lossy().into_owned(),
+            bootstrap_path: bootstrap_path.map(|path| path.to_string_lossy().into_owned()),
+            owner_identity: Self::router_owner_identity(envelope.owner_identity())?,
         };
         Self::write_configuration_binary_file(envelope, &configuration)
+    }
+
+    fn router_owner_identity(
+        owner: &signal_persona::origin::OwnerIdentity,
+    ) -> Result<signal_router::OwnerIdentity, DirectProcessFailure> {
+        match owner {
+            signal_persona::origin::OwnerIdentity::UnixUser(user) => Ok(
+                signal_router::OwnerIdentity::UnixUser(u64::from(user.as_u32())),
+            ),
+            signal_persona::origin::OwnerIdentity::System(_) => {
+                Err(DirectProcessFailure::RouterOwnerIdentityUnsupportedSystem)
+            }
+        }
     }
 
     fn meta_socket_path(envelope: &ComponentSpawnEnvelope) -> PathBuf {
@@ -661,31 +673,31 @@ impl DirectProcessLauncher {
             .domain_socket_path()
             .to_path_buf();
         let configuration = signal_introspect::IntrospectDaemonConfiguration {
-            introspect_socket_path: signal_engine_management::WirePath::new(
+            introspect_socket_path: signal_persona::WirePath::new(
                 envelope.domain_socket_path().to_string_lossy().into_owned(),
             ),
-            introspect_socket_mode: signal_engine_management::SocketMode::new(
+            introspect_socket_mode: signal_persona::SocketMode::new(
                 envelope.domain_socket_mode().as_octal(),
             ),
-            supervision_socket_path: signal_engine_management::WirePath::new(
+            supervision_socket_path: signal_persona::WirePath::new(
                 envelope
                     .supervision_socket_path()
                     .to_string_lossy()
                     .into_owned(),
             ),
-            supervision_socket_mode: signal_engine_management::SocketMode::new(
+            supervision_socket_mode: signal_persona::SocketMode::new(
                 envelope.supervision_socket_mode().as_octal(),
             ),
-            store_path: signal_engine_management::WirePath::new(
+            store_path: signal_persona::WirePath::new(
                 envelope.state_path().to_string_lossy().into_owned(),
             ),
-            manager_socket_path: signal_engine_management::WirePath::new(
+            manager_socket_path: signal_persona::WirePath::new(
                 envelope.manager_socket().to_string_lossy().into_owned(),
             ),
-            router_socket_path: signal_engine_management::WirePath::new(
+            router_socket_path: signal_persona::WirePath::new(
                 router_socket_path.to_string_lossy().into_owned(),
             ),
-            terminal_socket_path: signal_engine_management::WirePath::new(
+            terminal_socket_path: signal_persona::WirePath::new(
                 terminal_socket_path.to_string_lossy().into_owned(),
             ),
             owner_identity: envelope.owner_identity().clone(),
@@ -697,27 +709,52 @@ impl DirectProcessLauncher {
         envelope: &ComponentSpawnEnvelope,
     ) -> Result<PathBuf, DirectProcessFailure> {
         let configuration = signal_terminal::TerminalDaemonConfiguration {
-            terminal_socket_path: signal_engine_management::WirePath::new(
+            terminal_socket_path: signal_terminal::WirePath::new(
                 envelope.domain_socket_path().to_string_lossy().into_owned(),
             ),
-            terminal_socket_mode: signal_engine_management::SocketMode::new(
+            terminal_socket_mode: signal_terminal::SocketMode::new(u64::from(
                 envelope.domain_socket_mode().as_octal(),
+            )),
+            meta_terminal_socket_path: signal_terminal::WirePath::new(
+                Self::meta_socket_path(envelope)
+                    .to_string_lossy()
+                    .into_owned(),
             ),
-            supervision_socket_path: signal_engine_management::WirePath::new(
+            meta_terminal_socket_mode: signal_terminal::SocketMode::new(u64::from(
+                envelope.domain_socket_mode().as_octal(),
+            )),
+            supervision_socket_path: signal_terminal::WirePath::new(
                 envelope
                     .supervision_socket_path()
                     .to_string_lossy()
                     .into_owned(),
             ),
-            supervision_socket_mode: signal_engine_management::SocketMode::new(
+            supervision_socket_mode: signal_terminal::SocketMode::new(u64::from(
                 envelope.supervision_socket_mode().as_octal(),
-            ),
-            store_path: signal_engine_management::WirePath::new(
+            )),
+            store_path: signal_terminal::WirePath::new(
                 envelope.state_path().to_string_lossy().into_owned(),
             ),
-            owner_identity: envelope.owner_identity().clone(),
+            owner_identity: Self::terminal_owner_identity(envelope.owner_identity()),
         };
         Self::write_configuration_binary_file(envelope, &configuration)
+    }
+
+    fn terminal_owner_identity(
+        owner: &signal_persona::origin::OwnerIdentity,
+    ) -> signal_terminal::OwnerIdentity {
+        match owner {
+            signal_persona::origin::OwnerIdentity::UnixUser(user) => {
+                signal_terminal::OwnerIdentity::UnixUser(signal_terminal::UnixUserIdentifier::new(
+                    u64::from(user.as_u32()),
+                ))
+            }
+            signal_persona::origin::OwnerIdentity::System(principal) => {
+                signal_terminal::OwnerIdentity::System(signal_terminal::SystemPrincipal::new(
+                    principal.as_str().to_owned(),
+                ))
+            }
+        }
     }
 
     fn write_harness_daemon_configuration_file(
@@ -728,19 +765,19 @@ impl DirectProcessLauncher {
         // production stack will widen this; for the prototype path
         // every supervised harness is fixture-shaped.
         let configuration = signal_harness::HarnessDaemonConfiguration {
-            harness_socket_path: signal_engine_management::WirePath::new(
+            harness_socket_path: signal_persona::WirePath::new(
                 envelope.domain_socket_path().to_string_lossy().into_owned(),
             ),
-            harness_socket_mode: signal_engine_management::SocketMode::new(
+            harness_socket_mode: signal_persona::SocketMode::new(
                 envelope.domain_socket_mode().as_octal(),
             ),
-            supervision_socket_path: signal_engine_management::WirePath::new(
+            supervision_socket_path: signal_persona::WirePath::new(
                 envelope
                     .supervision_socket_path()
                     .to_string_lossy()
                     .into_owned(),
             ),
-            supervision_socket_mode: signal_engine_management::SocketMode::new(
+            supervision_socket_mode: signal_persona::SocketMode::new(
                 envelope.supervision_socket_mode().as_octal(),
             ),
             owner_identity: envelope.owner_identity().clone(),
@@ -758,7 +795,7 @@ impl DirectProcessLauncher {
 
     fn paired_terminal_socket_path(
         envelope: &ComponentSpawnEnvelope,
-    ) -> Option<signal_engine_management::WirePath> {
+    ) -> Option<signal_persona::WirePath> {
         let paired_terminal_instance = ComponentInstanceName::new(format!(
             "{}-terminal",
             envelope.component_instance().as_str()
@@ -773,7 +810,7 @@ impl DirectProcessLauncher {
                     .iter()
                     .find(|peer| peer.component() == EngineComponent::Terminal)
             })?;
-        Some(signal_engine_management::WirePath::new(
+        Some(signal_persona::WirePath::new(
             terminal_peer
                 .domain_socket_path()
                 .to_string_lossy()
@@ -785,19 +822,19 @@ impl DirectProcessLauncher {
         envelope: &ComponentSpawnEnvelope,
     ) -> Result<PathBuf, DirectProcessFailure> {
         let configuration = signal_system::SystemDaemonConfiguration {
-            system_socket_path: signal_engine_management::WirePath::new(
+            system_socket_path: signal_persona::WirePath::new(
                 envelope.domain_socket_path().to_string_lossy().into_owned(),
             ),
-            system_socket_mode: signal_engine_management::SocketMode::new(
+            system_socket_mode: signal_persona::SocketMode::new(
                 envelope.domain_socket_mode().as_octal(),
             ),
-            supervision_socket_path: signal_engine_management::WirePath::new(
+            supervision_socket_path: signal_persona::WirePath::new(
                 envelope
                     .supervision_socket_path()
                     .to_string_lossy()
                     .into_owned(),
             ),
-            supervision_socket_mode: signal_engine_management::SocketMode::new(
+            supervision_socket_mode: signal_persona::SocketMode::new(
                 envelope.supervision_socket_mode().as_octal(),
             ),
             backend: signal_system::SystemBackend::Niri,
@@ -1035,17 +1072,15 @@ impl ThreeHarnessRouterBootstrap {
             }) else {
                 return Ok(None);
             };
-            operations.push(RouterBootstrapOperation::RegisterActor(
-                RouterBootstrapRegisterActor::new(BootstrapActor::new(
-                    BootstrapActorIdentifier::new(name),
-                    0,
-                    Some(RouterBootstrapEndpointTransport::new(
-                        RouterBootstrapEndpointKind::HarnessSocket,
-                        peer.domain_socket_path().to_string_lossy().into_owned(),
-                        None,
-                    )),
-                )),
-            ));
+            operations.push(RouterBootstrapOperation::register_actor(BootstrapActor {
+                name: name.to_owned(),
+                process: 0,
+                endpoint: Some(RouterBootstrapEndpointTransport {
+                    kind: RouterBootstrapEndpointKind::HarnessSocket,
+                    target: peer.domain_socket_path().to_string_lossy().into_owned(),
+                    auxiliary: None,
+                }),
+            }));
         }
 
         for (from, to) in [
@@ -1056,11 +1091,11 @@ impl ThreeHarnessRouterBootstrap {
             ("responder", "reviewer"),
             ("reviewer", "owner"),
         ] {
-            operations.push(RouterBootstrapOperation::GrantDirectMessage(
-                RouterBootstrapGrantDirectMessage::new(
-                    BootstrapActorIdentifier::new(from),
-                    BootstrapActorIdentifier::new(to),
-                ),
+            operations.push(RouterBootstrapOperation::grant_direct_message(
+                RouterBootstrapGrantDirectMessage {
+                    from: from.to_owned(),
+                    to: to.to_owned(),
+                },
             ));
         }
         Ok(Some(Self {
@@ -1278,6 +1313,8 @@ pub enum DirectProcessFailure {
     MissingRouterPeerForIntrospect,
     #[error("introspect daemon spawn envelope has no Terminal peer socket")]
     MissingTerminalPeerForIntrospect,
+    #[error("router daemon owner identity does not support a system principal")]
+    RouterOwnerIdentityUnsupportedSystem,
     #[error("failed to encode binary component configuration archive")]
     ConfigurationArchiveEncode,
     #[error("{operation}: {source}")]

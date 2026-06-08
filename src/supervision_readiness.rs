@@ -4,15 +4,15 @@ use std::time::Duration;
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use signal_engine_management::{
+use signal_frame::{
+    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
+    SubReply,
+};
+use signal_persona::{
     ComponentHealth, ComponentHealthReport, ComponentIdentity, ComponentKind, ComponentName,
     ComponentNotReady, ComponentReady, EngineManagementProtocolVersion,
     Frame as EngineManagementFrame, FrameBody, Operation as EngineManagementRequest, Presence,
     Query as EngineManagementQuery, Reply as EngineManagementReply,
-};
-use signal_frame::{
-    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
-    SubReply,
 };
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

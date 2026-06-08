@@ -19,7 +19,7 @@ use persona::schema::{
     ComponentOperationReport, EngineEventBodyReport, EngineEventReport, EngineEventSourceKind,
 };
 use persona::state::EngineState;
-use signal_persona_origin::EngineIdentifier;
+use signal_persona::origin::EngineIdentifier;
 use signal_upgrade::{ComponentName as UpgradeComponentName, Date, HandoverMarker, Time};
 use version_projection::{ComponentName as ProjectionComponentName, ContractVersion};
 

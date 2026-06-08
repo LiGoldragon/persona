@@ -25,14 +25,11 @@
 
 use std::io::Write;
 
-use signal_engine_management::TimestampNanos;
 use signal_frame::{ExchangeIdentifier, ExchangeLane, LaneSequence, RequestPayload, SessionEpoch};
 use signal_message::{
-    Frame, FrameBody, InboxQuery, MessageBody, MessageKind, MessageRecipient, MessageRequest,
-    MessageSubmission, StampedMessageSubmission,
-};
-use signal_persona_origin::{
-    ComponentName, ConnectionClass, MessageOrigin, NetworkPeer, UnixUserIdentifier,
+    ComponentName, ConnectionClass, Frame, FrameBody, InboxQuery, Input, MessageBody, MessageKind,
+    MessageOrigin, MessageRecipient, MessageSubmission, NetworkPeer, StampedMessageSubmission,
+    TimestampNanos, UnixUserIdentifier,
 };
 
 #[derive(Debug)]
@@ -74,11 +71,13 @@ fn parse_origin(spec: &str) -> MessageOrigin {
         }
         if let Some(uid) = rest.strip_prefix("non-owner-user:") {
             return MessageOrigin::External(ConnectionClass::NonOwnerUser(
-                UnixUserIdentifier::new(uid.parse::<u32>().expect("uid u32")),
+                UnixUserIdentifier::new(uid.parse::<u64>().expect("uid u64")),
             ));
         }
         if let Some(peer) = rest.strip_prefix("network:") {
-            return MessageOrigin::External(ConnectionClass::Network(NetworkPeer::new(peer)));
+            return MessageOrigin::External(ConnectionClass::Network(NetworkPeer::new(
+                peer.to_owned(),
+            )));
         }
     }
     panic!("unknown origin spec: {spec}");
@@ -127,10 +126,10 @@ impl Cli {
         }
     }
 
-    fn build_request(self) -> MessageRequest {
+    fn build_request(self) -> Input {
         let recipient = MessageRecipient::new(self.recipient);
         match self.variant {
-            Variant::Submission => MessageRequest::Submit(MessageSubmission {
+            Variant::Submission => Input::Submit(MessageSubmission {
                 recipient,
                 kind: MessageKind::Send,
                 body: MessageBody::new(self.body.expect("--body is required for submission")),
@@ -138,7 +137,7 @@ impl Cli {
             Variant::Stamped => {
                 let body = MessageBody::new(self.body.expect("--body is required for stamped"));
                 let origin = self.origin.expect("--origin is required for stamped");
-                MessageRequest::SubmitStamped(StampedMessageSubmission {
+                Input::SubmitStamped(StampedMessageSubmission {
                     submission: MessageSubmission {
                         recipient,
                         kind: MessageKind::Send,
@@ -148,7 +147,7 @@ impl Cli {
                     stamped_at: TimestampNanos::new(self.stamped_at),
                 })
             }
-            Variant::InboxQuery => MessageRequest::QueryInbox(InboxQuery { recipient }),
+            Variant::InboxQuery => Input::QueryInbox(InboxQuery(recipient)),
         }
     }
 }

@@ -10,7 +10,7 @@ use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
     SubReply,
 };
-use signal_persona_origin::EngineIdentifier;
+use signal_persona::origin::EngineIdentifier;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 use unix_ancillary::UnixStreamExt;

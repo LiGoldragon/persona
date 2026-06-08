@@ -7,7 +7,7 @@ use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use meta_signal_persona::ComponentName;
-use signal_persona_origin::EngineIdentifier;
+use signal_persona::origin::EngineIdentifier;
 use thiserror::Error;
 use tokio::process::Command;
 use zbus::zvariant::OwnedObjectPath;

@@ -11,7 +11,7 @@ use persona::unit::{
     UnitController, UnitFuture, UnitReceipt, UnitRestartPolicy, UnitStatus, UnitStatusReport,
 };
 use persona::upgrade::Version;
-use signal_persona_origin::EngineIdentifier;
+use signal_persona::origin::EngineIdentifier;
 
 #[derive(Debug, Clone, Default)]
 struct RecordingController {

@@ -8,8 +8,8 @@ use sema_engine::{
     Engine, EngineOpen, QueryPlan, RecordKey, SchemaVersion, StorageKernelResult,
     StorageKernelTable, StorageWriteTransaction, TableDescriptor, TableName, TableReference,
 };
-use signal_engine_management::ComponentName;
-use signal_persona_origin::EngineIdentifier;
+use signal_persona::ComponentName;
+use signal_persona::origin::EngineIdentifier;
 
 use crate::Result;
 use crate::engine_event::{

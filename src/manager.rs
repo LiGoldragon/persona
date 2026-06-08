@@ -7,7 +7,7 @@ use meta_signal_persona::{
     RetirementRejection, RetirementRejectionReason,
 };
 use meta_signal_persona::{Operation, Reply};
-use signal_persona_origin::EngineIdentifier;
+use signal_persona::origin::EngineIdentifier;
 use std::sync::Arc;
 
 use crate::error::{Error, Result};

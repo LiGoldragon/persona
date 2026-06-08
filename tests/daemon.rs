@@ -251,7 +251,7 @@ async fn constraint_persona_daemon_launches_three_harness_chain_topology_through
     .expect("manager store starts for inspection");
     let events = store
         .ask(persona::manager_store::ReadEngineEvents::new(
-            signal_persona_origin::EngineIdentifier::new("default"),
+            signal_persona::origin::EngineIdentifier::new("default"),
         ))
         .await
         .expect("default engine events read through manager store actor");
@@ -297,7 +297,7 @@ async fn constraint_persona_daemon_launches_message_router_topology_through_engi
     .expect("manager store starts for inspection");
     let events = store
         .ask(persona::manager_store::ReadEngineEvents::new(
-            signal_persona_origin::EngineIdentifier::new("default"),
+            signal_persona::origin::EngineIdentifier::new("default"),
         ))
         .await
         .expect("default engine events read through manager store actor");
@@ -354,7 +354,7 @@ async fn constraint_persona_daemon_persists_cli_mutation_to_manager_store() {
     .expect("manager store starts for inspection");
     let record = store
         .ask(persona::manager_store::ReadEngineRecord::new(
-            signal_persona_origin::EngineIdentifier::new("default"),
+            signal_persona::origin::EngineIdentifier::new("default"),
         ))
         .await
         .expect("stored record read through manager store actor")
@@ -437,7 +437,7 @@ async fn constraint_persona_daemon_launches_prototype_supervised_components_thro
     .expect("manager store starts for inspection");
     let events = store
         .ask(persona::manager_store::ReadEngineEvents::new(
-            signal_persona_origin::EngineIdentifier::new("default"),
+            signal_persona::origin::EngineIdentifier::new("default"),
         ))
         .await
         .expect("default engine events read through manager store actor");

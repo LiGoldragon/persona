@@ -11,7 +11,7 @@ use persona::manager::{
 use persona::manager_store::{ManagerStore, ManagerStoreLocation};
 use persona::unit::{ComponentUnit, UnitController, UnitFuture, UnitReceipt, UnitStatusReport};
 use persona::upgrade::Version;
-use signal_persona_origin::EngineIdentifier;
+use signal_persona::origin::EngineIdentifier;
 
 struct StoreFixture {
     root: std::path::PathBuf,

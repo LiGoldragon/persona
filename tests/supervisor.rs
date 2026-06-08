@@ -10,7 +10,7 @@ use persona::supervisor::{
     EngineSupervisor, EngineSupervisorInput, ReadEngineSupervisorSnapshot,
     StartPrototypeSupervision, StopPrototypeSupervision,
 };
-use signal_persona_origin::EngineIdentifier;
+use signal_persona::origin::EngineIdentifier;
 
 mod support;
 
