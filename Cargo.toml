@@ -1,8 +1,8 @@
 [package]
 name         = "persona"
-version      = "0.1.0"
+version      = "0.2.0"
 edition      = "2024"
-rust-version = "1.88"
+rust-version = "1.89"
 license      = "MIT OR Apache-2.0"
 repository   = "https://github.com/LiGoldragon/persona"
 description  = "Engine manager and apex integration repo for multi-harness AI systems."
@@ -19,6 +19,10 @@ path = "src/main.rs"
 [[bin]]
 name = "persona-daemon"
 path = "src/bin/persona_daemon.rs"
+
+[[bin]]
+name = "persona-write-configuration"
+path = "src/bin/persona_write_configuration.rs"
 
 [dependencies]
 kameo                  = { version = "0.20", default-features = false }

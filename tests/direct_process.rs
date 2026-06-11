@@ -430,7 +430,7 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
         .bootstrap_path
         .expect("three-harness topology writes a router bootstrap");
     let bootstrap = DirectProcessFixture::decode_archive::<RouterBootstrapDocument>(
-        std::path::Path::new(bootstrap_path.as_str()),
+        std::path::Path::new(bootstrap_path.payload()),
         "router bootstrap decodes",
     );
     assert_eq!(bootstrap.payload().len(), 9);
@@ -440,10 +440,10 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
             bootstrap.payload().iter().any(|operation| matches!(
                 operation,
                 RouterBootstrapOperation::RegisterActor(registration)
-                    if registration.0.name.as_str() == name
-                        && registration.0.process == 0
+                    if registration.payload().name.payload() == name
+                        && registration.payload().process == 0
                         && matches!(
-                            &registration.0.endpoint,
+                            &registration.payload().endpoint,
                             Some(endpoint)
                                 if endpoint.kind == EndpointKind::HarnessSocket
                                     && endpoint.target.ends_with(format!("{name}.sock").as_str())
@@ -464,7 +464,7 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
             bootstrap.payload().iter().any(|operation| matches!(
                 operation,
                 RouterBootstrapOperation::GrantDirectMessage(grant)
-                    if grant.from.as_str() == from && grant.to.as_str() == to
+                    if grant.from.payload() == from && grant.to.payload() == to
             )),
             "bootstrap did not include grant {from}->{to}: {bootstrap:?}"
         );

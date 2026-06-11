@@ -91,7 +91,15 @@
             "rust-src"
           ];
           craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
-          src = craneLib.cleanCargoSource ./.;
+          # Include generated-contract inputs that Cargo's source filter does
+          # not know about.
+          schemaFilter = path: _type: builtins.match ".*/schema(/.*)?$" path != null;
+          sourceFilter = path: type: (craneLib.filterCargoSources path type) || (schemaFilter path type);
+          src = pkgs.lib.cleanSourceWith {
+            src = ./.;
+            filter = sourceFilter;
+            name = "source";
+          };
           cargoVendorDir = craneLib.vendorCargoDeps { inherit src; };
           commonArgs = {
             inherit src cargoVendorDir;
@@ -354,6 +362,7 @@
             ];
             text = ''
               export PERSONA_DAEMON_BIN=${self.packages.${system}.default}/bin/persona-daemon
+              export PERSONA_CONFIGURATION_WRITER_BIN=${self.packages.${system}.default}/bin/persona-write-configuration
               export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.default}/bin/message
               export PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN=${
                 inputs.persona-message.packages.${system}.default
@@ -409,6 +418,7 @@
               export TERMINAL_CELL_VIEW=${terminalCellBinaries}/bin/terminal-cell-view
               export PERSONA_ENGINE_SANDBOX_ATTACH=${personaEngineSandboxAttach}/bin/persona-engine-sandbox-attach
               export PERSONA_DAEMON_BIN=${self.packages.${system}.default}/bin/persona-daemon
+              export PERSONA_CONFIGURATION_WRITER_BIN=${self.packages.${system}.default}/bin/persona-write-configuration
               export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.default}/bin/message
               export PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN=${
                 inputs.persona-message.packages.${system}.default
@@ -1831,6 +1841,7 @@
                 work="$TMPDIR/persona-daemon-nix-built-topology"
                 mkdir -p "$work/state" "$work/run" "$work/artifacts"
                 manager_socket="$work/persona.sock"
+                configuration="$work/persona.rkyv"
 
                 export PERSONA_MANAGER_STORE="$work/manager.sema"
                 export PERSONA_STATE_ROOT="$work/state"
@@ -1844,7 +1855,10 @@
                 export PERSONA_INTROSPECT_DAEMON_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-introspect-prototype-launcher
                 export PERSONA_SPIRIT_DAEMON_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-spirit-prototype-launcher
 
-                ${self.packages.${system}.default}/bin/persona-daemon "$manager_socket" \
+                ${self.packages.${system}.default}/bin/persona-write-configuration \
+                  "(ConfigurationWriteRequest $manager_socket $PERSONA_MANAGER_STORE $configuration)"
+
+                ${self.packages.${system}.default}/bin/persona-daemon "$configuration" \
                   > "$work/persona-daemon.stdout" \
                   2> "$work/persona-daemon.stderr" &
                 daemon="$!"
@@ -1971,6 +1985,7 @@
                 work="$TMPDIR/persona-daemon-nix-built-message-router"
                 mkdir -p "$work/state" "$work/run" "$work/artifacts"
                 manager_socket="$work/persona.sock"
+                configuration="$work/persona.rkyv"
 
                 export PERSONA_MANAGER_STORE="$work/manager.sema"
                 export PERSONA_STATE_ROOT="$work/state"
@@ -1979,7 +1994,10 @@
                 export PERSONA_ROUTER_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-router-prototype-launcher
                 export PERSONA_MESSAGE_DAEMON_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-message-prototype-launcher
 
-                ${self.packages.${system}.default}/bin/persona-daemon "$manager_socket" \
+                ${self.packages.${system}.default}/bin/persona-write-configuration \
+                  "(ConfigurationWriteRequest $manager_socket $PERSONA_MANAGER_STORE $configuration)"
+
+                ${self.packages.${system}.default}/bin/persona-daemon "$configuration" \
                   > "$work/persona-daemon.stdout" \
                   2> "$work/persona-daemon.stderr" &
                 daemon="$!"

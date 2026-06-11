@@ -2,6 +2,7 @@
 set -euo pipefail
 
 : "${PERSONA_DAEMON_BIN:?PERSONA_DAEMON_BIN must point at persona-daemon}"
+: "${PERSONA_CONFIGURATION_WRITER_BIN:?PERSONA_CONFIGURATION_WRITER_BIN must point at persona-write-configuration}"
 : "${PERSONA_MESSAGE_BIN:?PERSONA_MESSAGE_BIN must point at message}"
 : "${PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN:?PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN must point at message-validate-output}"
 : "${PERSONA_TERMINAL_SIGNAL_BIN:?PERSONA_TERMINAL_SIGNAL_BIN must point at persona-terminal-signal}"
@@ -11,6 +12,7 @@ set -euo pipefail
 root="${PERSONA_STACK_ROOT:-$(mktemp -d -t persona-daemon-three-harness-chain.XXXXXX)}"
 mkdir -p "$root/state" "$root/run" "$root/artifacts"
 manager_socket="$root/persona.sock"
+configuration="$root/persona.rkyv"
 
 export PERSONA_MANAGER_STORE="$root/manager.sema"
 export PERSONA_STATE_ROOT="$root/state"
@@ -21,7 +23,10 @@ export PERSONA_HARNESS_EXECUTABLE="$PERSONA_THREE_HARNESS_LAUNCHERS/bin/persona-
 export PERSONA_TERMINAL_EXECUTABLE="$PERSONA_THREE_HARNESS_LAUNCHERS/bin/persona-three-harness-terminal-launcher"
 export PERSONA_MESSAGE_DAEMON_EXECUTABLE="$PERSONA_THREE_HARNESS_LAUNCHERS/bin/persona-message-prototype-launcher"
 
-"$PERSONA_DAEMON_BIN" "$manager_socket" \
+"$PERSONA_CONFIGURATION_WRITER_BIN" \
+  "(ConfigurationWriteRequest $manager_socket $PERSONA_MANAGER_STORE $configuration)"
+
+"$PERSONA_DAEMON_BIN" "$configuration" \
   > "$root/persona-daemon.stdout" \
   2> "$root/persona-daemon.stderr" &
 daemon="$!"

@@ -147,7 +147,7 @@ impl Cli {
                     stamped_at: TimestampNanos::new(self.stamped_at),
                 })
             }
-            Variant::InboxQuery => Input::QueryInbox(InboxQuery(recipient)),
+            Variant::InboxQuery => Input::QueryInbox(InboxQuery::new(recipient)),
         }
     }
 }

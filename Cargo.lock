@@ -454,17 +454,15 @@ dependencies = [
 
 [[package]]
 name = "meta-signal-upgrade"
-version = "0.2.2"
-source = "git+https://github.com/LiGoldragon/meta-signal-upgrade.git?branch=main#2ee978d33e907998966709b49a41db3ef9befe86"
+version = "0.2.3"
+source = "git+https://github.com/LiGoldragon/meta-signal-upgrade.git?branch=main#b57c7f0e51015507799ebcf712f098b9a961aafe"
 dependencies = [
  "nota-next",
  "rkyv",
  "schema-next",
  "schema-rust-next",
  "signal-frame",
- "signal-upgrade",
  "thiserror",
- "version-projection",
 ]
 
 [[package]]
@@ -500,8 +498,8 @@ dependencies = [
 
 [[package]]
 name = "nota-next"
-version = "0.3.0"
-source = "git+https://github.com/LiGoldragon/nota-next.git?branch=main#ae5c25cd42b65512be941b274922c9e17bf67176"
+version = "0.4.0"
+source = "git+https://github.com/LiGoldragon/nota-next.git?branch=main#af6a2080d52b88ef5c6c89755ecfd3e818ffdea4"
 dependencies = [
  "nota-next-derive",
  "rkyv",
@@ -510,7 +508,7 @@ dependencies = [
 [[package]]
 name = "nota-next-derive"
 version = "0.2.0"
-source = "git+https://github.com/LiGoldragon/nota-next.git?branch=main#ae5c25cd42b65512be941b274922c9e17bf67176"
+source = "git+https://github.com/LiGoldragon/nota-next.git?branch=main#af6a2080d52b88ef5c6c89755ecfd3e818ffdea4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -547,7 +545,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "persona"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kameo",
  "libc",
@@ -726,8 +724,8 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
 name = "schema-next"
-version = "0.1.4"
-source = "git+https://github.com/LiGoldragon/schema-next.git?branch=main#77e71a410d03e3cc5c16cebd82202e712439e648"
+version = "0.2.0"
+source = "git+https://github.com/LiGoldragon/schema-next.git?branch=main#9a9b769bacd6f24517dce98d341ee63cbb332cf0"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -735,8 +733,8 @@ dependencies = [
 
 [[package]]
 name = "schema-rust-next"
-version = "0.5.1"
-source = "git+https://github.com/LiGoldragon/schema-rust-next.git?branch=main#7282446ed3f41663d9e9ef1753a9a2b3514cf829"
+version = "0.5.3"
+source = "git+https://github.com/LiGoldragon/schema-rust-next.git?branch=main#b1c36e1ab61756d4f6afc9fafe7b9c9a3ab68611"
 dependencies = [
  "prettyplease",
  "proc-macro2",
@@ -829,17 +827,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-executor"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-executor.git?branch=main#6446b3f5ef58ac8fd28aa25bb7bdce5f4e59982f"
-dependencies = [
- "rkyv",
- "signal-frame",
- "signal-sema",
- "thiserror",
-]
-
-[[package]]
 name = "signal-frame"
 version = "0.2.1"
 source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#166bda84dc63bf8461fff11a41c43d6a1c92a941"
@@ -898,8 +885,8 @@ dependencies = [
 
 [[package]]
 name = "signal-message"
-version = "0.2.0"
-source = "git+https://github.com/LiGoldragon/signal-message.git?branch=main#6a29eb1999f35a1f0d0c60ebe2cade3a5eee2d59"
+version = "0.3.0"
+source = "git+https://github.com/LiGoldragon/signal-message.git?branch=main#fbdc675d0850adf0144909770d8106e9936af6a6"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -932,8 +919,8 @@ dependencies = [
 
 [[package]]
 name = "signal-router"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-router.git?branch=main#a014a33a7edd9ec8b465b932552df41d6ab7a84a"
+version = "0.2.0"
+source = "git+https://github.com/LiGoldragon/signal-router.git?branch=main#b6d6a36b6fd5f8b97b5b76e4f20b9ef662afa6d8"
 dependencies = [
  "rkyv",
  "schema-rust-next",
@@ -952,8 +939,8 @@ dependencies = [
 
 [[package]]
 name = "signal-spirit"
-version = "0.5.0"
-source = "git+https://github.com/LiGoldragon/signal-spirit.git?branch=main#3c6fd6c3b18cead6f3585cfaec5ca73b7531c359"
+version = "0.5.2"
+source = "git+https://github.com/LiGoldragon/signal-spirit.git?branch=main#a458c02670e92b8c2f647ac55d797bdad952d2ac"
 dependencies = [
  "rkyv",
  "signal-frame",
@@ -975,8 +962,8 @@ dependencies = [
 
 [[package]]
 name = "signal-terminal"
-version = "0.2.0"
-source = "git+https://github.com/LiGoldragon/signal-terminal.git?branch=main#0a11eb3717b0e74d31cfd1f808a54e8d3b7229b2"
+version = "0.2.1"
+source = "git+https://github.com/LiGoldragon/signal-terminal.git?branch=main#016ea42d2844525361d39bb773e04f76d284808e"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -987,16 +974,14 @@ dependencies = [
 
 [[package]]
 name = "signal-upgrade"
-version = "0.2.2"
-source = "git+https://github.com/LiGoldragon/signal-upgrade.git?branch=main#a8a66bb0a0e45e50337ebd19241aa79300475b62"
+version = "0.2.3"
+source = "git+https://github.com/LiGoldragon/signal-upgrade.git?branch=main#e0a687a9e7c1a9083a5ef019dfb2cf3fb506c8e7"
 dependencies = [
- "nota-next",
  "rkyv",
  "schema-next",
  "schema-rust-next",
  "signal-frame",
  "thiserror",
- "version-projection",
 ]
 
 [[package]]
@@ -1192,8 +1177,8 @@ dependencies = [
 
 [[package]]
 name = "triad-runtime"
-version = "0.6.0"
-source = "git+https://github.com/LiGoldragon/triad-runtime.git?branch=main#ae2e81755f8f1536329f372bdcc78dbbcd065999"
+version = "0.6.1"
+source = "git+https://github.com/LiGoldragon/triad-runtime.git?branch=main#6ea831627d13793a4c42d7f9b9174b47279a9b2b"
 dependencies = [
  "kameo",
  "rustix",
@@ -1236,17 +1221,15 @@ dependencies = [
 
 [[package]]
 name = "upgrade"
-version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/upgrade.git?branch=main#fb864a13bc6ae94f49ff8eef97a082a507d08d68"
+version = "0.1.2"
+source = "git+https://github.com/LiGoldragon/upgrade.git?branch=main#ef65983296db4e27d21e898bfa382b6df2490276"
 dependencies = [
  "meta-signal-upgrade",
  "rkyv",
  "schema-next",
  "schema-rust-next",
  "sema-engine",
- "signal-executor",
  "signal-frame",
- "signal-sema",
  "signal-spirit",
  "signal-upgrade",
  "thiserror",
@@ -1269,9 +1252,8 @@ dependencies = [
 [[package]]
 name = "version-projection"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/version-projection.git?branch=main#e40fd1493236b4506260a9e53a15e7bbda96951d"
+source = "git+https://github.com/LiGoldragon/version-projection.git?branch=main#f00b239f75aca30098a60b30e877faafe8625d77"
 dependencies = [
- "nota-next",
  "rkyv",
  "thiserror",
 ]

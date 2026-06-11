@@ -5,7 +5,7 @@ use thiserror::Error;
 use triad_runtime::{
     AcceptedConnection, AsyncListenerError, AsyncConnectionRuntime,
     AsyncSingleListenerDaemon, AsyncSingleListenerDaemonError, ArgumentError,
-    ComponentArgument, ComponentCommand, DaemonConfiguration, ExitReport, RequestErrorLog,
+    ComponentArgument, ComponentCommand, BindingSurface, ExitReport, RequestErrorLog,
 };
 #[rustfmt::skip]
 /// The component hook surface for the emitted daemon — the only daemon
@@ -16,7 +16,7 @@ use triad_runtime::{
 /// emitter cannot know how to open the component's Store/Engine) plus the
 /// typed working-input handler.
 pub trait ComponentDaemon: Sized + 'static {
-    type Configuration: DaemonConfiguration;
+    type Configuration: BindingSurface;
     type ConfigurationError: std::error::Error;
     type Engine: Send + Sync + 'static;
     type Error: std::fmt::Display + Send + Sync + 'static;

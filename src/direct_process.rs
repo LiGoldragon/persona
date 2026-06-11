@@ -617,19 +617,32 @@ impl DirectProcessLauncher {
             .map(|document| document.write_next_to(envelope.envelope_path()))
             .transpose()?;
         let configuration = signal_router::RouterDaemonConfiguration {
-            router_socket_path: envelope.domain_socket_path().to_string_lossy().into_owned(),
-            router_socket_mode: u64::from(envelope.domain_socket_mode().as_octal()),
-            meta_router_socket_path: Self::meta_socket_path(envelope)
-                .to_string_lossy()
-                .into_owned(),
-            meta_router_socket_mode: u64::from(envelope.domain_socket_mode().as_octal()),
-            supervision_socket_path: envelope
-                .supervision_socket_path()
-                .to_string_lossy()
-                .into_owned(),
-            supervision_socket_mode: u64::from(envelope.supervision_socket_mode().as_octal()),
-            store_path: store_path.to_string_lossy().into_owned(),
-            bootstrap_path: bootstrap_path.map(|path| path.to_string_lossy().into_owned()),
+            router_socket_path: signal_router::WirePath::new(
+                envelope.domain_socket_path().to_string_lossy().into_owned(),
+            ),
+            router_socket_mode: signal_router::SocketMode::new(u64::from(
+                envelope.domain_socket_mode().as_octal(),
+            )),
+            meta_router_socket_path: signal_router::WirePath::new(
+                Self::meta_socket_path(envelope)
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            meta_router_socket_mode: signal_router::SocketMode::new(u64::from(
+                envelope.domain_socket_mode().as_octal(),
+            )),
+            supervision_socket_path: signal_router::WirePath::new(
+                envelope
+                    .supervision_socket_path()
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            supervision_socket_mode: signal_router::SocketMode::new(u64::from(
+                envelope.supervision_socket_mode().as_octal(),
+            )),
+            store_path: signal_router::WirePath::new(store_path.to_string_lossy().into_owned()),
+            bootstrap_path: bootstrap_path
+                .map(|path| signal_router::WirePath::new(path.to_string_lossy().into_owned())),
             owner_identity: Self::router_owner_identity(envelope.owner_identity())?,
         };
         Self::write_configuration_binary_file(envelope, &configuration)
@@ -639,9 +652,11 @@ impl DirectProcessLauncher {
         owner: &signal_persona::origin::OwnerIdentity,
     ) -> Result<signal_router::OwnerIdentity, DirectProcessFailure> {
         match owner {
-            signal_persona::origin::OwnerIdentity::UnixUser(user) => Ok(
-                signal_router::OwnerIdentity::UnixUser(u64::from(user.as_u32())),
-            ),
+            signal_persona::origin::OwnerIdentity::UnixUser(user) => {
+                Ok(signal_router::OwnerIdentity::UnixUser(
+                    signal_router::UnixUserIdentifier::new(u64::from(user.as_u32())),
+                ))
+            }
             signal_persona::origin::OwnerIdentity::System(_) => {
                 Err(DirectProcessFailure::RouterOwnerIdentityUnsupportedSystem)
             }
@@ -1073,7 +1088,7 @@ impl ThreeHarnessRouterBootstrap {
                 return Ok(None);
             };
             operations.push(RouterBootstrapOperation::register_actor(BootstrapActor {
-                name: name.to_owned(),
+                name: signal_router::ActorIdentifier::new(name),
                 process: 0,
                 endpoint: Some(RouterBootstrapEndpointTransport {
                     kind: RouterBootstrapEndpointKind::HarnessSocket,
@@ -1093,8 +1108,8 @@ impl ThreeHarnessRouterBootstrap {
         ] {
             operations.push(RouterBootstrapOperation::grant_direct_message(
                 RouterBootstrapGrantDirectMessage {
-                    from: from.to_owned(),
-                    to: to.to_owned(),
+                    from: signal_router::ActorIdentifier::new(from),
+                    to: signal_router::ActorIdentifier::new(to),
                 },
             ));
         }

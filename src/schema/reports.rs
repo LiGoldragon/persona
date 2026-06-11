@@ -276,21 +276,21 @@ impl EngineEventBodyReport {
             }
             EngineEventBody::UpgradePrepared(event) => {
                 Self::UpgradePrepared(UpgradePreparedReport {
-                    component: ComponentName::new(event.component().as_str()),
+                    component: ComponentName::new(event.component().payload()),
                     current_version: event.current_version().as_str().to_string(),
                     next_version: event.next_version().as_str().to_string(),
                 })
             }
             EngineEventBody::ActiveVersionChanged(event) => {
                 Self::ActiveVersionChanged(ActiveVersionChangedReport {
-                    component: ComponentName::new(event.component().as_str()),
+                    component: ComponentName::new(event.component().payload()),
                     active_version: event.active_version().as_str().to_string(),
                     source: ActiveVersionChangeSourceReport::from_source(event.source()),
                 })
             }
             EngineEventBody::VersionQuarantined(event) => {
                 Self::VersionQuarantined(VersionQuarantinedReport {
-                    component: ComponentName::new(event.component().as_str()),
+                    component: ComponentName::new(event.component().payload()),
                     version: event.version().as_str().to_string(),
                     reason: event.reason(),
                 })

@@ -210,7 +210,7 @@ impl StoredActiveVersion {
     pub fn from_change(engine: &EngineIdentifier, change: &ActiveVersionChanged) -> Self {
         Self::new(
             engine.clone(),
-            ComponentName::new(change.component().as_str()),
+            ComponentName::new(change.component().payload()),
             ActiveVersion::from_change(change),
         )
     }

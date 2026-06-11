@@ -143,9 +143,9 @@ fn parse() -> Variant {
 fn build_reply(variant: Variant) -> Output {
     match variant {
         Variant::SubmissionAccepted { slot } => {
-            Output::SubmissionAccepted(SubmissionAcceptance(MessageSlot::new(slot)))
+            Output::SubmissionAccepted(SubmissionAcceptance::new(MessageSlot::new(slot)))
         }
-        Variant::InboxListing { entries } => Output::InboxListing(InboxListing(
+        Variant::InboxListing { entries } => Output::InboxListing(InboxListing::new(
             entries.into_iter().map(EntrySpec::into_entry).collect(),
         )),
         Variant::Unimplemented { operation, reason } => {

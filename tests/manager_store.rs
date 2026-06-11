@@ -20,8 +20,10 @@ use persona::schema::{
 };
 use persona::state::EngineState;
 use signal_persona::origin::EngineIdentifier;
-use signal_upgrade::{ComponentName as UpgradeComponentName, Date, HandoverMarker, Time};
-use version_projection::{ComponentName as ProjectionComponentName, ContractVersion};
+use signal_upgrade::{
+    ComponentName as UpgradeComponentName, ContractVersion, Date, HandoverMarker, RawByte,
+    RawBytes, Time,
+};
 
 use persona::upgrade::SocketPath as UpgradeSocketPath;
 use persona::upgrade::{ActiveVersionChanged, PreparedEvent, Target, TargetInput, Version};
@@ -76,13 +78,13 @@ impl StoreFixture {
             component: UpgradeComponentName::new("persona-spirit"),
             current_version: Version::new("v0.1.0"),
             next_version: Version::new("v0.1.1"),
-            current_owner_socket_path: UpgradeSocketPath::new(
+            current_meta_socket_path: UpgradeSocketPath::new(
                 "/run/persona/default/spirit/v0.1.0/owner.sock",
             ),
             current_upgrade_socket_path: UpgradeSocketPath::new(
                 "/run/persona/default/spirit/v0.1.0/upgrade.sock",
             ),
-            next_owner_socket_path: UpgradeSocketPath::new(
+            next_meta_socket_path: UpgradeSocketPath::new(
                 "/run/persona/default/spirit/v0.1.1/owner.sock",
             ),
             next_upgrade_socket_path: UpgradeSocketPath::new(
@@ -93,13 +95,21 @@ impl StoreFixture {
 
     fn spirit_handover_marker(state_sequence: u64) -> HandoverMarker {
         HandoverMarker {
-            component: ProjectionComponentName::new("persona-spirit"),
-            schema_hash: ContractVersion::new([7; 32]),
+            component: UpgradeComponentName::new("persona-spirit"),
+            schema_hash: ContractVersion::new(RawBytes::new(vec![RawByte::new(7); 32])),
             state_sequence,
             mirrored_write_count: 99,
             record_frontier: Some(210),
-            recorded_at_date: Date::new(2026, 5, 22),
-            recorded_at_time: Time::new(16, 0, 0),
+            recorded_at_date: Date {
+                year: 2026,
+                month: 5,
+                day: 22,
+            },
+            recorded_at_time: Time {
+                hour: 16,
+                minute: 0,
+                second: 0,
+            },
         }
     }
 }
@@ -360,7 +370,10 @@ async fn constraint_manager_store_projects_active_component_version_from_event_l
         .expect("active version snapshot reads")
         .expect("active version exists");
     assert_eq!(active.active_version().as_str(), "v0.1.1");
-    assert_eq!(active.schema_hash(), ContractVersion::new([7; 32]));
+    assert_eq!(
+        active.schema_hash(),
+        ContractVersion::new(RawBytes::new(vec![RawByte::new(7); 32]))
+    );
     assert_eq!(active.state_sequence(), Some(45));
 
     store
@@ -425,7 +438,7 @@ async fn constraint_engine_event_log_nota_projection_is_view() {
     ));
     assert!(
         nota.starts_with(
-            "(1 [engine-event-projection] Component (Some [persona-harness]) (ComponentUnimplemented"
+            "(1 engine-event-projection Component (Some persona-harness) (ComponentUnimplemented"
         ),
         "unexpected event projection: {nota}"
     );

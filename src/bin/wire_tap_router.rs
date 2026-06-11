@@ -91,7 +91,7 @@ impl Cli {
 fn build_reply_frame(canned: CannedReply, request_exchange: ExchangeIdentifier) -> Frame {
     let payload = match canned {
         CannedReply::SubmissionAcceptedSlot(slot) => {
-            Output::SubmissionAccepted(SubmissionAcceptance(MessageSlot::new(slot)))
+            Output::SubmissionAccepted(SubmissionAcceptance::new(MessageSlot::new(slot)))
         }
         CannedReply::UnimplementedSubmission => {
             Output::MessageRequestUnimplemented(MessageRequestUnimplemented {

@@ -325,24 +325,24 @@ async fn constraint_persona_daemon_launches_message_router_topology_through_engi
 fn constraint_persona_cli_talks_to_persona_daemon_over_socket() {
     let fixture = DaemonFixture::start();
 
-    let shutdown = fixture.persona("(ComponentShutdown ([persona-terminal]))");
+    let shutdown = fixture.persona("(ComponentShutdown (persona-terminal))");
     assert!(
-        shutdown.contains("(ActionAcceptedReport ([persona-terminal] Stopped))"),
+        shutdown.contains("(ActionAcceptedReport (persona-terminal Stopped))"),
         "shutdown output: {shutdown}"
     );
 
-    let status = fixture.persona("(ComponentStatusQuery ([persona-terminal]))");
+    let status = fixture.persona("(ComponentStatusQuery (persona-terminal))");
     assert!(status.contains("(ComponentStatusReport "));
-    assert!(status.contains("([persona-terminal] Terminal Stopped Stopped)"));
+    assert!(status.contains("(persona-terminal Terminal Stopped Stopped)"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_persona_daemon_persists_cli_mutation_to_manager_store() {
     let mut fixture = DaemonFixture::start();
 
-    let shutdown = fixture.persona("(ComponentShutdown ([persona-terminal]))");
+    let shutdown = fixture.persona("(ComponentShutdown (persona-terminal))");
     assert!(
-        shutdown.contains("(ActionAcceptedReport ([persona-terminal] Stopped))"),
+        shutdown.contains("(ActionAcceptedReport (persona-terminal Stopped))"),
         "shutdown output: {shutdown}"
     );
 

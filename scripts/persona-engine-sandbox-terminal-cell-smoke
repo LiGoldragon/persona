@@ -242,18 +242,24 @@ wait_for_socket() {
 
 start_message_router_engine() {
   : "${PERSONA_DAEMON_BIN:?PERSONA_DAEMON_BIN must point at persona-daemon}"
+  : "${PERSONA_CONFIGURATION_WRITER_BIN:?PERSONA_CONFIGURATION_WRITER_BIN must point at persona-write-configuration}"
   : "${PERSONA_MESSAGE_BIN:?PERSONA_MESSAGE_BIN must point at message CLI}"
   : "${PERSONA_ROUTER_EXECUTABLE:?PERSONA_ROUTER_EXECUTABLE must point at persona-router launcher}"
   : "${PERSONA_MESSAGE_DAEMON_EXECUTABLE:?PERSONA_MESSAGE_DAEMON_EXECUTABLE must point at persona-message launcher}"
 
   mkdir -p "$engine_state_root" "$engine_run_root"
-  PERSONA_MANAGER_STORE="$engine_state_root/manager.sema" \
+  configuration="$engine_state_root/persona.rkyv"
+  manager_store="$engine_state_root/manager.sema"
+  "$PERSONA_CONFIGURATION_WRITER_BIN" \
+    "(ConfigurationWriteRequest $manager_socket $manager_store $configuration)"
+
+  PERSONA_MANAGER_STORE="$manager_store" \
   PERSONA_STATE_ROOT="$engine_state_root" \
   PERSONA_RUN_ROOT="$engine_run_root" \
   PERSONA_ENGINE_TOPOLOGY=message-router \
   PERSONA_ROUTER_EXECUTABLE="$PERSONA_ROUTER_EXECUTABLE" \
   PERSONA_MESSAGE_DAEMON_EXECUTABLE="$PERSONA_MESSAGE_DAEMON_EXECUTABLE" \
-    "$PERSONA_DAEMON_BIN" "$manager_socket" \
+    "$PERSONA_DAEMON_BIN" "$configuration" \
     >"$engine_daemon_stdout" \
     2>"$engine_daemon_stderr" &
   engine_daemon_pid="$!"
@@ -276,12 +282,18 @@ start_message_router_engine() {
 
 start_managed_harness_engine() {
   : "${PERSONA_DAEMON_BIN:?PERSONA_DAEMON_BIN must point at persona-daemon}"
+  : "${PERSONA_CONFIGURATION_WRITER_BIN:?PERSONA_CONFIGURATION_WRITER_BIN must point at persona-write-configuration}"
   : "${PERSONA_MESSAGE_BIN:?PERSONA_MESSAGE_BIN must point at message CLI}"
   : "${PERSONA_TERMINAL_SIGNAL_BIN:?PERSONA_TERMINAL_SIGNAL_BIN must point at persona-terminal-signal}"
   : "${PERSONA_THREE_HARNESS_LAUNCHERS:?PERSONA_THREE_HARNESS_LAUNCHERS must point at three-harness launchers}"
 
   mkdir -p "$engine_state_root" "$engine_run_root"
-  PERSONA_MANAGER_STORE="$engine_state_root/manager.sema" \
+  configuration="$engine_state_root/persona.rkyv"
+  manager_store="$engine_state_root/manager.sema"
+  "$PERSONA_CONFIGURATION_WRITER_BIN" \
+    "(ConfigurationWriteRequest $manager_socket $manager_store $configuration)"
+
+  PERSONA_MANAGER_STORE="$manager_store" \
   PERSONA_STATE_ROOT="$engine_state_root" \
   PERSONA_RUN_ROOT="$engine_run_root" \
   PERSONA_ENGINE_TOPOLOGY=three-harness-chain \
@@ -289,7 +301,7 @@ start_managed_harness_engine() {
   PERSONA_HARNESS_EXECUTABLE="$PERSONA_THREE_HARNESS_LAUNCHERS/bin/persona-harness-prototype-launcher" \
   PERSONA_TERMINAL_EXECUTABLE="$PERSONA_THREE_HARNESS_LAUNCHERS/bin/persona-three-harness-terminal-launcher" \
   PERSONA_MESSAGE_DAEMON_EXECUTABLE="$PERSONA_THREE_HARNESS_LAUNCHERS/bin/persona-message-prototype-launcher" \
-    "$PERSONA_DAEMON_BIN" "$manager_socket" \
+    "$PERSONA_DAEMON_BIN" "$configuration" \
     >"$engine_daemon_stdout" \
     2>"$engine_daemon_stderr" &
   engine_daemon_pid="$!"

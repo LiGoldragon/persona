@@ -23,7 +23,7 @@ struct RequestFixture {
 impl RequestFixture {
     fn inline_component_status_query() -> Self {
         Self {
-            arguments: ["(ComponentStatusQuery", "([persona-router]))"],
+            arguments: ["(ComponentStatusQuery", "(persona-router))"],
         }
     }
 
@@ -122,7 +122,7 @@ fn engine_status_reply_renders_as_nota() {
         output.starts_with("(EngineStatusReport (2 Starting ["),
         "output: {output}"
     );
-    assert!(output.contains("([persona-mind] Mind Running Starting)"));
+    assert!(output.contains("(persona-mind Mind Running Starting)"));
 }
 
 #[test]

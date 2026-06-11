@@ -131,7 +131,7 @@ fn main() {
             Expectation::SubmissionAccepted { slot: want },
             Output::SubmissionAccepted(acceptance),
         ) => {
-            let got = *acceptance.0.payload();
+            let got = *acceptance.payload().payload();
             assert_eq!(
                 got, want,
                 "submission-accepted slot mismatch (expected {want}, got {got})"
@@ -146,40 +146,38 @@ fn main() {
             },
             Output::InboxListing(listing),
         ) => {
+            let entries = listing.payload();
             if let Some(want) = want_count {
-                let got = listing.0.len();
+                let got = entries.len();
                 assert_eq!(
                     got, want,
                     "inbox-listing entry count mismatch (expected {want}, got {got})"
                 );
             }
             if let Some(want) = want_body.as_deref() {
-                let found = listing
-                    .0
+                let found = entries
                     .iter()
                     .any(|entry| entry.body.payload().as_str() == want);
                 assert!(
                     found,
                     "inbox-listing missing entry with body={want:?}; entries={:?}",
-                    listing.0
+                    entries
                 );
             }
             if let Some(want) = want_sender.as_deref() {
-                let found = listing
-                    .0
+                let found = entries
                     .iter()
                     .any(|entry| entry.sender.payload().as_str() == want);
                 assert!(
                     found,
                     "inbox-listing missing entry with sender={want:?}; entries={:?}",
-                    listing.0
+                    entries
                 );
             }
             eprintln!(
                 "decoded InboxListing entries={} bodies={:?}",
-                listing.0.len(),
-                listing
-                    .0
+                entries.len(),
+                entries
                     .iter()
                     .map(|e| e.body.payload().as_str())
                     .collect::<Vec<_>>()
