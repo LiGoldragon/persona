@@ -222,7 +222,7 @@ printf '%s\n' 'MESSAGE_TOOL_PROOF_OK'
 EOF
   chmod +x "$tool_dir/message"
   export PATH="$tool_dir:$PATH"
-  export PERSONA_MESSAGE_SOCKET="$run_dir/pi-tools-message.sock"
+  export MESSAGE_SOCKET="$run_dir/pi-tools-message.sock"
 }
 
 wait_for_socket() {
@@ -336,7 +336,7 @@ exec "$PERSONA_MESSAGE_BIN" "\$@"
 EOF
   chmod +x "$tool_dir/message"
   export PATH="$tool_dir:$PATH"
-  export PERSONA_MESSAGE_SOCKET="$engine_run_root/default/message.sock"
+  export MESSAGE_SOCKET="$engine_run_root/default/message.sock"
 }
 
 pi_tools_command() {
@@ -384,7 +384,7 @@ pi_message_router_command() {
     --no-session
   )
   ready_text="Pi can explain"
-  prompt_text='Use the bash tool to run exactly: message '\''(Send responder "pi routed proof")'\''. After the command finishes, answer MESSAGE_ROUTER_DONE.'
+  prompt_text='Use the bash tool to run exactly: message '\''(Send responder [pi routed proof])'\''. After the command finishes, answer MESSAGE_ROUTER_DONE.'
   marker_text="SubmissionAccepted"
 }
 
@@ -421,7 +421,7 @@ wait_for_managed_terminal_text() {
 
 wait_for_managed_owner_inbox() {
   for _attempt in $(seq 1 100); do
-    PERSONA_MESSAGE_SOCKET="$engine_run_root/default/message.sock" \
+    MESSAGE_SOCKET="$engine_run_root/default/message.sock" \
       "$PERSONA_MESSAGE_BIN" \
         '(Inbox owner)' \
         >"$managed_harness_owner_inbox_file"
@@ -511,8 +511,8 @@ fi
 
 if [ "$harness" = "pi-message-router" ]; then
   test -f "$message_command_file"
-  grep -Fq '(Send responder "pi routed proof")' "$message_command_file"
-  PERSONA_MESSAGE_SOCKET="$engine_run_root/default/message.sock" \
+  grep -Fq '(Send responder [pi routed proof])' "$message_command_file"
+  MESSAGE_SOCKET="$engine_run_root/default/message.sock" \
     "$PERSONA_MESSAGE_BIN" '(Inbox responder)' >"$message_router_inbox_file"
   "$PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN" \
     --file "$message_router_inbox_file" \

@@ -9,6 +9,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
+name = "arrayref"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76a2e8124351fda1ef8aaaa3bbd7ebbcb486bbcd4225aca0aa0d84bb2db8fecb"
+
+[[package]]
+name = "arrayvec"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
+
+[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -55,6 +67,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4388bee8683e3d04af747c73422af53102d2bd24d9eadb6cbc100baef4b43f8"
 
 [[package]]
+name = "blake3"
+version = "1.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0aa83c34e62843d924f905e0f5c866eb1dd6545fc4d719e803d9ba6030371fce"
+dependencies = [
+ "arrayref",
+ "arrayvec",
+ "cc",
+ "cfg-if",
+ "constant_time_eq",
+ "cpufeatures",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -90,6 +116,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
+name = "cc"
+version = "1.2.64"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dad887fd958be91b5098c0248def011f4523ab786cd411be668777e55063501f"
+dependencies = [
+ "find-msvc-tools",
+ "shlex",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -102,6 +138,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
  "crossbeam-utils",
+]
+
+[[package]]
+name = "constant_time_eq"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
+
+[[package]]
+name = "cpufeatures"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -191,6 +242,12 @@ name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f1f227452a390804cdb637b74a86990f2a7d7ba4b7d5693aac9b4dd6defd8d6"
+
+[[package]]
+name = "find-msvc-tools"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "foldhash"
@@ -442,6 +499,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "message"
+version = "0.5.0"
+source = "git+https://github.com/LiGoldragon/message.git?branch=main#298104f7a24bb64407ba5c5d8c733821e2f29281"
+dependencies = [
+ "meta-signal-message",
+ "rkyv",
+ "schema-rust-next",
+ "signal-frame",
+ "signal-message",
+ "thiserror",
+ "tokio",
+ "triad-runtime",
+]
+
+[[package]]
+name = "meta-signal-message"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/meta-signal-message.git?branch=main#a7c810e56dcd9b5fea28995f9adfe825d15755a6"
+dependencies = [
+ "rkyv",
+ "signal-frame",
+ "signal-message",
+ "thiserror",
+]
+
+[[package]]
 name = "meta-signal-persona"
 version = "0.1.0"
 source = "git+https://github.com/LiGoldragon/meta-signal-persona.git?branch=main#e7f98a374d17ee0f7259b95f4af9f45041d1d5c4"
@@ -455,7 +538,7 @@ dependencies = [
 [[package]]
 name = "meta-signal-upgrade"
 version = "0.2.3"
-source = "git+https://github.com/LiGoldragon/meta-signal-upgrade.git?branch=main#b57c7f0e51015507799ebcf712f098b9a961aafe"
+source = "git+https://github.com/LiGoldragon/meta-signal-upgrade.git?branch=main#1ddcd810f08f4e080177b59011aa210efe4fdbcf"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -499,7 +582,7 @@ dependencies = [
 [[package]]
 name = "nota-next"
 version = "0.4.0"
-source = "git+https://github.com/LiGoldragon/nota-next.git?branch=main#af6a2080d52b88ef5c6c89755ecfd3e818ffdea4"
+source = "git+https://github.com/LiGoldragon/nota-next.git?branch=main#3d6c2cdf4a7a62b36640b8622fdcaa2b931f0d43"
 dependencies = [
  "nota-next-derive",
  "rkyv",
@@ -508,7 +591,7 @@ dependencies = [
 [[package]]
 name = "nota-next-derive"
 version = "0.2.0"
-source = "git+https://github.com/LiGoldragon/nota-next.git?branch=main#af6a2080d52b88ef5c6c89755ecfd3e818ffdea4"
+source = "git+https://github.com/LiGoldragon/nota-next.git?branch=main#3d6c2cdf4a7a62b36640b8622fdcaa2b931f0d43"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -549,6 +632,7 @@ version = "0.2.0"
 dependencies = [
  "kameo",
  "libc",
+ "message",
  "meta-signal-persona",
  "meta-signal-upgrade",
  "nota-next",
@@ -725,8 +809,9 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 [[package]]
 name = "schema-next"
 version = "0.2.0"
-source = "git+https://github.com/LiGoldragon/schema-next.git?branch=main#9a9b769bacd6f24517dce98d341ee63cbb332cf0"
+source = "git+https://github.com/LiGoldragon/schema-next.git?branch=main#f460e7b6e76ef8766e45b870c323becd0ef461bf"
 dependencies = [
+ "blake3",
  "nota-next",
  "rkyv",
 ]
@@ -734,7 +819,7 @@ dependencies = [
 [[package]]
 name = "schema-rust-next"
 version = "0.5.3"
-source = "git+https://github.com/LiGoldragon/schema-rust-next.git?branch=main#b1c36e1ab61756d4f6afc9fafe7b9c9a3ab68611"
+source = "git+https://github.com/LiGoldragon/schema-rust-next.git?branch=main#7c15bc3fa3d07f4710acca16f14eef1aa68b02dd"
 dependencies = [
  "prettyplease",
  "proc-macro2",
@@ -756,9 +841,10 @@ dependencies = [
 
 [[package]]
 name = "sema-engine"
-version = "0.2.3"
-source = "git+https://github.com/LiGoldragon/sema-engine.git?branch=main#ebee6e44ba6ee4afcb26998007bcfd128641b54c"
+version = "0.4.0"
+source = "git+https://github.com/LiGoldragon/sema-engine.git?branch=main#dbe29427d9a2c6c194909385485ad42b008048b8"
 dependencies = [
+ "blake3",
  "rkyv",
  "sema",
  "signal-frame",
@@ -827,6 +913,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "shlex"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
+
+[[package]]
 name = "signal-frame"
 version = "0.2.1"
 source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#166bda84dc63bf8461fff11a41c43d6a1c92a941"
@@ -886,7 +978,7 @@ dependencies = [
 [[package]]
 name = "signal-message"
 version = "0.3.0"
-source = "git+https://github.com/LiGoldragon/signal-message.git?branch=main#fbdc675d0850adf0144909770d8106e9936af6a6"
+source = "git+https://github.com/LiGoldragon/signal-message.git?branch=main#2effe45fa7e97984640f5a2c4e7ed4e935365e0a"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -920,7 +1012,7 @@ dependencies = [
 [[package]]
 name = "signal-router"
 version = "0.2.0"
-source = "git+https://github.com/LiGoldragon/signal-router.git?branch=main#b6d6a36b6fd5f8b97b5b76e4f20b9ef662afa6d8"
+source = "git+https://github.com/LiGoldragon/signal-router.git?branch=main#5ab83f0e8e180d9471a50a9a700095ed41136dfd"
 dependencies = [
  "rkyv",
  "schema-rust-next",
@@ -939,8 +1031,8 @@ dependencies = [
 
 [[package]]
 name = "signal-spirit"
-version = "0.5.2"
-source = "git+https://github.com/LiGoldragon/signal-spirit.git?branch=main#a458c02670e92b8c2f647ac55d797bdad952d2ac"
+version = "0.5.3"
+source = "git+https://github.com/LiGoldragon/signal-spirit.git?branch=main#c2bfeb57c0c68febf1870a69702201b4e9077339"
 dependencies = [
  "rkyv",
  "signal-frame",
@@ -963,7 +1055,7 @@ dependencies = [
 [[package]]
 name = "signal-terminal"
 version = "0.2.1"
-source = "git+https://github.com/LiGoldragon/signal-terminal.git?branch=main#016ea42d2844525361d39bb773e04f76d284808e"
+source = "git+https://github.com/LiGoldragon/signal-terminal.git?branch=main#8dc8cd447d34c81c75a2c7c10c3bb041abc658da"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -975,7 +1067,7 @@ dependencies = [
 [[package]]
 name = "signal-upgrade"
 version = "0.2.3"
-source = "git+https://github.com/LiGoldragon/signal-upgrade.git?branch=main#e0a687a9e7c1a9083a5ef019dfb2cf3fb506c8e7"
+source = "git+https://github.com/LiGoldragon/signal-upgrade.git?branch=main#5c6fdd74e22b0d71b9b5613a2a32a9b0b0a5c293"
 dependencies = [
  "rkyv",
  "schema-next",
@@ -1178,7 +1270,7 @@ dependencies = [
 [[package]]
 name = "triad-runtime"
 version = "0.6.1"
-source = "git+https://github.com/LiGoldragon/triad-runtime.git?branch=main#6ea831627d13793a4c42d7f9b9174b47279a9b2b"
+source = "git+https://github.com/LiGoldragon/triad-runtime.git?branch=main#1b5d0f17840793d00af73e8f16ad7908cad72a38"
 dependencies = [
  "kameo",
  "rustix",
@@ -1222,7 +1314,7 @@ dependencies = [
 [[package]]
 name = "upgrade"
 version = "0.1.2"
-source = "git+https://github.com/LiGoldragon/upgrade.git?branch=main#ef65983296db4e27d21e898bfa382b6df2490276"
+source = "git+https://github.com/LiGoldragon/upgrade.git?branch=main#59a7c84d5530cf4a96c8c24593191322671a7dfb"
 dependencies = [
  "meta-signal-upgrade",
  "rkyv",

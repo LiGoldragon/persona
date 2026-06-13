@@ -875,15 +875,15 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
 }
 
 /// Architectural-truth witness: the event-log append and the snapshot
-/// reduce land in one sema-kernel write transaction. A daemon crash between
-/// `ENGINE_EVENTS.insert` and the reducer's snapshot writes is
-/// structurally impossible — they share a transaction; the kernel commits or
-/// rolls back both together. The source scan reads `manager_store.rs`
-/// and asserts that `write_engine_event`'s body contains both the
-/// `ENGINE_EVENTS.insert` and the `reduce_event_into_snapshots` call,
-/// in that order, inside one `self.engine.storage_kernel().write(` closure.
+/// reduce land in one sema-engine commit. A daemon crash between appending
+/// the event and materialising its snapshot rows is structurally impossible:
+/// both are records in one `CommitRequest`, so sema-engine commits or rolls
+/// back the full batch together. The source scan reads `manager_store.rs`
+/// and asserts that `write_engine_event` builds the event record, extends the
+/// same batch with reducer output, and delegates once to `commit_upserts`;
+/// `commit_upserts` then owns one `CommitRequest` and one `self.engine.commit`.
 #[test]
-fn constraint_event_append_and_snapshot_reduce_share_one_write_transaction() {
+fn constraint_event_append_and_snapshot_reduce_share_one_engine_commit() {
     let source = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/manager_store.rs"),
     )
@@ -894,57 +894,71 @@ fn constraint_event_append_and_snapshot_reduce_share_one_write_transaction() {
         .find(signature)
         .expect("write_engine_event signature appears in manager_store.rs");
     let body_after = &source[body_start..];
-
-    // Scan a generous window past the signature and rely on the
-    // ordering checks below to anchor what counts as the method body.
     let window_end = body_start
         + body_after
             .find("\n    }\n")
             .expect("write_engine_event body ends with a `}`");
     let body = &source[body_start..window_end];
 
-    assert!(
-        body.contains("self.engine.storage_kernel().write("),
-        "write_engine_event must use a single `self.engine.storage_kernel().write(` closure"
-    );
-    let insert_position = body
-        .find(".insert(transaction, event.key().to_string(), event)")
-        .expect("write_engine_event must insert the event log row");
+    let event_position = body
+        .find("ManagerStoreRecord::engine_event(event.clone())")
+        .expect("write_engine_event must add the event-log record to the commit batch");
     let reduce_position = body
-        .find("Self::reduce_event_into_snapshots(transaction")
-        .expect(
-            "write_engine_event must call `Self::reduce_event_into_snapshots(transaction, ...)`",
-        );
+        .find("records.extend(Self::reduce_event_into_snapshot_records(event))")
+        .expect("write_engine_event must extend the same batch with reducer snapshot records");
+    let commit_position = body
+        .find("self.commit_upserts(records)")
+        .expect("write_engine_event must delegate the combined batch to commit_upserts once");
 
     assert!(
-        insert_position < reduce_position,
-        "event-log insert must precede the snapshot reduce in one transaction"
+        event_position < reduce_position && reduce_position < commit_position,
+        "event-log record, reducer output, and commit delegation must stay in order"
     );
 
-    // Confirm the call ordering really is inside one closure: between
-    // the `self.engine.storage_kernel().write(` opening and the matching `})?)` close,
-    // both the insert and the reduce appear exactly once.
-    let write_open = body
-        .find("self.engine.storage_kernel().write(")
-        .expect("write_engine_event opens one write transaction");
-    let close_marker = "        })?)";
-    let write_close_relative = body[write_open..]
-        .find(close_marker)
-        .expect("write transaction closes inside the method");
-    let write_close = write_open + write_close_relative;
-    let closure_body = &body[write_open..write_close];
     assert_eq!(
-        closure_body
-            .matches(".insert(transaction, event.key().to_string(), event)")
-            .count(),
+        body.matches("self.commit_upserts(records)").count(),
         1,
-        "exactly one event-log insert per call to write_engine_event"
+        "write_engine_event must hand off exactly one combined commit batch"
+    );
+
+    let commit_signature =
+        "fn commit_upserts(&self, records: Vec<ManagerStoreRecord>) -> Result<()> {";
+    let commit_start = source
+        .find(commit_signature)
+        .expect("commit_upserts signature appears in manager_store.rs");
+    let commit_after = &source[commit_start..];
+    let commit_end = commit_start
+        + commit_after
+            .find("\n    }\n")
+            .expect("commit_upserts body ends with a `}`");
+    let commit_body = &source[commit_start..commit_end];
+
+    assert!(
+        commit_body.contains("let mut request = CommitRequest::new(self.records);"),
+        "commit_upserts must create one sema-engine CommitRequest for the manager family"
     );
     assert_eq!(
-        closure_body
+        commit_body.matches("self.engine.commit(request)?").count(),
+        1,
+        "commit_upserts must issue exactly one sema-engine commit"
+    );
+    assert_eq!(
+        source
+            .matches("self.engine.storage_kernel().write(")
+            .count(),
+        0,
+        "manager_store.rs must not use the retired raw storage-kernel write surface"
+    );
+    assert_eq!(
+        source.matches("ENGINE_EVENTS.insert").count(),
+        0,
+        "manager_store.rs must not write retired split event tables"
+    );
+    assert_eq!(
+        source
             .matches("Self::reduce_event_into_snapshots(transaction")
             .count(),
-        1,
-        "exactly one snapshot reduce per call to write_engine_event"
+        0,
+        "manager_store.rs should keep the old reducer name absent"
     );
 }

@@ -24,7 +24,6 @@ use persona::launch::{
 use persona::manager::{EngineManager, HandleEngineRequest};
 use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadEngineEvents};
 use signal_harness::{HarnessDaemonConfiguration, HarnessKind};
-use signal_message::MessageDaemonConfiguration;
 use signal_persona::origin::EngineIdentifier;
 use signal_router::{
     EndpointKind, RouterBootstrapDocument, RouterBootstrapOperation, RouterDaemonConfiguration,
@@ -478,7 +477,7 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
 }
 
 #[tokio::test]
-async fn constraint_three_harness_chain_message_launch_writes_component_ingress_sockets() {
+async fn constraint_three_harness_chain_message_launch_writes_runtime_daemon_configuration() {
     let fixture = DirectProcessFixture::new("three-harness-message-ingress");
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
     let paths = PersonaDaemonPaths::new(fixture.state_root(), fixture.run_root());
@@ -496,39 +495,33 @@ async fn constraint_three_harness_chain_message_launch_writes_component_ingress_
         .spawn_envelope_for_instance(&ComponentInstanceName::new("message"), &resolved)
         .expect("message spawn envelope exists");
     let envelope_path = envelope.envelope_path().to_path_buf();
+    let expected_message_socket = envelope.domain_socket_path().to_path_buf();
+    let expected_meta_socket = envelope
+        .domain_socket_path()
+        .with_file_name("meta-message.sock");
+    let expected_state_path = envelope.state_path().to_path_buf();
+    let expected_router_socket = envelope
+        .peers()
+        .iter()
+        .find(|peer| peer.component() == EngineComponent::Router)
+        .expect("message has router peer")
+        .domain_socket_path()
+        .to_path_buf();
 
     DirectProcessFixture::launch(&launcher, envelope)
         .await
         .expect("message component launches");
 
     let configuration_path = envelope_path.with_file_name("message-daemon.rkyv");
-    let configuration = DirectProcessFixture::decode_archive::<MessageDaemonConfiguration>(
+    let configuration = DirectProcessFixture::decode_archive::<message::Configuration>(
         &configuration_path,
         "message configuration decodes",
     );
-
-    let ingresses = configuration.component_ingresses;
-    assert_eq!(ingresses.len(), 3);
-    for name in ["initiator", "responder", "reviewer"] {
-        let ingress = ingresses
-            .iter()
-            .find(|entry| entry.origin.instance.payload().as_str() == name)
-            .unwrap_or_else(|| panic!("missing component ingress for {name}"));
-        assert_eq!(
-            ingress.origin.component,
-            signal_message::ComponentName::Harness
-        );
-        assert!(
-            ingress
-                .socket_path
-                .payload()
-                .as_str()
-                .ends_with(&format!("message-ingress/{name}.sock")),
-            "unexpected ingress socket path for {name}: {}",
-            ingress.socket_path.payload().as_str()
-        );
-        assert_eq!(*ingress.socket_mode.payload(), 0o600);
-    }
+    assert_eq!(configuration.socket_path(), expected_message_socket);
+    assert_eq!(configuration.meta_socket_path(), expected_meta_socket);
+    assert_eq!(configuration.router_socket_path(), expected_router_socket);
+    assert_eq!(configuration.database_path(), expected_state_path);
+    assert_eq!(configuration.owner_name(), "message");
 
     DirectProcessFixture::stop(&launcher, EngineComponent::Message)
         .await
@@ -588,33 +581,19 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
         );
     }
 
-    let message_configuration = DirectProcessFixture::decode_archive::<MessageDaemonConfiguration>(
+    let message_configuration = DirectProcessFixture::decode_archive::<message::Configuration>(
         &engine_run_root.join("message-daemon.rkyv"),
         "message configuration decodes",
     );
-    assert_eq!(message_configuration.component_ingresses.len(), 3);
-
-    for agent_name in ["initiator", "responder", "reviewer"] {
-        let ingress = message_configuration
-            .component_ingresses
-            .iter()
-            .find(|entry| entry.origin.instance.payload().as_str() == agent_name)
-            .unwrap_or_else(|| panic!("message ingress exists for {agent_name}"));
-        assert_eq!(
-            ingress.origin.component,
-            signal_message::ComponentName::Harness
-        );
-        assert!(
-            ingress
-                .socket_path
-                .payload()
-                .as_str()
-                .ends_with(&format!("message-ingress/{agent_name}.sock")),
-            "message ingress path belongs to {agent_name}: {}",
-            ingress.socket_path.payload().as_str()
-        );
-        assert_eq!(*ingress.socket_mode.payload(), 0o600);
-    }
+    assert_eq!(
+        message_configuration.socket_path(),
+        engine_run_root.join("message.sock")
+    );
+    assert_eq!(
+        message_configuration.meta_socket_path(),
+        engine_run_root.join("meta-message.sock")
+    );
+    assert_eq!(message_configuration.owner_name(), "message");
 
     for agent_name in ["initiator", "responder", "reviewer"] {
         let terminal_instance_name = format!("{agent_name}-terminal");

@@ -533,80 +533,26 @@ impl DirectProcessLauncher {
             .find(|peer| peer.component() == EngineComponent::Router)
             .ok_or(DirectProcessFailure::MissingRouterPeerForMessage)?
             .domain_socket_path();
-        let configuration = signal_message::MessageDaemonConfiguration {
-            message_socket_path: signal_message::WirePath::new(
-                envelope.domain_socket_path().to_string_lossy().into_owned(),
-            ),
-            message_socket_mode: signal_message::SocketMode::new(u64::from(
-                envelope.domain_socket_mode().as_octal(),
-            )),
-            supervision_socket_path: signal_message::WirePath::new(
-                envelope
-                    .supervision_socket_path()
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
-            supervision_socket_mode: signal_message::SocketMode::new(u64::from(
-                envelope.supervision_socket_mode().as_octal(),
-            )),
-            router_socket_path: signal_message::WirePath::new(
-                router_socket_path.to_string_lossy().into_owned(),
-            ),
-            component_ingresses: Self::component_message_ingresses(envelope),
-            owner_identity: Self::message_owner_identity(envelope.owner_identity()),
-        };
+        let configuration = message::Configuration::new(
+            envelope.domain_socket_path(),
+            Self::meta_socket_path(envelope),
+            router_socket_path,
+            envelope.state_path(),
+            envelope.component_instance().as_str(),
+            Self::message_owner_user_identifier(envelope.owner_identity())?,
+        );
         Self::write_configuration_binary_file(envelope, &configuration)
     }
 
-    fn message_owner_identity(
+    fn message_owner_user_identifier(
         owner: &signal_persona::origin::OwnerIdentity,
-    ) -> signal_message::OwnerIdentity {
+    ) -> Result<u32, DirectProcessFailure> {
         match owner {
-            signal_persona::origin::OwnerIdentity::UnixUser(user) => {
-                signal_message::OwnerIdentity::UnixUser(signal_message::UnixUserIdentifier::new(
-                    u64::from(user.as_u32()),
-                ))
-            }
-            signal_persona::origin::OwnerIdentity::System(principal) => {
-                signal_message::OwnerIdentity::System(signal_message::SystemPrincipal::new(
-                    principal.as_str().to_owned(),
-                ))
+            signal_persona::origin::OwnerIdentity::UnixUser(user) => Ok(user.as_u32()),
+            signal_persona::origin::OwnerIdentity::System(_) => {
+                Err(DirectProcessFailure::MessageOwnerIdentityUnsupportedSystem)
             }
         }
-    }
-
-    fn component_message_ingresses(
-        envelope: &ComponentSpawnEnvelope,
-    ) -> Vec<signal_message::ComponentMessageIngress> {
-        envelope
-            .peers()
-            .iter()
-            .filter(|peer| peer.component() == EngineComponent::Harness)
-            .map(|peer| signal_message::ComponentMessageIngress {
-                origin: signal_message::InternalComponentInstanceOrigin {
-                    component: signal_message::ComponentName::Harness,
-                    instance: signal_message::ComponentInstanceName::new(
-                        peer.instance_name().as_str().to_owned(),
-                    ),
-                },
-                socket_path: signal_message::WirePath::new(
-                    Self::component_message_ingress_socket_path(envelope, peer.instance_name())
-                        .to_string_lossy()
-                        .into_owned(),
-                ),
-                socket_mode: signal_message::SocketMode::new(0o600),
-            })
-            .collect()
-    }
-
-    pub fn component_message_ingress_socket_path(
-        envelope: &ComponentSpawnEnvelope,
-        component_instance: &ComponentInstanceName,
-    ) -> PathBuf {
-        envelope
-            .domain_socket_path()
-            .with_file_name("message-ingress")
-            .join(format!("{}.sock", component_instance.as_str()))
     }
 
     fn write_router_daemon_configuration_file(
@@ -1330,6 +1276,8 @@ pub enum DirectProcessFailure {
     MissingTerminalPeerForIntrospect,
     #[error("router daemon owner identity does not support a system principal")]
     RouterOwnerIdentityUnsupportedSystem,
+    #[error("message daemon owner identity does not support a system principal")]
+    MessageOwnerIdentityUnsupportedSystem,
     #[error("failed to encode binary component configuration archive")]
     ConfigurationArchiveEncode,
     #[error("{operation}: {source}")]

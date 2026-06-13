@@ -436,6 +436,10 @@ impl EngineComponent {
         signal_persona::ComponentName::new(self.as_component_name())
     }
 
+    pub const fn exposes_engine_management_supervision(self) -> bool {
+        !matches!(self, Self::Message | Self::Router)
+    }
+
     pub fn from_component_name(component: &signal_persona::ComponentName) -> Option<Self> {
         match component.as_str() {
             "persona-mind" => Some(Self::Mind),

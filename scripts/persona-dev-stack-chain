@@ -11,8 +11,10 @@ root="${PERSONA_STACK_ROOT:-$(mktemp -d -t persona-dev-stack-chain.XXXXXX)}"
 mkdir -p "$root"
 
 message_bin="$PERSONA_MESSAGE_PACKAGE/bin/message"
-message_daemon_bin="$PERSONA_MESSAGE_PACKAGE/bin/persona-message-daemon"
-router_bin="$PERSONA_ROUTER_PACKAGE/bin/persona-router-daemon"
+message_daemon_bin="$PERSONA_MESSAGE_PACKAGE/bin/message-daemon"
+message_configuration_writer="$PERSONA_MESSAGE_PACKAGE/bin/message-write-configuration"
+router_bin="$PERSONA_ROUTER_PACKAGE/bin/router-daemon"
+router_configuration_writer="$PERSONA_ROUTER_PACKAGE/bin/router-write-configuration"
 terminal_daemon="$PERSONA_TERMINAL_PACKAGE/bin/persona-terminal-daemon"
 terminal_signal="$PERSONA_TERMINAL_PACKAGE/bin/persona-terminal-signal"
 harness_daemon="$PERSONA_HARNESS_PACKAGE/bin/persona-harness-daemon"
@@ -22,9 +24,11 @@ message_socket="$root/message.sock"
 router_store="$root/router.sema"
 message_store="$root/message-store"
 router_bootstrap="$root/router-bootstrap.nota"
-router_daemon_configuration="$root/router-daemon.nota"
+router_meta_socket="$root/router-meta.sock"
+router_daemon_configuration="$root/router-daemon.rkyv"
 router_supervision_socket="$root/router.supervision.sock"
-message_daemon_configuration="$root/message-daemon.nota"
+message_meta_socket="$root/message.meta.sock"
+message_daemon_configuration="$root/message-daemon.rkyv"
 message_spawn_envelope="$root/message.envelope"
 starting_instructions="$root/starting-instructions.nota"
 process_manifest="$root/process-manifest.nota"
@@ -126,7 +130,7 @@ write_agent_runner() {
 #!/usr/bin/env bash
 set -euo pipefail
 
-export PERSONA_MESSAGE_SOCKET='$message_socket'
+export MESSAGE_SOCKET='$message_socket'
 export PERSONA_MESSAGE_STORE='$message_store'
 message_bin='$message_bin'
 agent='$agent'
@@ -135,13 +139,13 @@ printf '%s-runner-ready\n' "\$agent"
 while IFS= read -r line; do
   printf '%s-received:%s\n' "\$agent" "\$line"
   if [ "\$agent" = 'initiator' ] && [ "\$line" = 'start-three-harness-task' ]; then
-    "\$message_bin" '(Send responder "initiator handed to responder")'
+    "\$message_bin" '(Send responder [initiator handed to responder])'
     printf '%s-sent:%s\n' "\$agent" 'initiator handed to responder'
   elif [ "\$agent" = 'responder' ] && [ "\$line" = 'initiator handed to responder' ]; then
-    "\$message_bin" '(Send reviewer "responder handed to reviewer")'
+    "\$message_bin" '(Send reviewer [responder handed to reviewer])'
     printf '%s-sent:%s\n' "\$agent" 'responder handed to reviewer'
   elif [ "\$agent" = 'reviewer' ] && [ "\$line" = 'responder handed to reviewer' ]; then
-    "\$message_bin" '(Send owner "reviewer completed task")'
+    "\$message_bin" '(Send owner [reviewer completed task])'
     printf '%s-sent:%s\n' "\$agent" 'reviewer completed task'
   fi
 done
@@ -212,14 +216,17 @@ write_router_bootstrap() {
 
 write_router_daemon_configuration() {
   local owner_user_id
+  local request
   owner_user_id="$(id -u)"
-  printf '(RouterDaemonConfiguration "%s" 384 "%s" 384 "%s" "%s" (UnixUser %s))\n' \
+  printf -v request '(ConfigurationWriteRequest %s %s %s %s %s %s %s)' \
     "$router_socket" \
+    "$router_meta_socket" \
     "$router_supervision_socket" \
     "$router_store" \
     "$router_bootstrap" \
     "$owner_user_id" \
-    >"$router_daemon_configuration"
+    "$router_daemon_configuration"
+  "$router_configuration_writer" "$request" >/dev/null
 }
 
 write_message_spawn_envelope() {
@@ -237,13 +244,16 @@ write_message_spawn_envelope() {
 
 write_message_daemon_configuration() {
   local owner_user_id
+  local request
   owner_user_id="$(id -u)"
-  printf '(MessageDaemonConfiguration "%s" 432 "%s" 384 "%s" [] (UnixUser %s))\n' \
+  printf -v request '(ConfigurationWriteRequest %s %s %s %s message %s %s)' \
     "$message_socket" \
-    "$root/message.supervision.sock" \
+    "$message_meta_socket" \
     "$router_socket" \
+    "$message_store" \
     "$owner_user_id" \
-    >"$message_daemon_configuration"
+    "$message_daemon_configuration"
+  "$message_configuration_writer" "$request" >/dev/null
 }
 
 start_router() {
@@ -251,7 +261,7 @@ start_router() {
   "$router_bin" "$router_daemon_configuration" >"$router_stdout" 2>&1 &
   router_pid="$!"
   processes+=("$router_pid")
-  wait_for_line "persona-router" "$router_stdout" "persona-router-daemon socket=$router_socket"
+  wait_for_line "router" "$router_stdout" "router-daemon socket=$router_socket"
 }
 
 start_message_daemon() {
@@ -262,7 +272,7 @@ start_message_daemon() {
     2>&1 &
   message_daemon_pid="$!"
   processes+=("$message_daemon_pid")
-  wait_for_line "persona-message-daemon" "$message_daemon_stdout" "persona-message-daemon socket=$message_socket"
+  wait_for_line "message-daemon" "$message_daemon_stdout" "message-daemon socket=$message_socket"
 }
 
 connect_terminal() {
@@ -307,7 +317,7 @@ wait_for_capture_text() {
 
 wait_for_owner_inbox() {
   for _ in $(seq 1 100); do
-    PERSONA_MESSAGE_SOCKET="$message_socket" \
+    MESSAGE_SOCKET="$message_socket" \
       PERSONA_MESSAGE_STORE="$message_store" \
       "$message_bin" '(Inbox owner)' \
       >"$owner_inbox_output"
@@ -368,7 +378,7 @@ run_chain() {
     connect_terminal "$agent"
   done
 
-  PERSONA_MESSAGE_SOCKET="$message_socket" \
+  MESSAGE_SOCKET="$message_socket" \
     PERSONA_MESSAGE_STORE="$message_store" \
     "$message_bin" '(Send initiator start-three-harness-task)' \
     >"$owner_send_output"

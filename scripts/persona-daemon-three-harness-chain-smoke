@@ -117,7 +117,7 @@ wait_for_terminal_text() {
 
 wait_for_owner_inbox() {
   for _attempt in $(seq 1 100); do
-    PERSONA_MESSAGE_SOCKET="$root/run/default/message.sock" \
+    MESSAGE_SOCKET="$root/run/default/message.sock" \
       "$PERSONA_MESSAGE_BIN" \
         '(Inbox owner)' \
         > "$root/artifacts/owner-inbox.nota" \
@@ -165,7 +165,7 @@ for agent in initiator responder reviewer; do
   wait_for_terminal_text "$agent" "$agent-runner-ready"
 done
 
-PERSONA_MESSAGE_SOCKET="$root/run/default/message.sock" \
+MESSAGE_SOCKET="$root/run/default/message.sock" \
   "$PERSONA_MESSAGE_BIN" \
     '(Send initiator start-three-harness-task)' \
     > "$root/artifacts/owner-send.nota" \

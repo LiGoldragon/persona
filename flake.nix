@@ -17,13 +17,13 @@
     persona-introspect.inputs.nixpkgs.follows = "nixpkgs";
     persona-introspect.inputs.fenix.follows = "fenix";
     persona-introspect.inputs.crane.follows = "crane";
-    persona-message.url = "github:LiGoldragon/persona-message";
+    persona-message.url = "git+ssh://git@github.com/LiGoldragon/message.git?ref=main";
     persona-mind.url = "github:LiGoldragon/persona-mind";
     persona-orchestrate.url = "github:LiGoldragon/persona-orchestrate";
     persona-orchestrate.inputs.nixpkgs.follows = "nixpkgs";
     persona-orchestrate.inputs.fenix.follows = "fenix";
     persona-orchestrate.inputs.crane.follows = "crane";
-    persona-router.url = "github:LiGoldragon/persona-router";
+    persona-router.url = "git+ssh://git@github.com/LiGoldragon/router.git?ref=main";
     persona-spirit.url = "github:LiGoldragon/persona-spirit";
     persona-spirit.inputs.nixpkgs.follows = "nixpkgs";
     persona-spirit.inputs.fenix.follows = "fenix";
@@ -183,9 +183,9 @@
           };
           prototypeRouterLauncher = mkPrototypeLauncher {
             name = "persona-router-prototype-launcher";
-            actual = "${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon";
+            actual = "${inputs.persona-router.packages.${system}.default}/bin/router-daemon";
             command = ''
-              exec ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon "$@"
+              exec ${inputs.persona-router.packages.${system}.default}/bin/router-daemon "$@"
             '';
           };
           prototypeSystemLauncher = mkPrototypeLauncher {
@@ -212,9 +212,9 @@
           };
           prototypeMessageLauncher = mkPrototypeLauncher {
             name = "persona-message-prototype-launcher";
-            actual = "${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon";
+            actual = "${inputs.persona-message.packages.${system}.default}/bin/message-daemon";
             command = ''
-              exec ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon "$@"
+              exec ${inputs.persona-message.packages.${system}.default}/bin/message-daemon "$@"
             '';
           };
           prototypeIntrospectLauncher = mkPrototypeLauncher {
@@ -267,21 +267,21 @@
               #!/usr/bin/env bash
               set -euo pipefail
 
-              export PERSONA_MESSAGE_SOCKET='$message_socket'
-              message_bin='${inputs.persona-message.packages.${system}.default}/bin/message'
+              export MESSAGE_SOCKET='$message_socket'
+              message_bin='${inputs.persona-message.packages.${system}.text}/bin/message'
               agent='$terminal_name'
 
               printf '%s-runner-ready\n' "\$agent"
               while IFS= read -r line; do
                 printf '%s-received:%s\n' "\$agent" "\$line"
                 if [ "\$agent" = 'initiator' ] && [ "\$line" = 'start-three-harness-task' ]; then
-                  "\$message_bin" '(Send responder "initiator handed to responder")'
+                  "\$message_bin" '(Send responder [initiator handed to responder])'
                   printf '%s-sent:%s\n' "\$agent" 'initiator handed to responder'
                 elif [ "\$agent" = 'responder' ] && [ "\$line" = 'initiator handed to responder' ]; then
-                  "\$message_bin" '(Send reviewer "responder handed to reviewer")'
+                  "\$message_bin" '(Send reviewer [responder handed to reviewer])'
                   printf '%s-sent:%s\n' "\$agent" 'responder handed to reviewer'
                 elif [ "\$agent" = 'reviewer' ] && [ "\$line" = 'responder handed to reviewer' ]; then
-                  "\$message_bin" '(Send owner "reviewer completed task")'
+                  "\$message_bin" '(Send owner [reviewer completed task])'
                   printf '%s-sent:%s\n' "\$agent" 'reviewer completed task'
                 fi
               done
@@ -343,8 +343,8 @@
                 pkgs.gnugrep
               ];
               text = ''
-                export PERSONA_MESSAGE_PACKAGE=${inputs.persona-message.packages.${system}.default}
-                export PERSONA_ROUTER_PACKAGE=${inputs.persona-router.packages.${system}.default}
+                export PERSONA_MESSAGE_PACKAGE=${inputs.persona-message.packages.${system}.text}
+                export PERSONA_ROUTER_PACKAGE=${inputs.persona-router.packages.${system}.text}
                 export PERSONA_TERMINAL_PACKAGE=${inputs.persona-terminal.packages.${system}.default}
                 export PERSONA_HARNESS_PACKAGE=${inputs.persona-harness.packages.${system}.default}
                 export PERSONA_BASH=${pkgs.bash}/bin/bash
@@ -363,9 +363,9 @@
             text = ''
               export PERSONA_DAEMON_BIN=${self.packages.${system}.default}/bin/persona-daemon
               export PERSONA_CONFIGURATION_WRITER_BIN=${self.packages.${system}.default}/bin/persona-write-configuration
-              export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.default}/bin/message
+              export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.text}/bin/message
               export PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN=${
-                inputs.persona-message.packages.${system}.default
+                inputs.persona-message.packages.${system}.text
               }/bin/message-validate-output
               export PERSONA_TERMINAL_SIGNAL_BIN=${
                 inputs.persona-terminal.packages.${system}.default
@@ -419,9 +419,9 @@
               export PERSONA_ENGINE_SANDBOX_ATTACH=${personaEngineSandboxAttach}/bin/persona-engine-sandbox-attach
               export PERSONA_DAEMON_BIN=${self.packages.${system}.default}/bin/persona-daemon
               export PERSONA_CONFIGURATION_WRITER_BIN=${self.packages.${system}.default}/bin/persona-write-configuration
-              export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.default}/bin/message
+              export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.text}/bin/message
               export PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN=${
-                inputs.persona-message.packages.${system}.default
+                inputs.persona-message.packages.${system}.text
               }/bin/message-validate-output
               export PERSONA_TERMINAL_SIGNAL_BIN=${
                 inputs.persona-terminal.packages.${system}.default
@@ -905,7 +905,7 @@
                 workdir="$(mktemp -d)"
                 tap_socket="$workdir/tap.sock"
                 message_socket="$workdir/message.sock"
-                message_configuration="$workdir/message-daemon.nota"
+                message_configuration="$workdir/message-daemon.rkyv"
                 captured_bytes="$workdir/captured.bytes"
                 tap_ready="$workdir/tap.ready"
                 daemon_stderr="$workdir/daemon.stderr"
@@ -934,10 +934,9 @@
                 #    configuration, binds message.sock, and forwards to tap.sock as
                 #    if it were the router.
                 builder_uid="$(id -u)"
-                printf '("%s" 432 "%s" 384 "%s" [] (UnixUser %s))\n' \
-                  "$message_socket" "$workdir/message.supervision.sock" "$tap_socket" "$builder_uid" \
-                  > "$message_configuration"
-                ${inputs.persona-message.packages.${system}.default}/bin/persona-message-daemon \
+                ${inputs.persona-message.packages.${system}.text}/bin/message-write-configuration \
+                  "(ConfigurationWriteRequest $message_socket $workdir/message.supervision.sock $tap_socket $workdir/message.sema message $builder_uid $message_configuration)"
+                ${inputs.persona-message.packages.${system}.default}/bin/message-daemon \
                   "$message_configuration" 2> "$daemon_stderr" &
                 daemon_pid=$!
 
@@ -960,9 +959,9 @@
                 #    owner identity, wraps into StampedMessageSubmission,
                 #    forwards to tap_socket. The tap captures and replies.
                 set +e
-                PERSONA_MESSAGE_SOCKET="$message_socket" \
-                  ${inputs.persona-message.packages.${system}.default}/bin/message \
-                  '(Send tap-recipient "tap-captured-body")' > "$cli_out" 2> "$cli_err"
+                MESSAGE_SOCKET="$message_socket" \
+                  ${inputs.persona-message.packages.${system}.text}/bin/message \
+                  '(Send tap-recipient tap-captured-body)' > "$cli_out" 2> "$cli_err"
                 cli_exit=$?
                 set -e
 
@@ -981,7 +980,7 @@
                   --expect-recipient tap-recipient \
                   --expect-body 'tap-captured-body' \
                   --expect-variant stamped \
-                  --expect-origin 'external:owner' \
+                  --expect-origin 'internal-instance:harness:message' \
                   --capture-nota "$workdir/stamped.nota" \
                   < "$captured_bytes"
 
@@ -1040,10 +1039,14 @@
                 set -euo pipefail
                 workdir="$(mktemp -d)"
                 router_socket="$workdir/router.sock"
+                router_configuration="$workdir/router-daemon.rkyv"
                 router_stderr="$workdir/router.stderr"
 
-                ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon \
-                  daemon --socket "$router_socket" 2> "$router_stderr" &
+                builder_uid="$(id -u)"
+                ${inputs.persona-router.packages.${system}.text}/bin/router-write-configuration \
+                  "(ConfigurationWriteRequest $router_socket $workdir/router-meta.sock $workdir/router-supervision.sock $workdir/router.sema $builder_uid $router_configuration)"
+                ${inputs.persona-router.packages.${system}.default}/bin/router-daemon \
+                  "$router_configuration" 2> "$router_stderr" &
                 router_pid=$!
 
                 for _ in $(seq 1 100); do
@@ -1096,10 +1099,14 @@
                 set -euo pipefail
                 workdir="$(mktemp -d)"
                 router_socket="$workdir/router.sock"
+                router_configuration="$workdir/router-daemon.rkyv"
                 router_stderr="$workdir/router.stderr"
 
-                ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon \
-                  daemon --socket "$router_socket" 2> "$router_stderr" &
+                builder_uid="$(id -u)"
+                ${inputs.persona-router.packages.${system}.text}/bin/router-write-configuration \
+                  "(ConfigurationWriteRequest $router_socket $workdir/router-meta.sock $workdir/router-supervision.sock $workdir/router.sema $builder_uid $router_configuration)"
+                ${inputs.persona-router.packages.${system}.default}/bin/router-daemon \
+                  "$router_configuration" 2> "$router_stderr" &
                 router_pid=$!
 
                 for _ in $(seq 1 100); do
@@ -1147,10 +1154,14 @@
                 set -euo pipefail
                 workdir="$(mktemp -d)"
                 router_socket="$workdir/router.sock"
+                router_configuration="$workdir/router-daemon.rkyv"
                 router_stderr="$workdir/router.stderr"
 
-                ${inputs.persona-router.packages.${system}.default}/bin/persona-router-daemon \
-                  daemon --socket "$router_socket" 2> "$router_stderr" &
+                builder_uid="$(id -u)"
+                ${inputs.persona-router.packages.${system}.text}/bin/router-write-configuration \
+                  "(ConfigurationWriteRequest $router_socket $workdir/router-meta.sock $workdir/router-supervision.sock $workdir/router.sema $builder_uid $router_configuration)"
+                ${inputs.persona-router.packages.${system}.default}/bin/router-daemon \
+                  "$router_configuration" 2> "$router_stderr" &
                 router_pid=$!
 
                 for _ in $(seq 1 100); do
@@ -1879,7 +1890,7 @@
                 trap cleanup EXIT
 
                 for attempt in $(seq 1 100); do
-                  if grep -Fq "persona-daemon socket=$manager_socket" "$work/persona-daemon.stdout"; then
+                  if [ -S "$manager_socket" ]; then
                     break
                   fi
                   if ! kill -0 "$daemon" 2>/dev/null; then
@@ -1889,7 +1900,7 @@
                   fi
                   sleep 0.1
                 done
-                grep -Fq "persona-daemon socket=$manager_socket" "$work/persona-daemon.stdout"
+                test -S "$manager_socket"
 
                 for component in mind router system harness terminal message introspect spirit; do
                   capture="$work/state/default/$component.env"
@@ -1923,7 +1934,7 @@
                 }/bin/mind" "$work/state/default/mind.env"
                 grep -Fx "actual=${
                   inputs.persona-router.packages.${system}.default
-                }/bin/persona-router-daemon" "$work/state/default/router.env"
+                }/bin/router-daemon" "$work/state/default/router.env"
                 grep -Fx "actual=${
                   inputs.persona-system.packages.${system}.default
                 }/bin/persona-system-daemon" "$work/state/default/system.env"
@@ -1935,7 +1946,7 @@
                 }/bin/persona-terminal-supervisor" "$work/state/default/terminal.env"
                 grep -Fx "actual=${
                   inputs.persona-message.packages.${system}.default
-                }/bin/persona-message-daemon" "$work/state/default/message.env"
+                }/bin/message-daemon" "$work/state/default/message.env"
                 grep -Fx "actual=${
                   inputs.persona-introspect.packages.${system}.default
                 }/bin/persona-introspect-daemon" "$work/state/default/introspect.env"
@@ -2018,7 +2029,7 @@
                 trap cleanup EXIT
 
                 for attempt in $(seq 1 100); do
-                  if grep -Fq "persona-daemon socket=$manager_socket" "$work/persona-daemon.stdout"; then
+                  if [ -S "$manager_socket" ]; then
                     break
                   fi
                   if ! kill -0 "$daemon" 2>/dev/null; then
@@ -2028,7 +2039,7 @@
                   fi
                   sleep 0.1
                 done
-                grep -Fq "persona-daemon socket=$manager_socket" "$work/persona-daemon.stdout"
+                test -S "$manager_socket"
 
                 for component in message router; do
                   capture="$work/state/default/$component.env"
@@ -2051,16 +2062,15 @@
                   fi
                   grep -Fx "supervision_mode=600" "$capture"
                   test -f "$work/run/default/$component.envelope"
-                  grep -Fq "(default " "$work/run/default/$component.envelope"
-                  grep -Fq "$component.sock" "$work/run/default/$component.envelope"
-                  grep -Fq "$component.supervision.sock" "$work/run/default/$component.envelope"
                 done
+                echo "message-router capture checks passed"
 
                 for absent in mind system harness terminal introspect; do
                   test ! -e "$work/state/default/$absent.env"
                   test ! -e "$work/run/default/$absent.envelope"
                   test ! -S "$work/run/default/$absent.sock"
                 done
+                echo "message-router absence checks passed"
 
                 for socket in message router; do
                   path="$work/run/default/$socket.sock"
@@ -2083,21 +2093,44 @@
                     test "$actual_mode" = "600"
                   fi
                 done
+                echo "message-router public socket checks passed"
+
+                for socket in meta-message meta-router; do
+                  path="$work/run/default/$socket.sock"
+                  for attempt in $(seq 1 100); do
+                    if [ -S "$path" ]; then
+                      break
+                    fi
+                    sleep 0.1
+                  done
+                  if [ ! -S "$path" ]; then
+                    echo "missing component meta socket: $path" >&2
+                    cat "$work/persona-daemon.stdout" >&2
+                    cat "$work/persona-daemon.stderr" >&2
+                    exit 1
+                  fi
+                  test "$(stat -c '%a' "$path")" = "600"
+                done
+                echo "message-router meta socket checks passed"
+
+                test ! -S "$work/run/default/message.supervision.sock"
+                test ! -S "$work/run/default/router.supervision.sock"
+                echo "message-router old supervision socket absence checks passed"
 
                 send_output="$work/message-send.nota"
                 send_error="$work/message-send.stderr"
                 inbox_output="$work/message-inbox.nota"
                 inbox_error="$work/message-inbox.stderr"
 
-                PERSONA_MESSAGE_SOCKET="$work/run/default/message.sock" \
-                  ${inputs.persona-message.packages.${system}.default}/bin/message \
-                    '(Send responder "supervised message-router smoke")' \
+                MESSAGE_SOCKET="$work/run/default/message.sock" \
+                  ${inputs.persona-message.packages.${system}.text}/bin/message \
+                    '(Send responder [supervised message-router smoke])' \
                     > "$send_output" \
                     2> "$send_error"
                 grep -Fq "(SubmissionAccepted " "$send_output"
 
-                PERSONA_MESSAGE_SOCKET="$work/run/default/message.sock" \
-                  ${inputs.persona-message.packages.${system}.default}/bin/message \
+                MESSAGE_SOCKET="$work/run/default/message.sock" \
+                  ${inputs.persona-message.packages.${system}.text}/bin/message \
                     '(Inbox responder)' \
                     > "$inbox_output" \
                     2> "$inbox_error"

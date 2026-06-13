@@ -115,10 +115,12 @@ impl EngineSupervisor {
             ))
             .await?;
             self.verify_component_socket(readiness_expectation).await?;
-            self.verify_component_socket(supervision_socket_expectation)
-                .await?;
-            self.verify_component_supervision(supervision_expectation)
-                .await?;
+            if component.exposes_engine_management_supervision() {
+                self.verify_component_socket(supervision_socket_expectation)
+                    .await?;
+                self.verify_component_supervision(supervision_expectation)
+                    .await?;
+            }
             self.append_component_event(EngineEventBody::ComponentReady(
                 ComponentLifecycleEvent::new(receipt.component().component_name()),
             ))

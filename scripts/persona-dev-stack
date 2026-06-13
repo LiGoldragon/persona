@@ -26,10 +26,12 @@ router_store="$root/router.sema"
 terminal_store="$root/terminal.sema"
 message_store="$root/message-store"
 router_bootstrap="$root/router-bootstrap.nota"
-router_daemon_configuration="$root/router-daemon.nota"
+router_meta_socket="$root/router-meta.sock"
+router_daemon_configuration="$root/router-daemon.rkyv"
 router_supervision_socket="$root/router.supervision.sock"
 message_spawn_envelope="$root/message.envelope"
-message_daemon_configuration="$root/message-daemon.nota"
+message_meta_socket="$root/message.meta.sock"
+message_daemon_configuration="$root/message-daemon.rkyv"
 router_stdout="$root/router.stdout"
 router_stderr="$root/router.stderr"
 message_daemon_stdout="$root/message-daemon.stdout"
@@ -43,8 +45,10 @@ process_manifest="$root/process-manifest.nota"
 socket_manifest="$root/socket-manifest.nota"
 
 message_bin="$PERSONA_MESSAGE_PACKAGE/bin/message"
-message_daemon_bin="$PERSONA_MESSAGE_PACKAGE/bin/persona-message-daemon"
-router_bin="$PERSONA_ROUTER_PACKAGE/bin/persona-router-daemon"
+message_daemon_bin="$PERSONA_MESSAGE_PACKAGE/bin/message-daemon"
+message_configuration_writer="$PERSONA_MESSAGE_PACKAGE/bin/message-write-configuration"
+router_bin="$PERSONA_ROUTER_PACKAGE/bin/router-daemon"
+router_configuration_writer="$PERSONA_ROUTER_PACKAGE/bin/router-write-configuration"
 terminal_daemon="$PERSONA_TERMINAL_PACKAGE/bin/persona-terminal-daemon"
 terminal_signal="$PERSONA_TERMINAL_PACKAGE/bin/persona-terminal-signal"
 if [ -n "${PERSONA_HARNESS_PACKAGE:-}" ]; then
@@ -110,7 +114,7 @@ start_router() {
   write_router_daemon_configuration
   coproc PERSONA_ROUTER_PROCESS { "$router_bin" "$router_daemon_configuration" 2>&1; }
   router_pid="$PERSONA_ROUTER_PROCESS_PID"
-  read_ready_line "persona-router" "${PERSONA_ROUTER_PROCESS[0]}" "$router_stdout" "persona-router-daemon socket=$router_socket"
+  read_ready_line "router" "${PERSONA_ROUTER_PROCESS[0]}" "$router_stdout" "router-daemon socket=$router_socket"
 }
 
 start_message_daemon() {
@@ -120,7 +124,7 @@ start_message_daemon() {
     "$message_daemon_bin" "$message_daemon_configuration" 2>&1
   }
   message_daemon_pid="$PERSONA_MESSAGE_DAEMON_PROCESS_PID"
-  read_ready_line "persona-message-daemon" "${PERSONA_MESSAGE_DAEMON_PROCESS[0]}" "$message_daemon_stdout" "persona-message-daemon socket=$message_socket"
+  read_ready_line "message-daemon" "${PERSONA_MESSAGE_DAEMON_PROCESS[0]}" "$message_daemon_stdout" "message-daemon socket=$message_socket"
 }
 
 start_harness() {
@@ -175,37 +179,40 @@ write_message_spawn_envelope() {
 
 write_router_daemon_configuration() {
   local owner_user_id
+  local request
   owner_user_id="$(id -u)"
-  # RouterDaemonConfiguration per signal-router:
-  # router_socket_path router_socket_mode supervision_socket_path
-  # supervision_socket_mode store_path bootstrap_path owner_identity
-  # `Option<WirePath>` encodes as the inner value when Some.
-  printf '(RouterDaemonConfiguration "%s" 384 "%s" 384 "%s" "%s" (UnixUser %s))\n' \
+  printf -v request '(ConfigurationWriteRequest %s %s %s %s %s %s %s)' \
     "$router_socket" \
+    "$router_meta_socket" \
     "$router_supervision_socket" \
     "$router_store" \
     "$router_bootstrap" \
     "$owner_user_id" \
-    >"$router_daemon_configuration"
+    "$router_daemon_configuration"
+  "$router_configuration_writer" \
+    "$request" \
+    >/dev/null
 }
 
 write_message_daemon_configuration() {
   local owner_user_id
+  local request
   owner_user_id="$(id -u)"
-  # MessageDaemonConfiguration record per signal-message:
-  # message_socket_path message_socket_mode supervision_socket_path
-  # supervision_socket_mode router_socket_path component_ingresses owner_identity
-  printf '(MessageDaemonConfiguration "%s" 432 "%s" 384 "%s" [] (UnixUser %s))\n' \
+  printf -v request '(ConfigurationWriteRequest %s %s %s %s message %s %s)' \
     "$message_socket" \
-    "$root/message.supervision.sock" \
+    "$message_meta_socket" \
     "$router_socket" \
+    "$message_store" \
     "$owner_user_id" \
-    >"$message_daemon_configuration"
+    "$message_daemon_configuration"
+  "$message_configuration_writer" \
+    "$request" \
+    >/dev/null
 }
 
 write_environment_file() {
   cat >"$environment_file" <<EOF
-export PERSONA_MESSAGE_SOCKET='$message_socket'
+export MESSAGE_SOCKET='$message_socket'
 export PERSONA_MESSAGE_ROUTER_SOCKET='$router_socket'
 export PERSONA_MESSAGE_STORE='$message_store'
 export PERSONA_ROUTER_STORE='$router_store'
@@ -267,9 +274,9 @@ run_smoke() {
   "$terminal_signal" --control-socket "$terminal_socket" --terminal responder connect >"$terminal_connect"
   grep -Fq $'TerminalReady\tresponder\t1' "$terminal_connect"
 
-  PERSONA_MESSAGE_SOCKET="$message_socket" \
+  MESSAGE_SOCKET="$message_socket" \
     PERSONA_MESSAGE_STORE="$message_store" \
-    "$message_bin" '(Send responder "hello from persona meta")' \
+    "$message_bin" '(Send responder [hello from persona meta])' \
     >"$send_output" 2>"$send_error"
   grep -Fq "(SubmissionAccepted " "$send_output"
 
@@ -277,7 +284,7 @@ run_smoke() {
   grep -Fq $'TerminalCaptured\tresponder\t1' "$terminal_capture"
   capture_contains_text "$terminal_capture" "hello from persona meta"
 
-  PERSONA_MESSAGE_SOCKET="$message_socket" \
+  MESSAGE_SOCKET="$message_socket" \
     PERSONA_MESSAGE_STORE="$message_store" \
     "$message_bin" '(Inbox responder)' \
     >"$inbox_output" 2>"$inbox_error"
@@ -332,7 +339,7 @@ case "$mode" in
     fi
     printf 'terminal socket=%s\n' "$terminal_socket"
     printf 'try: source %s\n' "$environment_file"
-    printf 'try: message '\''(Send responder "hello")'\''\n'
+    printf 'try: message '\''(Send responder hello)'\''\n'
     printf 'try: message '\''(Inbox responder)'\''\n'
     printf 'try: persona-terminal-signal --control-socket "$PERSONA_TERMINAL_SOCKET" --terminal responder capture\n'
     if [ -n "$harness_daemon" ]; then

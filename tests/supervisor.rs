@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use kameo::actor::Spawn;
 use persona::engine::{EngineComponent, EngineTopology, PersonaDaemonPaths};
@@ -14,6 +14,8 @@ use signal_persona::origin::EngineIdentifier;
 
 mod support;
 
+static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(1);
+
 struct SupervisorFixture {
     root: PathBuf,
     engine: EngineIdentifier,
@@ -21,12 +23,8 @@ struct SupervisorFixture {
 
 impl SupervisorFixture {
     fn new(_name: &str) -> Self {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock after Unix epoch")
-            .as_nanos();
-        let root =
-            PathBuf::from("/tmp").join(format!("ps{}{}", std::process::id(), now % 1_000_000));
+        let sequence = NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed);
+        let root = PathBuf::from("/tmp").join(format!("ps{}-{sequence}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("fixture root created");
         Self {

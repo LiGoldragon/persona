@@ -20,6 +20,7 @@
 //!                               Implies --expect-variant stamped.
 //!                               Spec grammar:
 //!                                 internal:<component>
+//!                                 internal-instance:<component>:<instance>
 //!                                 external:owner
 //!                                 external:non-owner-user:<uid>
 //!                                 external:network:<peer>
@@ -34,8 +35,8 @@
 use std::io::{Read, Write};
 
 use signal_message::{
-    ComponentName, ConnectionClass, Frame, FrameBody, Input, MessageOrigin, NetworkPeer,
-    UnixUserIdentifier,
+    ComponentInstanceName, ComponentName, ConnectionClass, Frame, FrameBody, Input,
+    InternalComponentInstanceOrigin, MessageOrigin, NetworkPeer, NotaEncode, UnixUserIdentifier,
 };
 
 struct Expectations {
@@ -76,6 +77,15 @@ fn parse_component(value: &str) -> ComponentName {
 }
 
 fn parse_origin(spec: &str) -> MessageOrigin {
+    if let Some(rest) = spec.strip_prefix("internal-instance:") {
+        let (component, instance) = rest
+            .split_once(':')
+            .expect("internal-instance origin expects component:instance");
+        return MessageOrigin::InternalComponentInstance(InternalComponentInstanceOrigin {
+            component: parse_component(component),
+            instance: ComponentInstanceName::new(instance.to_owned()),
+        });
+    }
     if let Some(rest) = spec.strip_prefix("internal:") {
         return MessageOrigin::Internal(parse_component(rest));
     }
