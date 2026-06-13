@@ -111,18 +111,18 @@ pub trait DaemonBinder: ComponentDaemon {
         let engine = Self::build_runtime(&configuration)
             .map_err(DaemonError::Component)?;
         let runtime = GeneratedDaemonRuntime::<Self>::new(engine);
-        let daemon = AsyncSingleListenerDaemon::new(
-                configuration.socket_path().to_path_buf(),
-                runtime,
-                RequestErrorLog::new(Self::PROCESS_NAME),
-            )
-            .with_concurrency_limit(configuration.request_concurrency_limit());
-        Ok(
+        Ok({
+            let daemon = AsyncSingleListenerDaemon::new(
+                    configuration.socket_path().to_path_buf(),
+                    runtime.clone(),
+                    RequestErrorLog::new(Self::PROCESS_NAME),
+                )
+                .with_concurrency_limit(configuration.request_concurrency_limit());
             match configuration.socket_mode() {
                 Some(socket_mode) => daemon.with_socket_mode(socket_mode),
                 None => daemon,
-            },
-        )
+            }
+        })
     }
 }
 #[rustfmt::skip]
@@ -131,28 +131,38 @@ impl<Daemon: ComponentDaemon> DaemonBinder for Daemon {}
 /// The generated runtime struct that owns the engine. Its
 /// `handle_connection` IS the async decode -> execute -> encode spine.
 pub struct GeneratedDaemonRuntime<Daemon: ComponentDaemon> {
-    engine: Daemon::Engine,
+    engine: std::sync::Arc<Daemon::Engine>,
 }
 #[rustfmt::skip]
 impl<Daemon: ComponentDaemon> GeneratedDaemonRuntime<Daemon> {
     fn new(engine: Daemon::Engine) -> Self {
-        Self { engine }
+        Self {
+            engine: std::sync::Arc::new(engine),
+        }
     }
     async fn handle_working_connection(
         &self,
         connection: AcceptedConnection,
     ) -> Result<(), Daemon::Error> {
-        Daemon::handle_working_connection(&self.engine, connection).await
+        Daemon::handle_working_connection(self.engine.as_ref(), connection).await
+    }
+}
+#[rustfmt::skip]
+impl<Daemon: ComponentDaemon> Clone for GeneratedDaemonRuntime<Daemon> {
+    fn clone(&self) -> Self {
+        Self {
+            engine: self.engine.clone(),
+        }
     }
 }
 #[rustfmt::skip]
 impl<Daemon: ComponentDaemon> AsyncConnectionRuntime for GeneratedDaemonRuntime<Daemon> {
     type Error = Daemon::Error;
     async fn start(&self) -> Result<(), Self::Error> {
-        Daemon::start(&self.engine)
+        Daemon::start(self.engine.as_ref())
     }
     async fn stop(&self) -> Result<(), Self::Error> {
-        Daemon::stop(&self.engine)
+        Daemon::stop(self.engine.as_ref())
     }
     async fn handle_connection(
         &self,
