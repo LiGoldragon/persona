@@ -9,22 +9,22 @@
 
     crane.url = "github:ipetkov/crane";
 
-    persona-harness.url = "github:LiGoldragon/persona-harness";
+    persona-harness.url = "github:LiGoldragon/harness";
     persona-harness.inputs.nixpkgs.follows = "nixpkgs";
     persona-harness.inputs.fenix.follows = "fenix";
     persona-harness.inputs.crane.follows = "crane";
-    persona-introspect.url = "github:LiGoldragon/persona-introspect";
+    persona-introspect.url = "github:LiGoldragon/introspect";
     persona-introspect.inputs.nixpkgs.follows = "nixpkgs";
     persona-introspect.inputs.fenix.follows = "fenix";
     persona-introspect.inputs.crane.follows = "crane";
     persona-message.url = "git+ssh://git@github.com/LiGoldragon/message.git?ref=main";
-    persona-mind.url = "github:LiGoldragon/persona-mind";
-    persona-orchestrate.url = "github:LiGoldragon/persona-orchestrate";
+    persona-mind.url = "github:LiGoldragon/mind";
+    persona-orchestrate.url = "github:LiGoldragon/orchestrate";
     persona-orchestrate.inputs.nixpkgs.follows = "nixpkgs";
     persona-orchestrate.inputs.fenix.follows = "fenix";
     persona-orchestrate.inputs.crane.follows = "crane";
     persona-router.url = "git+ssh://git@github.com/LiGoldragon/router.git?ref=main";
-    persona-spirit.url = "github:LiGoldragon/persona-spirit";
+    persona-spirit.url = "github:LiGoldragon/spirit";
     persona-spirit.inputs.nixpkgs.follows = "nixpkgs";
     persona-spirit.inputs.fenix.follows = "fenix";
     persona-spirit.inputs.crane.follows = "crane";
@@ -52,11 +52,11 @@
     meta-signal-terminal.inputs.nixpkgs.follows = "nixpkgs";
     meta-signal-terminal.inputs.fenix.follows = "fenix";
     meta-signal-terminal.inputs.crane.follows = "crane";
-    persona-system.url = "github:LiGoldragon/persona-system";
+    persona-system.url = "github:LiGoldragon/system";
     persona-system.inputs.nixpkgs.follows = "nixpkgs";
     persona-system.inputs.fenix.follows = "fenix";
     persona-system.inputs.crane.follows = "crane";
-    persona-terminal.url = "github:LiGoldragon/persona-terminal";
+    persona-terminal.url = "github:LiGoldragon/terminal";
     terminal-cell = {
       url = "github:LiGoldragon/terminal-cell";
       flake = false;
@@ -93,7 +93,17 @@
           craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
           # Include generated-contract inputs that Cargo's source filter does
           # not know about.
-          schemaFilter = path: _type: builtins.match ".*/schema(/.*)?$" path != null;
+          schemaFilter =
+            path: type:
+            let
+              pathString = toString path;
+            in
+            (type == "regular" || type == "directory")
+            && (
+              builtins.baseNameOf pathString == "schema"
+              || pkgs.lib.hasPrefix "schema/" pathString
+              || pkgs.lib.hasInfix "/schema/" pathString
+            );
           sourceFilter = path: type: (craneLib.filterCargoSources path type) || (schemaFilter path type);
           src = pkgs.lib.cleanSourceWith {
             src = ./.;
@@ -109,7 +119,11 @@
             PERSONA_TESTS_DOCUMENT_PATH = "${./TESTS.md}";
           };
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
-          terminalCellSrc = craneLib.cleanCargoSource inputs.terminal-cell;
+          terminalCellSrc = pkgs.lib.cleanSourceWith {
+            src = inputs.terminal-cell;
+            filter = sourceFilter;
+            name = "terminal-cell-source";
+          };
           terminalCellCommonArgs = {
             src = terminalCellSrc;
             strictDeps = true;
@@ -146,6 +160,7 @@
               ++ runtimeInputs;
               text = ''
                 state_dir="$(dirname "''${PERSONA_STATE_PATH:?}")"
+                export PERSONA_ACTUAL_EXECUTABLE='${actual}'
                 mkdir -p "$state_dir"
                 {
                   printf 'engine=%s\n' "''${PERSONA_ENGINE_ID:?}"
@@ -165,21 +180,18 @@
                 ${command}
               '';
             };
+          fixtureCommand = ''
+            exec ${self.packages.${system}.default}/bin/persona-component-fixture "$@"
+          '';
           prototypeMindLauncher = mkPrototypeLauncher {
             name = "persona-mind-prototype-launcher";
-            actual = "${inputs.persona-mind.packages.${system}.default}/bin/mind";
-            command = ''
-              exec ${inputs.persona-mind.packages.${system}.default}/bin/mind daemon \
-                --socket "$PERSONA_DOMAIN_SOCKET_PATH" \
-                --store "$PERSONA_STATE_PATH"
-            '';
+            actual = "${inputs.persona-mind.packages.${system}.default}/bin/mind-daemon";
+            command = fixtureCommand;
           };
           prototypeOrchestrateLauncher = mkPrototypeLauncher {
             name = "persona-orchestrate-prototype-launcher";
-            actual = "${inputs.persona-orchestrate.packages.${system}.default}/bin/persona-orchestrate-daemon";
-            command = ''
-              exec ${inputs.persona-orchestrate.packages.${system}.default}/bin/persona-orchestrate-daemon "$@"
-            '';
+            actual = "${inputs.persona-orchestrate.packages.${system}.default}/bin/orchestrate-daemon";
+            command = fixtureCommand;
           };
           prototypeRouterLauncher = mkPrototypeLauncher {
             name = "persona-router-prototype-launcher";
@@ -190,25 +202,18 @@
           };
           prototypeSystemLauncher = mkPrototypeLauncher {
             name = "persona-system-prototype-launcher";
-            actual = "${inputs.persona-system.packages.${system}.default}/bin/persona-system-daemon";
-            command = ''
-              exec ${inputs.persona-system.packages.${system}.default}/bin/persona-system-daemon \
-                "$@"
-            '';
+            actual = "${inputs.persona-system.packages.${system}.default}/bin/system-daemon";
+            command = fixtureCommand;
           };
           prototypeHarnessLauncher = mkPrototypeLauncher {
             name = "persona-harness-prototype-launcher";
-            actual = "${inputs.persona-harness.packages.${system}.default}/bin/persona-harness-daemon";
-            command = ''
-              exec ${inputs.persona-harness.packages.${system}.default}/bin/persona-harness-daemon "$@"
-            '';
+            actual = "${inputs.persona-harness.packages.${system}.default}/bin/harness-daemon";
+            command = fixtureCommand;
           };
           prototypeTerminalLauncher = mkPrototypeLauncher {
             name = "persona-terminal-prototype-launcher";
-            actual = "${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-supervisor";
-            command = ''
-              exec ${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-supervisor "$@"
-            '';
+            actual = "${inputs.persona-terminal.packages.${system}.default}/bin/terminal-supervisor";
+            command = fixtureCommand;
           };
           prototypeMessageLauncher = mkPrototypeLauncher {
             name = "persona-message-prototype-launcher";
@@ -219,17 +224,13 @@
           };
           prototypeIntrospectLauncher = mkPrototypeLauncher {
             name = "persona-introspect-prototype-launcher";
-            actual = "${inputs.persona-introspect.packages.${system}.default}/bin/persona-introspect-daemon";
-            command = ''
-              exec ${inputs.persona-introspect.packages.${system}.default}/bin/persona-introspect-daemon "$@"
-            '';
+            actual = "${inputs.persona-introspect.packages.${system}.default}/bin/introspect-daemon";
+            command = fixtureCommand;
           };
           prototypeSpiritLauncher = mkPrototypeLauncher {
             name = "persona-spirit-prototype-launcher";
-            actual = "${inputs.persona-spirit.packages.${system}.persona-spirit-daemon}/bin/persona-spirit-daemon";
-            command = ''
-              exec ${inputs.persona-spirit.packages.${system}.persona-spirit-daemon}/bin/persona-spirit-daemon "$@"
-            '';
+            actual = "${inputs.persona-spirit.packages.${system}.daemon}/bin/spirit-daemon";
+            command = fixtureCommand;
           };
           prototypeComponentLaunchers = pkgs.symlinkJoin {
             name = "persona-prototype-component-launchers";
@@ -247,7 +248,7 @@
           };
           threeHarnessTerminalLauncher = mkPrototypeLauncher {
             name = "persona-three-harness-terminal-launcher";
-            actual = "${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-supervisor";
+            actual = "${inputs.persona-terminal.packages.${system}.default}/bin/terminal-supervisor";
             command = ''
               if [ "''${PERSONA_PEER_0_COMPONENT:?}" != "message" ]; then
                 printf 'expected first peer to be message, got %s\n' "$PERSONA_PEER_0_COMPONENT" >&2
@@ -288,7 +289,7 @@
               RUNNER
               chmod +x "$runner"
 
-              ${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-daemon \
+              ${inputs.persona-terminal.packages.${system}.default}/bin/terminal-daemon \
                 --store "$PERSONA_STATE_PATH" \
                 --name "$terminal_name" \
                 --control-socket "$cell_control_socket" \
@@ -316,7 +317,7 @@
               done
               test -S "$cell_control_socket"
 
-              ${inputs.persona-terminal.packages.${system}.default}/bin/persona-terminal-supervisor "$@"
+              ${inputs.persona-terminal.packages.${system}.default}/bin/terminal-supervisor "$@"
             '';
           };
           threeHarnessComponentLaunchers = pkgs.symlinkJoin {
@@ -369,10 +370,10 @@
               }/bin/message-validate-output
               export PERSONA_TERMINAL_SIGNAL_BIN=${
                 inputs.persona-terminal.packages.${system}.default
-              }/bin/persona-terminal-signal
+              }/bin/terminal-signal
               export PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN=${
                 inputs.persona-terminal.packages.${system}.default
-              }/bin/persona-terminal-validate-capture
+              }/bin/terminal-validate-capture
               export PERSONA_THREE_HARNESS_LAUNCHERS=${threeHarnessComponentLaunchers}
               exec ${pkgs.bash}/bin/bash ${./scripts/persona-daemon-three-harness-chain-smoke} "$@"
             '';
@@ -425,10 +426,10 @@
               }/bin/message-validate-output
               export PERSONA_TERMINAL_SIGNAL_BIN=${
                 inputs.persona-terminal.packages.${system}.default
-              }/bin/persona-terminal-signal
+              }/bin/terminal-signal
               export PERSONA_TERMINAL_VALIDATE_CAPTURE_BIN=${
                 inputs.persona-terminal.packages.${system}.default
-              }/bin/persona-terminal-validate-capture
+              }/bin/terminal-validate-capture
               export PERSONA_ROUTER_EXECUTABLE=${prototypeComponentLaunchers}/bin/persona-router-prototype-launcher
               export PERSONA_MESSAGE_DAEMON_EXECUTABLE=${prototypeComponentLaunchers}/bin/persona-message-prototype-launcher
               export PERSONA_THREE_HARNESS_LAUNCHERS=${threeHarnessComponentLaunchers}
@@ -1923,36 +1924,33 @@
                   fi
                   grep -Fx "supervision_mode=600" "$capture"
                   test -f "$work/run/default/$component.envelope"
-                  grep -Fq "(default " "$work/run/default/$component.envelope"
-                  grep -Fq "$component.sock" "$work/run/default/$component.envelope"
-                  grep -Fq "$component.supervision.sock" "$work/run/default/$component.envelope"
-                  grep -Fq "[$work/persona.sock]" "$work/run/default/$component.envelope"
+                  test "$(stat -c '%a' "$work/run/default/$component.envelope")" = "600"
                 done
 
                 grep -Fx "actual=${
                   inputs.persona-mind.packages.${system}.default
-                }/bin/mind" "$work/state/default/mind.env"
+                }/bin/mind-daemon" "$work/state/default/mind.env"
                 grep -Fx "actual=${
                   inputs.persona-router.packages.${system}.default
                 }/bin/router-daemon" "$work/state/default/router.env"
                 grep -Fx "actual=${
                   inputs.persona-system.packages.${system}.default
-                }/bin/persona-system-daemon" "$work/state/default/system.env"
+                }/bin/system-daemon" "$work/state/default/system.env"
                 grep -Fx "actual=${
                   inputs.persona-harness.packages.${system}.default
-                }/bin/persona-harness-daemon" "$work/state/default/harness.env"
+                }/bin/harness-daemon" "$work/state/default/harness.env"
                 grep -Fx "actual=${
                   inputs.persona-terminal.packages.${system}.default
-                }/bin/persona-terminal-supervisor" "$work/state/default/terminal.env"
+                }/bin/terminal-supervisor" "$work/state/default/terminal.env"
                 grep -Fx "actual=${
                   inputs.persona-message.packages.${system}.default
                 }/bin/message-daemon" "$work/state/default/message.env"
                 grep -Fx "actual=${
                   inputs.persona-introspect.packages.${system}.default
-                }/bin/persona-introspect-daemon" "$work/state/default/introspect.env"
+                }/bin/introspect-daemon" "$work/state/default/introspect.env"
                 grep -Fx "actual=${
-                  inputs.persona-spirit.packages.${system}.persona-spirit-daemon
-                }/bin/persona-spirit-daemon" "$work/state/default/spirit.env"
+                  inputs.persona-spirit.packages.${system}.daemon
+                }/bin/spirit-daemon" "$work/state/default/spirit.env"
 
                 for socket in mind router system harness terminal message introspect spirit; do
                   path="$work/run/default/$socket.sock"

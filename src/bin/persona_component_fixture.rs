@@ -83,6 +83,10 @@ impl FixtureProcess {
             self.supervision_socket.mode_text(),
             self.peer_count,
         );
+        let text = match env::var("PERSONA_ACTUAL_EXECUTABLE") {
+            Ok(actual) => format!("{text}actual={actual}\n"),
+            Err(_) => text,
+        };
         fs::write(capture, text).expect("component capture written");
     }
 
