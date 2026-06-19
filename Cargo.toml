@@ -94,3 +94,6 @@ path = "src/bin/persona_component_fixture.rs"
 [lints.rust]
 unused = "warn"
 dead_code = "warn"
+
+[patch.crates-io]
+kameo = { git = "https://github.com/LiGoldragon/kameo.git", branch = "main" }

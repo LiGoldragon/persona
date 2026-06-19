@@ -435,8 +435,7 @@ dependencies = [
 [[package]]
 name = "kameo"
 version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1dfd134d7a2c6ec05ee696dcbf3f7a034bdb97ecc623e981014652dcd124d77"
+source = "git+https://github.com/LiGoldragon/kameo.git?branch=main#f491b45d7dcb55e5837eddde3d5d7ca8ceaa9f01"
 dependencies = [
  "downcast-rs",
  "dyn-clone",
@@ -448,22 +447,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "kameo"
-version = "0.20.0"
-source = "git+https://github.com/LiGoldragon/kameo.git?branch=main#f491b45d7dcb55e5837eddde3d5d7ca8ceaa9f01"
-dependencies = [
- "downcast-rs",
- "dyn-clone",
- "futures",
- "serde",
- "tokio",
-]
-
-[[package]]
 name = "kameo_macros"
 version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16c9002c9ecd16e1636f566c0bf62db48e70d86ed0d0a91b398955e883217a23"
+source = "git+https://github.com/LiGoldragon/kameo.git?branch=main#f491b45d7dcb55e5837eddde3d5d7ca8ceaa9f01"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -643,7 +629,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 name = "persona"
 version = "0.2.0"
 dependencies = [
- "kameo 0.20.0 (git+https://github.com/LiGoldragon/kameo.git?branch=main)",
+ "kameo",
  "libc",
  "message",
  "meta-signal-persona",
@@ -1289,7 +1275,7 @@ name = "triad-runtime"
 version = "0.6.1"
 source = "git+https://github.com/LiGoldragon/triad-runtime.git?branch=main#7a84034b81148abe0105fb103d782d82c45c170f"
 dependencies = [
- "kameo 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "kameo",
  "rkyv",
  "rustix",
  "signal-frame",
