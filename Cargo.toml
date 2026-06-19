@@ -25,7 +25,7 @@ name = "persona-write-configuration"
 path = "src/bin/persona_write_configuration.rs"
 
 [dependencies]
-kameo                  = { version = "0.20", default-features = false }
+kameo                  = { git = "https://github.com/LiGoldragon/kameo.git", branch = "main", default-features = false }
 libc                   = "0.2"
 message                = { git = "https://github.com/LiGoldragon/message.git", branch = "main" }
 meta-signal-upgrade    = { git = "https://github.com/LiGoldragon/meta-signal-upgrade.git", branch = "main", features = ["nota-text"] }

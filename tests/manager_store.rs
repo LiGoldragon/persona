@@ -1,3 +1,4 @@
+use kameo::actor::{ActorStateAbsence, ActorTerminalReason};
 use meta_signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, Query,
 };
@@ -719,9 +720,17 @@ async fn constraint_manager_store_close_protocol_releases_storage_lock_before_sh
         .await
         .expect("router spawn event appends");
 
-    ManagerStore::close_and_stop(store)
+    store
+        .ask(persona::manager_store::CloseManagerStore)
         .await
-        .expect("manager store close protocol completes");
+        .expect("manager store closes its tables before stop");
+    store
+        .stop_gracefully()
+        .await
+        .expect("manager store stop request is accepted");
+    let shutdown = store.wait_for_shutdown().await;
+    assert_eq!(shutdown.state, ActorStateAbsence::Dropped);
+    assert_eq!(shutdown.reason, ActorTerminalReason::Stopped);
 
     let reopened = ManagerStore::start(fixture.location())
         .expect("manager store sema path reopens after graceful shutdown and wait_for_shutdown");
