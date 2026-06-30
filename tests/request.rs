@@ -110,7 +110,7 @@ fn engine_status_reply_renders_as_nota() {
         generation: EngineGeneration::new(2),
         phase: EnginePhase::Starting,
         components: vec![ComponentStatus {
-            name: ComponentName::new("persona-mind"),
+            name: ComponentName::new("mind"),
             kind: ComponentKind::Mind,
             desired_state: ComponentDesiredState::Running,
             health: ComponentHealth::Starting,
@@ -122,7 +122,7 @@ fn engine_status_reply_renders_as_nota() {
         output.starts_with("(EngineStatusReport (2 Starting ["),
         "output: {output}"
     );
-    assert!(output.contains("(persona-mind Mind Running Starting)"));
+    assert!(output.contains("(mind Mind Running Starting)"));
 }
 
 #[test]

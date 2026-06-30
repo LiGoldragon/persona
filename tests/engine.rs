@@ -48,7 +48,7 @@ impl TemporaryEngineRoot {
 
     fn closure_command(component: EngineComponent) -> ComponentCommand {
         let command_name = match component {
-            EngineComponent::Mind => "persona-mind-daemon",
+            EngineComponent::Mind => "mind-daemon",
             EngineComponent::Orchestrate => "persona-orchestrate-daemon",
             EngineComponent::Router => "persona-router-daemon",
             EngineComponent::System => "persona-system-daemon",

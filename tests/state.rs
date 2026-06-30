@@ -18,7 +18,7 @@ fn default_catalog_names_engine_components() {
     assert_eq!(
         names,
         vec![
-            "persona-mind",
+            "mind",
             "persona-router",
             "persona-system",
             "persona-harness",

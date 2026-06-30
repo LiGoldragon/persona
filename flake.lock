@@ -137,7 +137,7 @@
     "fenix_3": {
       "inputs": {
         "nixpkgs": [
-          "persona-mind",
+          "mind",
           "nixpkgs"
         ],
         "rust-analyzer-src": "rust-analyzer-src_3"
@@ -636,7 +636,7 @@
         "url": "ssh://git@github.com/LiGoldragon/message.git"
       }
     },
-    "persona-mind": {
+    "mind": {
       "inputs": {
         "crane": "crane_3",
         "fenix": "fenix_3",
@@ -804,7 +804,7 @@
         "persona-harness": "persona-harness",
         "persona-introspect": "persona-introspect",
         "persona-message": "persona-message",
-        "persona-mind": "persona-mind",
+        "mind": "mind",
         "persona-orchestrate": "persona-orchestrate",
         "persona-router": "persona-router",
         "persona-spirit": "persona-spirit",

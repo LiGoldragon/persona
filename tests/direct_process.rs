@@ -994,7 +994,7 @@ async fn constraint_component_launcher_observes_natural_child_exit_and_appends_e
     let EngineEventBody::ComponentExited(exited) = exited_events[0].body() else {
         unreachable!();
     };
-    assert_eq!(exited.component().as_str(), "persona-mind");
+    assert_eq!(exited.component().as_str(), "mind");
     assert_eq!(exited.exit_code(), Some(0));
 
     launcher.stop_gracefully().await.expect("launcher stops");

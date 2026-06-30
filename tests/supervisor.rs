@@ -204,7 +204,7 @@ async fn constraint_engine_supervisor_launches_message_router_topology_without_f
     }
     assert!(
         !fixture.component_capture(EngineComponent::Mind).exists(),
-        "message-router topology must not launch persona-mind"
+        "message-router topology must not launch mind"
     );
 
     let events = store

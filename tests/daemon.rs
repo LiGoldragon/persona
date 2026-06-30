@@ -286,7 +286,7 @@ async fn constraint_persona_daemon_launches_message_router_topology_through_engi
     }
     assert!(
         !fixture.component_capture(EngineComponent::Mind).exists(),
-        "message-router topology must not launch persona-mind"
+        "message-router topology must not launch mind"
     );
 
     fixture.stop_daemon();

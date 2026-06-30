@@ -18,7 +18,7 @@
     persona-introspect.inputs.fenix.follows = "fenix";
     persona-introspect.inputs.crane.follows = "crane";
     persona-message.url = "git+ssh://git@github.com/LiGoldragon/message.git?ref=main";
-    persona-mind.url = "github:LiGoldragon/mind";
+    mind.url = "github:LiGoldragon/mind";
     persona-orchestrate.url = "github:LiGoldragon/orchestrate";
     persona-orchestrate.inputs.nixpkgs.follows = "nixpkgs";
     persona-orchestrate.inputs.fenix.follows = "fenix";
@@ -184,8 +184,8 @@
             exec ${self.packages.${system}.default}/bin/persona-component-fixture "$@"
           '';
           prototypeMindLauncher = mkPrototypeLauncher {
-            name = "persona-mind-prototype-launcher";
-            actual = "${inputs.persona-mind.packages.${system}.default}/bin/mind-daemon";
+            name = "mind-prototype-launcher";
+            actual = "${inputs.mind.packages.${system}.default}/bin/mind-daemon";
             command = fixtureCommand;
           };
           prototypeOrchestrateLauncher = mkPrototypeLauncher {
@@ -571,7 +571,7 @@
           persona-harness = inputs.persona-harness.packages.${system}.default;
           persona-introspect = inputs.persona-introspect.packages.${system}.default;
           persona-message = inputs.persona-message.packages.${system}.default;
-          persona-mind = inputs.persona-mind.packages.${system}.default;
+          mind = inputs.mind.packages.${system}.default;
           persona-orchestrate = inputs.persona-orchestrate.packages.${system}.default;
           persona-router = inputs.persona-router.packages.${system}.default;
           meta-signal-persona = inputs.meta-signal-persona.packages.${system}.default;
@@ -621,7 +621,7 @@
           );
           persona-harness = inputs.persona-harness.checks.${system}.default;
           persona-message = inputs.persona-message.checks.${system}.default;
-          persona-mind = inputs.persona-mind.checks.${system}.default;
+          mind = inputs.mind.checks.${system}.default;
           persona-orchestrate = inputs.persona-orchestrate.checks.${system}.test;
           persona-router = inputs.persona-router.checks.${system}.default;
           meta-signal-persona-build = inputs.meta-signal-persona.checks.${system}.build;
@@ -1858,7 +1858,7 @@
                 export PERSONA_MANAGER_STORE="$work/manager.sema"
                 export PERSONA_STATE_ROOT="$work/state"
                 export PERSONA_RUN_ROOT="$work/run"
-                export PERSONA_MIND_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-mind-prototype-launcher
+                export PERSONA_MIND_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/mind-prototype-launcher
                 export PERSONA_ROUTER_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-router-prototype-launcher
                 export PERSONA_SYSTEM_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-system-prototype-launcher
                 export PERSONA_HARNESS_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-harness-prototype-launcher
@@ -1928,7 +1928,7 @@
                 done
 
                 grep -Fx "actual=${
-                  inputs.persona-mind.packages.${system}.default
+                  inputs.mind.packages.${system}.default
                 }/bin/mind-daemon" "$work/state/default/mind.env"
                 grep -Fx "actual=${
                   inputs.persona-router.packages.${system}.default

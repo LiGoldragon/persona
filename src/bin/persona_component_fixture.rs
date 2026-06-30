@@ -128,8 +128,12 @@ impl FixtureComponent {
             "spirit" => ComponentKind::Spirit,
             other => panic!("unknown component name: {other}"),
         };
+        let signal_name = match name.as_str() {
+            "mind" => String::from("mind"),
+            _ => format!("persona-{name}"),
+        };
         Self {
-            signal_name: ComponentName::new(format!("persona-{name}")),
+            signal_name: ComponentName::new(signal_name),
             name,
             kind,
         }

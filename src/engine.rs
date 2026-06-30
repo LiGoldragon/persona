@@ -442,7 +442,7 @@ impl EngineComponent {
 
     pub fn from_component_name(component: &signal_persona::ComponentName) -> Option<Self> {
         match component.as_str() {
-            "persona-mind" => Some(Self::Mind),
+            "mind" => Some(Self::Mind),
             "persona-orchestrate" => Some(Self::Orchestrate),
             "persona-router" => Some(Self::Router),
             "persona-system" => Some(Self::System),
@@ -541,7 +541,7 @@ impl EngineComponent {
 
     pub const fn as_component_name(self) -> &'static str {
         match self {
-            Self::Mind => "persona-mind",
+            Self::Mind => "mind",
             Self::Orchestrate => "persona-orchestrate",
             Self::Router => "persona-router",
             Self::System => "persona-system",
