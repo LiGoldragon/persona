@@ -691,6 +691,14 @@ The order applies per-engine. When Persona supervises multiple
 engines, each engine's component federation follows this sequence
 independently.
 
+Persona lands before the Spirit cutover. The engine-management daemon
+comes up first so it can drive component lifecycle from day one; only
+then does Spirit migrate onto the substrate behind it. The supervisor's
+higher permission is infrastructure-shaped — permission to spawn,
+restart, and observe — while Spirit's authority is cognitive; the
+infrastructure layer is up and supervising before the cognitive apex
+animates.
+
 Host deployment is systemd-shaped. The production `persona` daemon is the
 host-level manager and should be started by a NixOS module as a systemd
 service. Component daemons are represented to the manager as `ComponentUnit`
@@ -1235,6 +1243,14 @@ Migration rules:
   instances.
 - The daemon runs as the dedicated `persona` system user, not as root and not
   as the operator's user.
+- Persona's privilege is scoped to its supervisory role, not ambient root. Its
+  OS authority covers only what supervision requires: spawning, restarting, and
+  observing component daemons; managing systemd units; routing public client
+  traffic via FD-handoff; inspecting peer credentials; minting spawn envelopes.
+  This scoped privilege is the basis for Persona's process-lifecycle role in
+  component upgrades — it is *because* Persona is privileged infrastructure that
+  it can drive versioned unit starts and stable-socket handoff on the engine's
+  behalf.
 - `persona` may wire Nix inputs, checks, deployment modules, and
   cross-component witness tests.
 - The meta repo exposes Nix apps for stateful integration runners; recurring
