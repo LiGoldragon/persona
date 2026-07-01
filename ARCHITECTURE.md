@@ -103,8 +103,7 @@ identity) lives in the criome ecosystem.
 > eventually-self-hosting stack is one Sema-on-Sema substrate that
 > subsumes these pieces; today's Persona is a realization step
 > toward it, built rightly for the scope it serves now. See
-> `~/primary/ESSENCE.md` §"Today and eventually — different things,
-> different names".
+> `~/primary/ARCHITECTURE.md` §"Workspace vision and intent".
 >
 > Eventual cross-trust-domain federation (multiple Persona deployments,
 > distinct organizations, schema evolution across the federation) is
@@ -754,8 +753,8 @@ test. Omitted components use the Nix-provided default.
   The manager writes the envelope file at
   `/var/run/persona/<engine-id>/<component>.envelope` at spawn
   time; the child reads it via `signal-engine-management`'s typed decoder
-  and proceeds. Per ESSENCE §"Infrastructure mints identity, time,
-  and sender," the child does not invent its socket path or
+  and proceeds. Per `~/primary/ARCHITECTURE.md` §"Workspace vision and
+  intent", the child does not invent its socket path or
   component name.
 
 The child reads only the `SpawnEnvelope`. It does not see executable
@@ -832,7 +831,7 @@ primitive for *"another process has called `bind(2)` on a path I just minted
 for it."* The manager's startup-time check that a child's domain socket
 exists and has the requested mode is a **bounded reachability probe across
 a process boundary** — *"is the child alive and listening"* — not state-change
-polling. It carries `ESSENCE.md` §"Polling is forbidden" §"Named carve-outs"'s
+polling. It carries `~/primary/ARCHITECTURE.md` §"Workspace vision and intent"'s
 reachability-probe carveout. The probe terminates: success appends
 `ComponentReady`; timeout returns a typed `ComponentReadinessTimeout`. No
 manager loop continues to ask *"did anything change?"* after the probe
@@ -1375,7 +1374,7 @@ Migration rules:
   all return non-error replies over the child's engine-management socket. Filesystem
   socket existence alone does not promote a component to `Ready`.
 - Manager startup-time socket reachability is a bounded reachability probe
-  carrying the `ESSENCE.md` §"Named carve-outs" carveout, not ongoing
+  carrying the `~/primary/ARCHITECTURE.md` §"Workspace vision and intent" carveout, not ongoing
   state-change polling. Ongoing health observation is push-shaped from the
   component's engine-management socket.
 - Each `DirectProcessLauncher`-spawned child is owned by a dedicated watcher
@@ -1703,8 +1702,7 @@ The long-term resolution is **content-addressed schema versioning
 plus translation reducers**:
 
 - On the eventual Sema-on-Sema stack (per
-  `~/primary/ESSENCE.md` §"Today and eventually" + §"Versioning on
-  the eventual stack"), Sema's purity makes every schema content-
+  `~/primary/ARCHITECTURE.md` §"Workspace vision and intent"), Sema's purity makes every schema content-
   addressable by hash. The schema-hash is the identity; equal hash
   means equal schema by construction.
 - Components carry **multiple schema versions in their runtime**.
