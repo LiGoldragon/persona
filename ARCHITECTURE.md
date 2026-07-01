@@ -93,8 +93,8 @@ controllers.
 
 This positioning is upstream of every individual persona-* component.
 It is the criterion that decides what belongs in the persona ecosystem:
-durable-agent work belongs here; one-shot operator actions (deploy CLIs)
-live in `lojix-cli` / `CriomOS`; declarative cluster data lives in
+durable-agent work belongs here; one-shot operator actions (deploy requests)
+live in Lojix / CriomOS; declarative cluster data lives in
 `goldragon`; auth/security/identity infrastructure (host trust, cluster
 identity) lives in the criome ecosystem.
 
@@ -1461,8 +1461,8 @@ Migration rules:
   shim for legacy systems; deliberate non-expansion). It is **not inside
   today's `criome` daemon** (today's criome is the sema-ecosystem records
   validator). The eventual-Criome shape eventually subsumes both, but today
-  they are separate components. One-shot deploy actions live in `lojix-cli`
-  / `CriomOS`. Declarative cluster proposals live in `goldragon`.
+  they are separate components. One-shot deploy requests live in Lojix /
+  CriomOS. Declarative cluster proposals live in `goldragon`.
 - Internal sockets are mode `0600`, owner `persona`; `message.sock` is mode
   `0660`, group matches engine owner's group.
 - `MessageOrigin` is stamped on every router-accepted message before commit.
