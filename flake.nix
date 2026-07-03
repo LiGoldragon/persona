@@ -17,13 +17,13 @@
     persona-introspect.inputs.nixpkgs.follows = "nixpkgs";
     persona-introspect.inputs.fenix.follows = "fenix";
     persona-introspect.inputs.crane.follows = "crane";
-    persona-message.url = "git+ssh://git@github.com/LiGoldragon/message.git?ref=main";
+    persona-message.url = "github:LiGoldragon/message";
     mind.url = "github:LiGoldragon/mind";
     persona-orchestrate.url = "github:LiGoldragon/orchestrate";
     persona-orchestrate.inputs.nixpkgs.follows = "nixpkgs";
     persona-orchestrate.inputs.fenix.follows = "fenix";
     persona-orchestrate.inputs.crane.follows = "crane";
-    persona-router.url = "git+ssh://git@github.com/LiGoldragon/router.git?ref=main";
+    persona-router.url = "github:LiGoldragon/router";
     persona-spirit.url = "github:LiGoldragon/spirit";
     persona-spirit.inputs.nixpkgs.follows = "nixpkgs";
     persona-spirit.inputs.fenix.follows = "fenix";

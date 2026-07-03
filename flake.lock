@@ -701,16 +701,15 @@
       "locked": {
         "lastModified": 1782838269,
         "narHash": "sha256-kSDdRx6M+xy1A1n+f8YVp7/vsVrozTzusz70bBKqawk=",
-        "ref": "main",
+        "owner": "LiGoldragon",
+        "repo": "message",
         "rev": "d7dfb00576f602dbbfdfec1dfdab3af6cd972970",
-        "revCount": 98,
-        "type": "git",
-        "url": "ssh://git@github.com/LiGoldragon/message.git"
+        "type": "github"
       },
       "original": {
-        "ref": "main",
-        "type": "git",
-        "url": "ssh://git@github.com/LiGoldragon/message.git"
+        "owner": "LiGoldragon",
+        "repo": "message",
+        "type": "github"
       }
     },
     "persona-orchestrate": {
@@ -744,16 +743,15 @@
       "locked": {
         "lastModified": 1782838261,
         "narHash": "sha256-WJlBWQvC1Qvt3ZTozAiU6heQ9T85v0WfDNM2fiFpQJk=",
-        "ref": "main",
+        "owner": "LiGoldragon",
+        "repo": "router",
         "rev": "14f855747d0a4c30881960046802dd2be0cd8907",
-        "revCount": 126,
-        "type": "git",
-        "url": "ssh://git@github.com/LiGoldragon/router.git"
+        "type": "github"
       },
       "original": {
-        "ref": "main",
-        "type": "git",
-        "url": "ssh://git@github.com/LiGoldragon/router.git"
+        "owner": "LiGoldragon",
+        "repo": "router",
+        "type": "github"
       }
     },
     "persona-spirit": {
