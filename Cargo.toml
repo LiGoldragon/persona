@@ -27,19 +27,19 @@ path = "src/bin/persona_write_configuration.rs"
 [dependencies]
 kameo                  = { git = "https://github.com/LiGoldragon/kameo.git", branch = "main", default-features = false }
 libc                   = "0.2"
-message                = { git = "https://github.com/LiGoldragon/message.git", branch = "main" }
+message                = { git = "https://github.com/LiGoldragon/message.git", branch = "synchronizer" }
 meta-signal-upgrade    = { git = "https://github.com/LiGoldragon/meta-signal-upgrade.git", branch = "main", features = ["nota-text"] }
 nota-next              = { git = "https://github.com/LiGoldragon/nota-next.git", branch = "main" }
 meta-signal-persona   = { git = "https://github.com/LiGoldragon/meta-signal-persona.git", branch = "main" }
 rkyv                   = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
 sema-engine            = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
 signal-frame           = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "main" }
-signal-harness            = { git = "https://github.com/LiGoldragon/signal-harness.git", branch = "main" }
+signal-harness            = { git = "https://github.com/LiGoldragon/signal-harness.git", branch = "synchronizer" }
 signal-introspect         = { git = "https://github.com/LiGoldragon/signal-introspect.git", branch = "main" }
 signal-message            = { git = "https://github.com/LiGoldragon/signal-message.git", branch = "main" }
 signal-mind               = { git = "https://github.com/LiGoldragon/signal-mind.git", branch = "main" }
 signal-persona            = { git = "https://github.com/LiGoldragon/signal-persona.git", branch = "main" }
-signal-router             = { git = "https://github.com/LiGoldragon/signal-router.git", branch = "main" }
+signal-router             = { git = "https://github.com/LiGoldragon/signal-router.git", branch = "synchronizer" }
 signal-system             = { git = "https://github.com/LiGoldragon/signal-system.git", branch = "main" }
 signal-terminal           = { git = "https://github.com/LiGoldragon/signal-terminal.git", branch = "main" }
 strum                  = { version = "0.28", features = ["derive"] }

@@ -499,7 +499,7 @@ dependencies = [
 [[package]]
 name = "message"
 version = "0.5.0"
-source = "git+https://github.com/LiGoldragon/message.git?branch=main#33ced7994d05944a0989b06e56d48d6532d44a66"
+source = "git+https://github.com/LiGoldragon/message.git?branch=synchronizer#2ebd32f07ad46a465ee1e1a3cb7e9ea64ad316aa"
 dependencies = [
  "meta-signal-message",
  "rkyv",
@@ -934,8 +934,8 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "signal-frame"
-version = "0.2.1"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#166bda84dc63bf8461fff11a41c43d6a1c92a941"
+version = "0.3.0"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#0027ea3cef353b1c168ca6862e40c6077a853642"
 dependencies = [
  "nota-next",
  "paste",
@@ -947,7 +947,7 @@ dependencies = [
 [[package]]
 name = "signal-frame-macros"
 version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#166bda84dc63bf8461fff11a41c43d6a1c92a941"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#0027ea3cef353b1c168ca6862e40c6077a853642"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -956,8 +956,8 @@ dependencies = [
 
 [[package]]
 name = "signal-harness"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-harness.git?branch=main#623baf60312c0e5a711012a533eab87520ed9235"
+version = "0.2.0"
+source = "git+https://github.com/LiGoldragon/signal-harness.git?branch=synchronizer#746b5347150ad0b12775310defa7c07d04044dd9"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -1026,7 +1026,7 @@ dependencies = [
 [[package]]
 name = "signal-router"
 version = "0.2.0"
-source = "git+https://github.com/LiGoldragon/signal-router.git?branch=main#f81d46469e948b1d29d77e226f53bfe679eeb023"
+source = "git+https://github.com/LiGoldragon/signal-router.git?branch=synchronizer#df94b8bf4ccc3fb943c9ac13fe2dc78836779fb6"
 dependencies = [
  "rkyv",
  "schema-rust-next",
