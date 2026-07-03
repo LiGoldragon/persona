@@ -27,37 +27,37 @@ path = "src/bin/persona_write_configuration.rs"
 [dependencies]
 kameo                  = { git = "https://github.com/LiGoldragon/kameo.git", branch = "main", default-features = false }
 libc                   = "0.2"
-message                = { git = "https://github.com/LiGoldragon/message.git", branch = "main" }
-meta-signal-upgrade    = { git = "https://github.com/LiGoldragon/meta-signal-upgrade.git", branch = "main", features = ["nota-text"] }
+message                = { git = "https://github.com/LiGoldragon/message.git", branch = "drop-next" }
+meta-signal-upgrade    = { git = "https://github.com/LiGoldragon/meta-signal-upgrade.git", branch = "drop-next", features = ["nota-text"] }
 nota              = { git = "https://github.com/LiGoldragon/nota.git", branch = "main" }
-meta-signal-persona   = { git = "https://github.com/LiGoldragon/meta-signal-persona.git", branch = "main" }
+meta-signal-persona   = { git = "https://github.com/LiGoldragon/meta-signal-persona.git", branch = "drop-next" }
 rkyv                   = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
 sema-engine            = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
-signal-frame           = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "main" }
-signal-harness            = { git = "https://github.com/LiGoldragon/signal-harness.git", branch = "main" }
-signal-introspect         = { git = "https://github.com/LiGoldragon/signal-introspect.git", branch = "main" }
-signal-message            = { git = "https://github.com/LiGoldragon/signal-message.git", branch = "main" }
-signal-mind               = { git = "https://github.com/LiGoldragon/signal-mind.git", branch = "main" }
-signal-persona            = { git = "https://github.com/LiGoldragon/signal-persona.git", branch = "main" }
-signal-router             = { git = "https://github.com/LiGoldragon/signal-router.git", branch = "main" }
-signal-system             = { git = "https://github.com/LiGoldragon/signal-system.git", branch = "main" }
-signal-terminal           = { git = "https://github.com/LiGoldragon/signal-terminal.git", branch = "main" }
+signal-frame           = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "drop-next" }
+signal-harness            = { git = "https://github.com/LiGoldragon/signal-harness.git", branch = "drop-next" }
+signal-introspect         = { git = "https://github.com/LiGoldragon/signal-introspect.git", branch = "drop-next" }
+signal-message            = { git = "https://github.com/LiGoldragon/signal-message.git", branch = "drop-next" }
+signal-mind               = { git = "https://github.com/LiGoldragon/signal-mind.git", branch = "drop-next" }
+signal-persona            = { git = "https://github.com/LiGoldragon/signal-persona.git", branch = "drop-next" }
+signal-router             = { git = "https://github.com/LiGoldragon/signal-router.git", branch = "drop-next" }
+signal-system             = { git = "https://github.com/LiGoldragon/signal-system.git", branch = "drop-next" }
+signal-terminal           = { git = "https://github.com/LiGoldragon/signal-terminal.git", branch = "drop-next" }
 strum                  = { version = "0.28", features = ["derive"] }
 thiserror              = "2"
 tokio                  = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "process", "time"] }
-triad-runtime          = { git = "https://github.com/LiGoldragon/triad-runtime.git", branch = "main" }
+triad-runtime          = { git = "https://github.com/LiGoldragon/triad-runtime.git", branch = "drop-next" }
 unix-ancillary         = "0.2"
-upgrade                = { git = "https://github.com/LiGoldragon/upgrade.git", branch = "main" }
-version-projection     = { git = "https://github.com/LiGoldragon/version-projection.git", branch = "main" }
+upgrade                = { git = "https://github.com/LiGoldragon/upgrade.git", branch = "drop-next" }
+version-projection     = { git = "https://github.com/LiGoldragon/version-projection.git", branch = "drop-next" }
 zbus                   = { version = "5.15", default-features = false, features = ["tokio"] }
 
 [build-dependencies]
-schema-rust = { git = "https://github.com/LiGoldragon/schema-rust.git", branch = "main" }
+schema-rust = { git = "https://github.com/LiGoldragon/schema-rust.git", branch = "drop-next" }
 
 [dev-dependencies]
-schema = { git = "https://github.com/LiGoldragon/schema.git", branch = "main" }
-signal-sema = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "main" }
-signal-upgrade = { git = "https://github.com/LiGoldragon/signal-upgrade.git", branch = "main" }
+schema = { git = "https://github.com/LiGoldragon/schema.git", branch = "drop-next" }
+signal-sema = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "drop-next" }
+signal-upgrade = { git = "https://github.com/LiGoldragon/signal-upgrade.git", branch = "drop-next" }
 
 # ─── Wire-test shim binaries (for nix-chained tests) ──────
 # These exercise signal-message end-to-end through
