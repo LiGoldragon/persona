@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use nota_next::{NotaDecode, NotaEncode};
+use nota::{NotaDecode, NotaEncode};
 
 #[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ExecutablePath(String);

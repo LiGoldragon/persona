@@ -1,6 +1,6 @@
 use meta_signal_persona as contract;
 use meta_signal_upgrade::{ForceReason, QuarantineReason, RollbackReason};
-use nota_next::{NotaDecode, NotaEncode, NotaSource};
+use nota::{NotaDecode, NotaEncode, NotaSource};
 use signal_persona::origin::EngineIdentifier;
 
 pub use crate::engine_event::{EngineEventBodyKind, EngineEventSourceKind};
@@ -37,7 +37,7 @@ impl EngineEventReport {
         }
     }
 
-    pub fn from_nota(text: &str) -> Result<Self, nota_next::NotaDecodeError> {
+    pub fn from_nota(text: &str) -> Result<Self, nota::NotaDecodeError> {
         NotaSource::new(text).parse::<Self>()
     }
 
@@ -190,7 +190,7 @@ impl EngineStatusReport {
         }
     }
 
-    pub fn from_nota(text: &str) -> Result<Self, nota_next::NotaDecodeError> {
+    pub fn from_nota(text: &str) -> Result<Self, nota::NotaDecodeError> {
         NotaSource::new(text).parse::<Self>()
     }
 

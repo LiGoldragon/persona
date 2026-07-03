@@ -8,7 +8,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("nota decode: {0}")]
-    NotaDecode(#[from] nota_next::NotaDecodeError),
+    NotaDecode(#[from] nota::NotaDecodeError),
 
     #[error("sema engine: {0}")]
     SemaEngine(#[from] sema_engine::Error),

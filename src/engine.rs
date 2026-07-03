@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use nota_next::{NotaDecode, NotaEncode};
+use nota::{NotaDecode, NotaEncode};
 use signal_persona::origin::{
     ComponentName as SignalComponentName, EngineIdentifier, OwnerIdentity, UnixUserIdentifier,
 };

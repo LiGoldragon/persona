@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use nota_next::{Delimiter, NotaBlock, NotaDecode, NotaDecodeError, NotaEncode, NotaSource};
+use nota::{Delimiter, NotaBlock, NotaDecode, NotaDecodeError, NotaEncode, NotaSource};
 use persona::PersonaDaemonConfiguration;
 use thiserror::Error;
 use triad_runtime::{ArgumentError, ComponentArgument, ComponentCommand};
@@ -104,7 +104,7 @@ impl ConfigurationWriteRequest {
 }
 
 impl NotaDecode for ConfigurationWriteRequest {
-    fn from_nota_block(block: &nota_next::Block) -> Result<Self, NotaDecodeError> {
+    fn from_nota_block(block: &nota::Block) -> Result<Self, NotaDecodeError> {
         let body = NotaBlock::new(block)
             .expect_body(Delimiter::Parenthesis, "ConfigurationWriteRequest")?;
         let objects = body.root_objects();

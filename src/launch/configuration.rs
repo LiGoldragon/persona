@@ -1,4 +1,4 @@
-use nota_next::{NotaDecode, NotaEncode};
+use nota::{NotaDecode, NotaEncode};
 use thiserror::Error;
 
 use crate::engine::{EngineComponent, EngineTopology};

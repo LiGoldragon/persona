@@ -29,7 +29,7 @@ kameo                  = { git = "https://github.com/LiGoldragon/kameo.git", bra
 libc                   = "0.2"
 message                = { git = "https://github.com/LiGoldragon/message.git", branch = "main" }
 meta-signal-upgrade    = { git = "https://github.com/LiGoldragon/meta-signal-upgrade.git", branch = "main", features = ["nota-text"] }
-nota-next              = { git = "https://github.com/LiGoldragon/nota-next.git", branch = "main" }
+nota              = { git = "https://github.com/LiGoldragon/nota.git", branch = "main" }
 meta-signal-persona   = { git = "https://github.com/LiGoldragon/meta-signal-persona.git", branch = "main" }
 rkyv                   = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
 sema-engine            = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
@@ -52,10 +52,10 @@ version-projection     = { git = "https://github.com/LiGoldragon/version-project
 zbus                   = { version = "5.15", default-features = false, features = ["tokio"] }
 
 [build-dependencies]
-schema-rust-next = { git = "https://github.com/LiGoldragon/schema-rust-next.git", branch = "main" }
+schema-rust = { git = "https://github.com/LiGoldragon/schema-rust.git", branch = "main" }
 
 [dev-dependencies]
-schema-next = { git = "https://github.com/LiGoldragon/schema-next.git", branch = "main" }
+schema = { git = "https://github.com/LiGoldragon/schema.git", branch = "main" }
 signal-sema = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "main" }
 signal-upgrade = { git = "https://github.com/LiGoldragon/signal-upgrade.git", branch = "main" }
 
