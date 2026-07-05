@@ -211,7 +211,7 @@ when `PERSONA_ORCHESTRATE_EXECUTABLE` points at the launcher or daemon.
 | `signal-terminal` | Ordinary terminal transport, prompt-gate, injection, session-registry-read, and worker-lifecycle contract. |
 | `meta-signal-terminal` | Policy terminal session lifecycle mutation contract (`CreateSession`, `RetireSession`) used by the orchestrate/harness/terminal authority chain. |
 | `nexus` | Semantic text vocabulary written in NOTA syntax. |
-| `nota-next` | NOTA language, typed codec, and derive support. |
+| `nota` | NOTA language, typed codec, and derive support. |
 
 ```mermaid
 graph LR

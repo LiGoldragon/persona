@@ -3,7 +3,7 @@
 //! The uniform daemon skeleton (argv parsing, async task-backed listener
 //! binding, the accept loop, request gating, peer credentials, lifecycle, and
 //! the `ExitReport` entry) is emitted into `src/schema/daemon.rs` by
-//! schema-rust-next's daemon emitter from the [`NexusDaemonShape`] in
+//! schema-rust's daemon emitter from the [`NexusDaemonShape`] in
 //! `build.rs`. Persona's ordinary manager socket is a component-decoded working
 //! listener: persona speaks its own `meta-signal-persona` length-prefixed
 //! `Frame` wire (a relation contract, not a schema-derived `Input`/`Output`

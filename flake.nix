@@ -9,6 +9,9 @@
 
     crane.url = "github:ipetkov/crane";
 
+    rust-build.url = "github:LiGoldragon/rust-build";
+    rust-build.inputs.nixpkgs.follows = "nixpkgs";
+
     persona-harness.url = "github:LiGoldragon/harness";
     persona-harness.inputs.nixpkgs.follows = "nixpkgs";
     persona-harness.inputs.fenix.follows = "fenix";
@@ -28,6 +31,7 @@
     persona-spirit.inputs.nixpkgs.follows = "nixpkgs";
     persona-spirit.inputs.fenix.follows = "fenix";
     persona-spirit.inputs.crane.follows = "crane";
+    persona-spirit.inputs.rust-build.follows = "rust-build";
     meta-signal-persona.url = "github:LiGoldragon/meta-signal-persona";
     meta-signal-persona.inputs.nixpkgs.follows = "nixpkgs";
     meta-signal-persona.inputs.fenix.follows = "fenix";
