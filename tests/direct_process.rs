@@ -15,6 +15,7 @@ use persona::engine::{
     PersonaDaemonPaths,
 };
 use persona::engine_event::EngineEventBody;
+use persona::generated_contract::PayloadString;
 use persona::launch::{
     ComponentCommand, ComponentCommandCatalog, ComponentCommandEntry, ComponentCommandEntryInput,
     ComponentCommandInput, ComponentCommandResolver, EngineLaunchConfiguration,
@@ -24,7 +25,7 @@ use persona::launch::{
 use persona::manager::{EngineManager, HandleEngineRequest};
 use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadEngineEvents};
 use signal_harness::{HarnessDaemonConfiguration, HarnessKind};
-use signal_persona::origin::EngineIdentifier;
+use signal_persona::EngineIdentifier;
 use signal_router::{
     EndpointKind, RouterBootstrapDocument, RouterBootstrapOperation, RouterDaemonConfiguration,
 };
@@ -426,26 +427,24 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
         "router configuration decodes",
     );
     let bootstrap_path = configuration
-        .bootstrap_path
+        .bootstrap_path()
         .expect("three-harness topology writes a router bootstrap");
     let bootstrap = DirectProcessFixture::decode_archive::<RouterBootstrapDocument>(
         std::path::Path::new(bootstrap_path.payload()),
         "router bootstrap decodes",
     );
-    assert_eq!(bootstrap.payload().len(), 9);
+    assert_eq!(bootstrap.operations().len(), 9);
 
     for name in ["initiator", "responder", "reviewer"] {
         assert!(
-            bootstrap.payload().iter().any(|operation| matches!(
+            bootstrap.operations().iter().any(|operation| matches!(
                 operation,
                 RouterBootstrapOperation::RegisterActor(registration)
-                    if registration.payload().name.payload() == name
-                        && registration.payload().process == 0
-                        && matches!(
-                            &registration.payload().endpoint,
-                            Some(endpoint)
-                                if endpoint.kind == EndpointKind::HarnessSocket
-                                    && endpoint.target.ends_with(format!("{name}.sock").as_str())
+                    if registration.actor.name.payload().payload() == name
+                        && *registration.actor.process.payload() == 0
+                        && registration.actor.endpoint().is_some_and(|endpoint|
+                            *endpoint.kind.payload() == EndpointKind::HarnessSocket
+                                && endpoint.target.payload().ends_with(format!("{name}.sock").as_str())
                         )
             )),
             "bootstrap did not register {name}: {bootstrap:?}"
@@ -460,10 +459,11 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
         ("reviewer", "owner"),
     ] {
         assert!(
-            bootstrap.payload().iter().any(|operation| matches!(
+            bootstrap.operations().iter().any(|operation| matches!(
                 operation,
                 RouterBootstrapOperation::GrantDirectMessage(grant)
-                    if grant.from.payload() == from && grant.to.payload() == to
+                    if grant.source_actor.payload().payload() == from
+                        && grant.destination_actor.payload().payload() == to
             )),
             "bootstrap did not include grant {from}->{to}: {bootstrap:?}"
         );
@@ -615,7 +615,10 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
                 .as_str()
         );
         assert_eq!(
-            *terminal_configuration.terminal_socket_mode.payload(),
+            *terminal_configuration
+                .terminal_socket_mode
+                .payload()
+                .payload(),
             0o600
         );
         assert!(
@@ -631,7 +634,10 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
                 .as_str()
         );
         assert_eq!(
-            *terminal_configuration.supervision_socket_mode.payload(),
+            *terminal_configuration
+                .supervision_socket_mode
+                .payload()
+                .payload(),
             0o600
         );
         assert!(
@@ -660,23 +666,25 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
             );
         assert!(
             harness_configuration
-                .harness_socket_path
+                .domain_socket_path
                 .as_str()
                 .ends_with(&format!("{agent_name}.sock")),
             "harness socket path belongs to {agent_name}: {}",
-            harness_configuration.harness_socket_path.as_str()
+            harness_configuration.domain_socket_path.as_str()
         );
-        assert_eq!(harness_configuration.harness_socket_mode.into_u32(), 0o600);
+        assert_eq!(*harness_configuration.domain_socket_mode.payload(), 0o600);
         assert!(
             harness_configuration
-                .supervision_socket_path
+                .engine_management_socket_path
                 .as_str()
                 .ends_with(&format!("{agent_name}.supervision.sock")),
             "harness supervision socket belongs to {agent_name}: {}",
-            harness_configuration.supervision_socket_path.as_str()
+            harness_configuration.engine_management_socket_path.as_str()
         );
         assert_eq!(
-            harness_configuration.supervision_socket_mode.into_u32(),
+            *harness_configuration
+                .engine_management_socket_mode
+                .payload(),
             0o600
         );
         let harness_instance = harness_configuration
@@ -797,7 +805,7 @@ async fn constraint_component_launcher_does_not_block_manager_mailbox() {
 
     let manager_reply = manager
         .ask(HandleEngineRequest::new(EngineRequest::Query(
-            Query::EngineStatus(EngineStatusScope::WholeEngine),
+            Query::EngineStatus(EngineStatusScope::WholeEngine).into(),
         )))
         .await
         .expect("manager mailbox replies while launched child runs");
@@ -897,13 +905,13 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
         signal_persona::ComponentKind::Mind
     );
     assert_eq!(
-        signal_envelope.component_name,
-        signal_persona::origin::ComponentName::Mind
+        signal_envelope.component_principal,
+        signal_persona::ComponentPrincipal::Mind
     );
     assert_eq!(signal_envelope.owner_identity, owner_identity);
     assert!(
         signal_envelope
-            .state_dir
+            .state_directory_path
             .as_str()
             .ends_with("state/engine-direct-process")
     );
@@ -913,7 +921,7 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
             .as_str()
             .ends_with("mind.sock")
     );
-    assert_eq!(signal_envelope.domain_socket_mode.into_u32(), 0o600);
+    assert_eq!(*signal_envelope.domain_socket_mode.payload(), 0o600);
     assert!(
         signal_envelope
             .engine_management_socket_path
@@ -921,13 +929,11 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
             .ends_with("mind.supervision.sock")
     );
     assert_eq!(
-        signal_envelope.engine_management_socket_mode.into_u32(),
+        *signal_envelope.engine_management_socket_mode.payload(),
         0o600
     );
     assert_eq!(
-        signal_envelope
-            .engine_management_protocol_version
-            .into_u16(),
+        *signal_envelope.engine_management_protocol_version.payload(),
         1
     );
 

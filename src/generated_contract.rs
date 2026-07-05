@@ -17,6 +17,10 @@ macro_rules! impl_payload_string {
 impl_payload_string!(
     signal_persona::ComponentName,
     signal_persona::EngineIdentifier,
+    signal_persona::StateDirectoryPath,
+    signal_persona::DomainSocketPath,
+    signal_persona::EngineManagementSocketPath,
+    signal_persona::ManagerSocketPath,
     signal_persona::SystemPrincipal,
     meta_signal_persona::EngineLabel,
 );

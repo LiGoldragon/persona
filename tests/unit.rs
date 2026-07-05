@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use meta_signal_persona::ComponentName;
+use persona::generated_contract::PayloadString;
 use persona::launch::{
     CommandArgument, ComponentCommand, ComponentCommandInput, EnvironmentVariable,
     EnvironmentVariableInput, EnvironmentVariableName, EnvironmentVariableValue, ExecutablePath,
@@ -11,7 +12,7 @@ use persona::unit::{
     UnitController, UnitFuture, UnitReceipt, UnitRestartPolicy, UnitStatus, UnitStatusReport,
 };
 use persona::upgrade::Version;
-use signal_persona::origin::EngineIdentifier;
+use signal_persona::EngineIdentifier;
 
 #[derive(Debug, Clone, Default)]
 struct RecordingController {

@@ -1,16 +1,17 @@
 use meta_signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, ComponentStatus,
-    EngineGeneration, EnginePhase, EngineStatus, EngineStatusScope as ContractEngineStatusScope,
-    Query,
+    ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, EngineGeneration,
+    EnginePhase, EngineStatus, EngineStatusReport as ContractEngineStatusReport,
+    EngineStatusScope as ContractEngineStatusScope, LifecycleComponentStatus, Query,
 };
 use meta_signal_persona::{
     Frame as PersonaFrame, FrameBody, Operation as EngineRequest, Reply as EngineReply,
 };
 use nota::NotaSource;
+use persona::generated_contract::PayloadString;
 use persona::request::{
     CommandLine, EngineStatusQuery, EngineStatusScope, PersonaOutput, PersonaRequest,
 };
-use persona::schema::EngineStatusReport;
+use persona::schema::{EngineStatusReport, LifecycleComponentStatusReport};
 use persona::transport::PersonaFrameCodec;
 use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Request, SessionEpoch,
@@ -69,9 +70,12 @@ fn persona_request_lowers_to_signal_persona_engine_request() {
     let engine_request = request.into_engine_request();
 
     match engine_request {
-        EngineRequest::Query(Query::ComponentStatus(component)) => {
-            assert_eq!(component.as_str(), "persona-system");
-        }
+        EngineRequest::Query(query) => match query.into_payload() {
+            Query::ComponentStatus(component) => {
+                assert_eq!(component.as_str(), "persona-system");
+            }
+            other => panic!("expected component status query, got {other:?}"),
+        },
         other => panic!("expected signal component status query, got {other:?}"),
     }
 }
@@ -79,10 +83,10 @@ fn persona_request_lowers_to_signal_persona_engine_request() {
 #[test]
 fn persona_frame_codec_rejects_multi_operation_request() {
     let request = Request::from_payloads(NonEmpty::from_head_and_tail(
-        EngineRequest::Query(Query::EngineStatus(ContractEngineStatusScope::WholeEngine)),
-        vec![EngineRequest::Query(Query::EngineStatus(
-            ContractEngineStatusScope::WholeEngine,
-        ))],
+        EngineRequest::Query(Query::EngineStatus(ContractEngineStatusScope::WholeEngine).into()),
+        vec![EngineRequest::Query(
+            Query::EngineStatus(ContractEngineStatusScope::WholeEngine).into(),
+        )],
     ));
     let frame = PersonaFrame::new(FrameBody::Request {
         exchange: ExchangeIdentifier::new(
@@ -106,16 +110,19 @@ fn persona_frame_codec_rejects_multi_operation_request() {
 
 #[test]
 fn engine_status_reply_renders_as_nota() {
-    let reply = EngineReply::EngineStatus(EngineStatus {
-        generation: EngineGeneration::new(2),
-        phase: EnginePhase::Starting,
-        components: vec![ComponentStatus {
-            name: ComponentName::new("mind"),
-            kind: ComponentKind::Mind,
-            desired_state: ComponentDesiredState::Running,
-            health: ComponentHealth::Starting,
-        }],
-    });
+    let reply = EngineReply::EngineStatus(
+        EngineStatus::new(ContractEngineStatusReport {
+            generation: EngineGeneration::new(2),
+            phase: EnginePhase::Starting,
+            components: vec![LifecycleComponentStatus {
+                component_name: ComponentName::new("mind"),
+                component_kind: ComponentKind::Mind,
+                component_desired_state: ComponentDesiredState::Running,
+                component_health: ComponentHealth::Starting,
+            }],
+        })
+        .into(),
+    );
     let output = PersonaOutput::from_engine_reply(reply).to_nota().unwrap();
 
     assert!(
@@ -128,13 +135,13 @@ fn engine_status_reply_renders_as_nota() {
 #[test]
 fn output_round_trips_through_nota() {
     let output = PersonaOutput::EngineStatusReport(EngineStatusReport {
-        generation: EngineGeneration::new(1),
-        phase: EnginePhase::Starting,
-        components: vec![ComponentStatus {
-            name: ComponentName::new("persona-router"),
-            kind: ComponentKind::Router,
-            desired_state: ComponentDesiredState::Running,
-            health: ComponentHealth::Starting,
+        generation: 1,
+        phase: "Starting".to_owned(),
+        components: vec![LifecycleComponentStatusReport {
+            component: ComponentName::new("persona-router"),
+            kind: "Router".to_owned(),
+            desired_state: "Running".to_owned(),
+            health: "Starting".to_owned(),
         }],
     });
     let encoded = output.to_nota().unwrap();

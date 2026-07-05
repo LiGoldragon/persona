@@ -5,13 +5,14 @@ use meta_signal_persona::{
     Query,
 };
 use meta_signal_persona::{Operation as EngineRequest, Reply as EngineReply};
+use persona::generated_contract::PayloadString;
 use persona::manager::{
     EngineManager, HandleEngineRequest, ManagerEvent, ReadTrace, StartComponentUnit,
 };
 use persona::manager_store::{ManagerStore, ManagerStoreLocation};
 use persona::unit::{ComponentUnit, UnitController, UnitFuture, UnitReceipt, UnitStatusReport};
 use persona::upgrade::Version;
-use signal_persona::origin::EngineIdentifier;
+use signal_persona::EngineIdentifier;
 
 struct StoreFixture {
     root: std::path::PathBuf,
@@ -93,7 +94,7 @@ async fn constraint_engine_request_reply_is_created_by_kameo_manager_path() {
 
     let reply = manager
         .ask(HandleEngineRequest::new(EngineRequest::Query(
-            Query::EngineStatus(EngineStatusScope::WholeEngine),
+            Query::EngineStatus(EngineStatusScope::WholeEngine).into(),
         )))
         .await
         .expect("request handled by actor");
@@ -123,11 +124,11 @@ async fn constraint_engine_request_reply_is_created_by_kameo_manager_path() {
 async fn constraint_engine_manager_keeps_component_state_between_messages() {
     let manager = EngineManager::start().await;
 
-    let shutdown = ComponentShutdown {
-        component: ComponentName::new("persona-terminal"),
-    };
+    let shutdown = ComponentShutdown::new(ComponentName::new("persona-terminal"));
     let acceptance = manager
-        .ask(HandleEngineRequest::new(EngineRequest::Stop(shutdown)))
+        .ask(HandleEngineRequest::new(EngineRequest::Stop(
+            shutdown.into(),
+        )))
         .await
         .expect("shutdown handled by actor");
 
@@ -135,15 +136,19 @@ async fn constraint_engine_manager_keeps_component_state_between_messages() {
 
     let status = manager
         .ask(HandleEngineRequest::new(EngineRequest::Query(
-            Query::ComponentStatus(ComponentName::new("persona-terminal")),
+            Query::ComponentStatus(ComponentName::new("persona-terminal")).into(),
         )))
         .await
         .expect("status handled by actor");
 
     match status {
         EngineReply::ComponentStatus(component) => {
-            assert_eq!(component.desired_state, ComponentDesiredState::Stopped);
-            assert_eq!(component.health, ComponentHealth::Stopped);
+            let component = component.into_payload();
+            assert_eq!(
+                component.component_desired_state,
+                ComponentDesiredState::Stopped
+            );
+            assert_eq!(component.component_health, ComponentHealth::Stopped);
         }
         other => panic!("expected terminal component status, got {other:?}"),
     }

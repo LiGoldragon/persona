@@ -3,6 +3,7 @@ use meta_signal_persona::{
     ActionRejectionReason, ComponentDesiredState, ComponentHealth, ComponentName,
     ComponentShutdown, ComponentStartup,
 };
+use persona::generated_contract::{EngineGenerationValue, PayloadString};
 use persona::state::EngineState;
 
 #[test]
@@ -12,7 +13,7 @@ fn default_catalog_names_engine_components() {
         .snapshot()
         .components
         .iter()
-        .map(|component| component.name.as_str())
+        .map(|component| component.component_name.as_str())
         .collect();
 
     assert_eq!(
@@ -33,18 +34,22 @@ fn default_catalog_names_engine_components() {
 #[test]
 fn component_shutdown_advances_generation_and_updates_status() {
     let mut state = EngineState::default_catalog();
-    let reply = state.stop_component(ComponentShutdown {
-        component: ComponentName::new("persona-terminal"),
-    });
+    let reply = state.stop_component(ComponentShutdown::new(ComponentName::new(
+        "persona-terminal",
+    )));
 
     assert!(matches!(reply, Reply::ActionAccepted(_)));
-    assert_eq!(state.snapshot().generation.into_u64(), 1);
+    assert_eq!(state.snapshot().generation.clone().into_u64(), 1);
 
     let status = state.component_status(ComponentName::new("persona-terminal"));
     match status {
         Reply::ComponentStatus(component) => {
-            assert_eq!(component.desired_state, ComponentDesiredState::Stopped);
-            assert_eq!(component.health, ComponentHealth::Stopped);
+            let component = component.into_payload();
+            assert_eq!(
+                component.component_desired_state,
+                ComponentDesiredState::Stopped
+            );
+            assert_eq!(component.component_health, ComponentHealth::Stopped);
         }
         other => panic!("expected component status, got {other:?}"),
     }
@@ -57,7 +62,7 @@ fn missing_component_query_returns_typed_missing_reply() {
 
     match reply {
         Reply::ComponentMissing(missing) => {
-            assert_eq!(missing.as_str(), "persona-missing");
+            assert_eq!(missing.into_payload().as_str(), "persona-missing");
         }
         other => panic!("expected missing component reply, got {other:?}"),
     }
@@ -66,12 +71,11 @@ fn missing_component_query_returns_typed_missing_reply() {
 #[test]
 fn repeated_startup_returns_already_desired_rejection() {
     let mut state = EngineState::default_catalog();
-    let reply = state.start_component(ComponentStartup {
-        component: ComponentName::new("persona-router"),
-    });
+    let reply = state.start_component(ComponentStartup::new(ComponentName::new("persona-router")));
 
     match reply {
         Reply::ActionRejected(rejection) => {
+            let rejection = rejection.into_payload();
             assert_eq!(
                 rejection.reason,
                 ActionRejectionReason::ComponentAlreadyInDesiredState

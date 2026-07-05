@@ -6,6 +6,7 @@ use kameo::error::SendError;
 use persona::engine::{
     ComponentInstanceName, EngineComponent, EngineTopology, PersonaDaemonPaths, SocketMode,
 };
+use persona::generated_contract::PayloadString;
 use persona::launch::{
     CommandArgument, CommandResolutionFailure, ComponentCommand, ComponentCommandCatalog,
     ComponentCommandEntry, ComponentCommandEntryInput, ComponentCommandInput,
@@ -14,7 +15,7 @@ use persona::launch::{
     EnvironmentVariableName, EnvironmentVariableValue, ExecutablePath,
     ReadCommandResolutionAttemptCount, ResolveComponentCommands, ResolvedComponentCommands,
 };
-use signal_persona::origin::{EngineIdentifier, OwnerIdentity, UnixUserIdentifier};
+use signal_persona::{EngineIdentifier, OwnerIdentity, UnixUserIdentifier};
 
 struct TemporaryEngineRoot {
     root: PathBuf,
@@ -447,13 +448,13 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
         signal_persona::ComponentKind::Router
     );
     assert_eq!(
-        signal_envelope.component_name,
-        signal_persona::origin::ComponentName::Router
+        signal_envelope.component_principal,
+        signal_persona::ComponentPrincipal::Router
     );
     assert_eq!(signal_envelope.owner_identity, owner_identity);
     assert!(
         signal_envelope
-            .state_dir
+            .state_directory_path
             .as_str()
             .ends_with("state/engine-gamma")
     );
@@ -463,7 +464,7 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
             .as_str()
             .ends_with("router.sock")
     );
-    assert_eq!(signal_envelope.domain_socket_mode.into_u32(), 0o600);
+    assert_eq!(*signal_envelope.domain_socket_mode.payload(), 0o600);
     assert!(
         signal_envelope
             .engine_management_socket_path
@@ -471,10 +472,10 @@ async fn constraint_spawn_envelope_carries_component_paths_and_peer_sockets() {
             .ends_with("router.supervision.sock")
     );
     assert_eq!(
-        signal_envelope.engine_management_socket_mode.into_u32(),
+        *signal_envelope.engine_management_socket_mode.payload(),
         0o600
     );
-    assert_eq!(signal_envelope.peer_sockets.len(), 7);
+    assert_eq!(signal_envelope.peer_sockets().len(), 7);
 
     let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&signal_envelope)
         .expect("encode signal spawn envelope");
@@ -524,8 +525,8 @@ async fn constraint_mind_orchestrate_topology_spawn_envelope_has_one_peer_socket
         signal_persona::ComponentKind::Orchestrate
     );
     assert_eq!(
-        signal_envelope.component_name,
-        signal_persona::origin::ComponentName::Orchestrate
+        signal_envelope.component_principal,
+        signal_persona::ComponentPrincipal::Orchestrate
     );
 }
 

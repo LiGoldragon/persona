@@ -8,6 +8,7 @@ use persona::engine_event::{
     ComponentUnimplementedInput, EngineEventBody, EngineEventDraft, EngineEventDraftInput,
     EngineEventSource, HarnessOperationKind, UnimplementedReason,
 };
+use persona::generated_contract::{EngineGenerationValue, PayloadString};
 use persona::manager::EngineManager;
 use persona::manager_store::AppendOrphansFromEventLog;
 use persona::manager_store::{
@@ -20,7 +21,7 @@ use persona::schema::{
     ComponentOperationReport, EngineEventBodyReport, EngineEventReport, EngineEventSourceKind,
 };
 use persona::state::EngineState;
-use signal_persona::origin::EngineIdentifier;
+use signal_persona::EngineIdentifier;
 use signal_upgrade::{
     ComponentName as UpgradeComponentName, ContractVersion, Date, HandoverMarker, RawByte,
     RawBytes, Time,
@@ -28,6 +29,14 @@ use signal_upgrade::{
 
 use persona::upgrade::SocketPath as UpgradeSocketPath;
 use persona::upgrade::{ActiveVersionChanged, PreparedEvent, Target, TargetInput, Version};
+
+fn stop_component_request(component: &str) -> EngineRequest {
+    EngineRequest::Stop(ComponentShutdown::new(ComponentName::new(component)).into())
+}
+
+fn component_status_request(component: &str) -> EngineRequest {
+    EngineRequest::Query(Query::ComponentStatus(ComponentName::new(component)).into())
+}
 
 struct StoreFixture {
     root: std::path::PathBuf,
@@ -147,7 +156,10 @@ async fn constraint_manager_store_writes_engine_status_through_writer_actor() {
 
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let receipt = store
-        .ask(PersistEngineRecord::new(engine.clone(), status.clone()))
+        .ask(PersistEngineRecord::new(
+            engine.clone(),
+            status.clone().into(),
+        ))
         .await
         .expect("record persisted through actor");
     assert_eq!(receipt.engine(), &engine);
@@ -165,7 +177,7 @@ async fn constraint_manager_store_writes_engine_status_through_writer_actor() {
         .expect("record read through actor")
         .expect("engine record exists");
     assert_eq!(record.engine(), &engine);
-    assert_eq!(record.status(), &status);
+    assert_eq!(record.status().payload(), &status);
     store.stop_gracefully().await.expect("manager store stops");
     let _shutdown_completion = store.wait_for_shutdown().await;
 }
@@ -184,13 +196,19 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
         .await
         .expect("initial record read through store actor")
         .expect("initial record exists");
-    assert_eq!(initial_record.status().generation.into_u64(), 0);
+    assert_eq!(
+        initial_record
+            .status()
+            .payload()
+            .generation
+            .clone()
+            .into_u64(),
+        0
+    );
 
     let reply = manager
         .ask(persona::manager::HandleEngineRequest::new(
-            EngineRequest::Stop(ComponentShutdown {
-                component: ComponentName::new("persona-terminal"),
-            }),
+            stop_component_request("persona-terminal"),
         ))
         .await
         .expect("shutdown handled through manager actor");
@@ -201,25 +219,32 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
         .await
         .expect("stored record read through store actor")
         .expect("stored record exists");
-    assert_eq!(stored_record.status().generation.into_u64(), 1);
+    assert_eq!(
+        stored_record
+            .status()
+            .payload()
+            .generation
+            .clone()
+            .into_u64(),
+        1
+    );
 
     let terminal_status = stored_record
         .status()
+        .payload()
         .components
         .iter()
-        .find(|component| component.name.as_str() == "persona-terminal")
+        .find(|component| component.component_name.as_str() == "persona-terminal")
         .expect("terminal component stored");
     assert_eq!(
-        terminal_status.desired_state,
+        terminal_status.component_desired_state,
         ComponentDesiredState::Stopped
     );
-    assert_eq!(terminal_status.health, ComponentHealth::Stopped);
+    assert_eq!(terminal_status.component_health, ComponentHealth::Stopped);
 
     let query = manager
         .ask(persona::manager::HandleEngineRequest::new(
-            EngineRequest::Query(Query::ComponentStatus(ComponentName::new(
-                "persona-terminal",
-            ))),
+            component_status_request("persona-terminal"),
         ))
         .await
         .expect("status handled through manager actor");
@@ -243,9 +268,7 @@ async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_
 
     let reply = manager
         .ask(persona::manager::HandleEngineRequest::new(
-            EngineRequest::Stop(ComponentShutdown {
-                component: ComponentName::new("persona-terminal"),
-            }),
+            stop_component_request("persona-terminal"),
         ))
         .await
         .expect("shutdown handled through manager actor");
@@ -260,9 +283,7 @@ async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_
         .expect("engine manager restores from store");
     let status = restored
         .ask(persona::manager::HandleEngineRequest::new(
-            EngineRequest::Query(Query::ComponentStatus(ComponentName::new(
-                "persona-terminal",
-            ))),
+            component_status_request("persona-terminal"),
         ))
         .await
         .expect("status handled through restored manager actor");
@@ -270,15 +291,19 @@ async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_
     let EngineReply::ComponentStatus(status) = status else {
         panic!("expected restored component status");
     };
-    assert_eq!(status.desired_state, ComponentDesiredState::Stopped);
-    assert_eq!(status.health, ComponentHealth::Stopped);
+    let status = status.into_payload();
+    assert_eq!(
+        status.component_desired_state,
+        ComponentDesiredState::Stopped
+    );
+    assert_eq!(status.component_health, ComponentHealth::Stopped);
 
     let record = store
         .ask(ReadEngineRecord::new(engine.clone()))
         .await
         .expect("stored record read through store actor")
         .expect("stored engine record exists");
-    assert_eq!(record.status().generation.into_u64(), 1);
+    assert_eq!(record.status().payload().generation.clone().into_u64(), 1);
 
     EngineManager::stop(restored)
         .await
@@ -557,16 +582,17 @@ async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
 
     let reply = manager
         .ask(persona::manager::HandleEngineRequest::new(
-            EngineRequest::Query(Query::ComponentStatus(ComponentName::new(
-                "persona-terminal",
-            ))),
+            component_status_request("persona-terminal"),
         ))
         .await
         .expect("status query handled through manager");
     let EngineReply::ComponentStatus(status) = reply else {
         panic!("expected terminal component status, got {reply:?}");
     };
-    assert_eq!(status.health, meta_signal_persona::ComponentHealth::Running);
+    assert_eq!(
+        status.into_payload().component_health,
+        meta_signal_persona::ComponentHealth::Running
+    );
 
     EngineManager::stop(manager)
         .await
