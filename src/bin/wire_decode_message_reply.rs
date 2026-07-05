@@ -146,7 +146,7 @@ fn main() {
             },
             Output::InboxListing(listing),
         ) => {
-            let entries = listing.payload();
+            let entries = listing.entries();
             if let Some(want) = want_count {
                 let got = entries.len();
                 assert_eq!(
@@ -157,7 +157,7 @@ fn main() {
             if let Some(want) = want_body.as_deref() {
                 let found = entries
                     .iter()
-                    .any(|entry| entry.body.payload().as_str() == want);
+                    .any(|entry| entry.message_body.payload().as_str() == want);
                 assert!(
                     found,
                     "inbox-listing missing entry with body={want:?}; entries={:?}",
@@ -167,7 +167,7 @@ fn main() {
             if let Some(want) = want_sender.as_deref() {
                 let found = entries
                     .iter()
-                    .any(|entry| entry.sender.payload().as_str() == want);
+                    .any(|entry| entry.message_sender.payload().as_str() == want);
                 assert!(
                     found,
                     "inbox-listing missing entry with sender={want:?}; entries={:?}",
@@ -179,7 +179,7 @@ fn main() {
                 entries.len(),
                 entries
                     .iter()
-                    .map(|e| e.body.payload().as_str())
+                    .map(|entry| entry.message_body.payload().as_str())
                     .collect::<Vec<_>>()
             );
         }
@@ -188,12 +188,12 @@ fn main() {
             Output::MessageRequestUnimplemented(unimplemented),
         ) => {
             assert_eq!(
-                unimplemented.operation, want,
+                unimplemented.message_operation_kind, want,
                 "unimplemented operation mismatch"
             );
             eprintln!(
                 "decoded MessageRequestUnimplemented operation={:?} reason={:?}",
-                unimplemented.operation, unimplemented.reason
+                unimplemented.message_operation_kind, unimplemented.message_unimplemented_reason
             );
         }
         (expect, got) => {

@@ -78,10 +78,10 @@ impl ComponentSupervisionReadiness {
 
         let ready = self.request_readiness(&mut stream, expectation).await?;
         let health = self.request_health(&mut stream, expectation).await?;
-        if health.health != ComponentHealth::Running {
+        if *health.payload() != ComponentHealth::Running {
             return Err(ComponentSupervisionReadinessFailure::Unhealthy {
                 component: expectation.component,
-                health: health.health,
+                health: *health.payload(),
             });
         }
 
@@ -98,14 +98,17 @@ impl ComponentSupervisionReadiness {
         stream: &mut UnixStream,
         expectation: &ComponentSupervisionExpectation,
     ) -> Result<ComponentIdentity, ComponentSupervisionReadinessFailure> {
-        let request = EngineManagementRequest::Announce(Presence {
-            expected_component: expectation.name.clone(),
-            expected_kind: expectation.kind,
-            engine_management_protocol_version: expectation.version,
-        });
+        let request = EngineManagementRequest::Announce(
+            Presence {
+                expected_component: expectation.name.clone().into(),
+                expected_kind: expectation.kind.into(),
+                engine_management_protocol_version: expectation.version.clone(),
+            }
+            .into(),
+        );
         self.codec.write_request(stream, request).await?;
         match self.codec.read_reply(stream).await? {
-            EngineManagementReply::Identified(identity) => Ok(identity),
+            EngineManagementReply::Identified(identity) => Ok(identity.into_payload()),
             other => Err(ComponentSupervisionReadinessFailure::UnexpectedReply {
                 component: expectation.component,
                 operation: "component hello",
@@ -119,16 +122,16 @@ impl ComponentSupervisionReadiness {
         stream: &mut UnixStream,
         expectation: &ComponentSupervisionExpectation,
     ) -> Result<ComponentReady, ComponentSupervisionReadinessFailure> {
-        let request = EngineManagementRequest::Query(EngineManagementQuery::ReadinessStatus(
-            expectation.name.clone(),
-        ));
+        let request = EngineManagementRequest::Query(
+            EngineManagementQuery::ReadinessStatus(expectation.name.clone()).into(),
+        );
         self.codec.write_request(stream, request).await?;
         match self.codec.read_reply(stream).await? {
-            EngineManagementReply::Ready(ready) => Ok(ready),
+            EngineManagementReply::Ready(ready) => Ok(ready.into_payload()),
             EngineManagementReply::NotReady(not_ready) => {
                 Err(ComponentSupervisionReadinessFailure::NotReady {
                     component: expectation.component,
-                    not_ready,
+                    not_ready: not_ready.into_payload(),
                 })
             }
             other => Err(ComponentSupervisionReadinessFailure::UnexpectedReply {
@@ -144,12 +147,12 @@ impl ComponentSupervisionReadiness {
         stream: &mut UnixStream,
         expectation: &ComponentSupervisionExpectation,
     ) -> Result<ComponentHealthReport, ComponentSupervisionReadinessFailure> {
-        let request = EngineManagementRequest::Query(EngineManagementQuery::HealthStatus(
-            expectation.name.clone(),
-        ));
+        let request = EngineManagementRequest::Query(
+            EngineManagementQuery::HealthStatus(expectation.name.clone()).into(),
+        );
         self.codec.write_request(stream, request).await?;
         match self.codec.read_reply(stream).await? {
-            EngineManagementReply::HealthReport(health) => Ok(health),
+            EngineManagementReply::HealthReport(health) => Ok(health.into_payload()),
             other => Err(ComponentSupervisionReadinessFailure::UnexpectedReply {
                 component: expectation.component,
                 operation: "component health",
@@ -262,25 +265,25 @@ impl ComponentSupervisionExpectation {
     }
 
     pub fn version(&self) -> EngineManagementProtocolVersion {
-        self.version
+        self.version.clone()
     }
 
     fn verify_identity(
         &self,
         identity: &ComponentIdentity,
     ) -> Result<(), ComponentSupervisionReadinessFailure> {
-        if identity.name != self.name
-            || identity.kind != self.kind
+        if identity.component_name != self.name
+            || identity.component_kind != self.kind
             || identity.engine_management_protocol_version != self.version
         {
             return Err(ComponentSupervisionReadinessFailure::IdentityMismatch {
                 component: self.component,
                 expected_name: self.name.clone(),
-                actual_name: identity.name.clone(),
+                actual_name: identity.component_name.clone(),
                 expected_kind: self.kind,
-                actual_kind: identity.kind,
-                expected_version: self.version,
-                actual_version: identity.engine_management_protocol_version,
+                actual_kind: identity.component_kind,
+                expected_version: self.version.clone(),
+                actual_version: identity.engine_management_protocol_version.clone(),
             });
         }
         Ok(())

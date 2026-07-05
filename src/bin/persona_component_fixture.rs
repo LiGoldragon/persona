@@ -231,28 +231,24 @@ impl SupervisionServer {
     fn reply_to(&self, request: EngineManagementRequest) -> EngineManagementReply {
         match request {
             EngineManagementRequest::Announce(_) => {
-                EngineManagementReply::Identified(ComponentIdentity {
-                    name: self.component.signal_name.clone(),
-                    kind: self.component.kind,
-                    engine_management_protocol_version: EngineManagementProtocolVersion::new(1),
-                    last_fatal_startup_error: None,
-                })
+                EngineManagementReply::identified(ComponentIdentity::new(
+                    self.component.signal_name.clone(),
+                    self.component.kind,
+                    EngineManagementProtocolVersion::new(1),
+                    None,
+                ))
             }
-            EngineManagementRequest::Query(EngineManagementQuery::ReadinessStatus(_)) => {
-                EngineManagementReply::Ready(ComponentReady {
-                    component_started_at: None,
-                })
-            }
-            EngineManagementRequest::Query(EngineManagementQuery::HealthStatus(_)) => {
-                EngineManagementReply::HealthReport(ComponentHealthReport {
-                    health: ComponentHealth::Running,
-                })
-            }
-            EngineManagementRequest::Stop(_) => {
-                EngineManagementReply::StopAcknowledged(StopAcknowledgement {
-                    drain_completed_at: None,
-                })
-            }
+            EngineManagementRequest::Query(query) => match query.into_payload() {
+                EngineManagementQuery::ReadinessStatus(_) => {
+                    EngineManagementReply::ready(ComponentReady::from_started_at(None))
+                }
+                EngineManagementQuery::HealthStatus(_) => EngineManagementReply::health_report(
+                    ComponentHealthReport::new(ComponentHealth::Running),
+                ),
+            },
+            EngineManagementRequest::Stop(_) => EngineManagementReply::stop_acknowledged(
+                StopAcknowledgement::from_drain_completed_at(None),
+            ),
         }
     }
 }

@@ -11,13 +11,14 @@ use sema_engine::{
     VersioningPolicy,
 };
 use signal_persona::ComponentName;
-use signal_persona::origin::EngineIdentifier;
+use signal_persona::EngineIdentifier;
 
 use crate::Result;
 use crate::engine_event::{
     ComponentExited, ComponentOrphaned, ComponentOrphanedInput, EngineEvent, EngineEventBody,
     EngineEventDraft, EngineEventDraftInput, EngineEventSequence, EngineEventSource,
 };
+use crate::generated_contract::PayloadString;
 use crate::upgrade::{ActiveVersion, ActiveVersionChanged};
 
 const MANAGER_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(4);

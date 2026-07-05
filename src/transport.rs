@@ -10,13 +10,14 @@ use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
     SubReply,
 };
-use signal_persona::origin::EngineIdentifier;
+use signal_persona::EngineIdentifier;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 use unix_ancillary::UnixStreamExt;
 
 use crate::engine::{ComponentLayout, EngineComponent, EngineTopology, PersonaDaemonPaths};
 use crate::error::{Error, Result};
+use crate::generated_contract::PayloadString;
 use crate::launch::ComponentCommandCatalog;
 use crate::manager_store::{ManagerStore, ReadActiveVersion};
 use crate::upgrade::Version;

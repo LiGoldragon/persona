@@ -7,7 +7,8 @@ use nota::{NotaDecode, NotaEncode, NotaSource};
 use crate::error::Error;
 use crate::schema::{
     ActionAcceptedReport, ActionRejectedReport, ComponentStatusMissingReport,
-    ComponentStatusReport, EngineStatusReport, RetirementAcceptanceReport,
+    ComponentStatusReport, EngineCatalogReport, EngineStatusReport, LaunchAcceptanceReport,
+    LaunchRejectionReport, RetirementAcceptanceReport, RetirementRejectionReport,
 };
 
 #[derive(NotaEncode, NotaDecode, Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,37 +53,33 @@ impl PersonaRequest {
         match self {
             Self::EngineStatusQuery(request) => match request.scope {
                 EngineStatusScope::WholeEngine => contract::Operation::Query(
-                    contract::Query::EngineStatus(contract::EngineStatusScope::WholeEngine),
+                    contract::MetaQuery::EngineStatus(contract::EngineStatusScope::WholeEngine)
+                        .into(),
                 ),
             },
-            Self::ComponentStatusQuery(request) => {
-                contract::Operation::Query(contract::Query::ComponentStatus(request.component))
-            }
-            Self::ComponentStartup(request) => {
-                contract::Operation::Start(contract::ComponentStartup {
-                    component: request.component,
-                })
-            }
-            Self::ComponentShutdown(request) => {
-                contract::Operation::Stop(contract::ComponentShutdown {
-                    component: request.component,
-                })
-            }
+            Self::ComponentStatusQuery(request) => contract::Operation::Query(
+                contract::MetaQuery::ComponentStatus(request.component).into(),
+            ),
+            Self::ComponentStartup(request) => contract::Operation::Start(
+                contract::ComponentStartup::new(request.component).into(),
+            ),
+            Self::ComponentShutdown(request) => contract::Operation::Stop(
+                contract::ComponentShutdown::new(request.component).into(),
+            ),
         }
     }
 }
 
 #[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub enum PersonaOutput {
-    LaunchAccepted(contract::LaunchAcceptance),
-    LaunchRejected(contract::LaunchRejection),
-    EngineCatalog(contract::EngineCatalog),
+    LaunchAccepted(LaunchAcceptanceReport),
+    LaunchRejected(LaunchRejectionReport),
+    EngineCatalog(EngineCatalogReport),
     RetirementAccepted(RetirementAcceptanceReport),
-    RetirementRejected(contract::RetirementRejection),
+    RetirementRejected(RetirementRejectionReport),
     EngineStatusReport(EngineStatusReport),
     ComponentStatusReport(ComponentStatusReport),
     ComponentStatusMissingReport(ComponentStatusMissingReport),
-    ObserverSubscriptionOpened(contract::ObserverSubscriptionOpened),
     ActionAcceptedReport(ActionAcceptedReport),
     ActionRejectedReport(ActionRejectedReport),
 }
@@ -90,35 +87,49 @@ pub enum PersonaOutput {
 impl PersonaOutput {
     pub fn from_engine_reply(reply: contract::Reply) -> Self {
         match reply {
-            contract::Reply::Launched(acceptance) => Self::LaunchAccepted(acceptance),
-            contract::Reply::LaunchRejected(rejection) => Self::LaunchRejected(rejection),
-            contract::Reply::Catalog(catalog) => Self::EngineCatalog(catalog),
-            contract::Reply::Retired(engine) => {
-                Self::RetirementAccepted(RetirementAcceptanceReport { engine })
+            contract::Reply::Launched(acceptance) => Self::LaunchAccepted(
+                LaunchAcceptanceReport::from_contract(acceptance.into_payload()),
+            ),
+            contract::Reply::LaunchRejected(rejection) => Self::LaunchRejected(
+                LaunchRejectionReport::from_contract(rejection.into_payload()),
+            ),
+            contract::Reply::Catalog(catalog) => {
+                Self::EngineCatalog(EngineCatalogReport::from_contract(catalog.into_payload()))
             }
-            contract::Reply::RetireRejected(rejection) => Self::RetirementRejected(rejection),
+            contract::Reply::Retired(engine) => {
+                Self::RetirementAccepted(RetirementAcceptanceReport {
+                    engine: engine.into_payload(),
+                })
+            }
+            contract::Reply::RetireRejected(rejection) => Self::RetirementRejected(
+                RetirementRejectionReport::from_contract(rejection.into_payload()),
+            ),
             contract::Reply::EngineStatus(status) => {
-                Self::EngineStatusReport(EngineStatusReport::from_contract(status))
+                Self::EngineStatusReport(EngineStatusReport::from_contract(status.into_payload()))
             }
             contract::Reply::ComponentStatus(status) => {
-                Self::ComponentStatusReport(ComponentStatusReport { component: status })
+                Self::ComponentStatusReport(ComponentStatusReport {
+                    component: ComponentStatusReport::from_contract(status.into_payload())
+                        .component,
+                })
             }
             contract::Reply::ComponentMissing(component) => {
-                Self::ComponentStatusMissingReport(ComponentStatusMissingReport { component })
-            }
-            contract::Reply::ObserverSubscriptionOpened(opened) => {
-                Self::ObserverSubscriptionOpened(opened)
+                Self::ComponentStatusMissingReport(ComponentStatusMissingReport {
+                    component: component.into_payload(),
+                })
             }
             contract::Reply::ActionAccepted(acceptance) => {
+                let acceptance = acceptance.into_payload();
                 Self::ActionAcceptedReport(ActionAcceptedReport {
                     component: acceptance.component,
-                    desired_state: acceptance.desired_state,
+                    desired_state: format!("{:?}", acceptance.desired_state),
                 })
             }
             contract::Reply::ActionRejected(rejection) => {
+                let rejection = rejection.into_payload();
                 Self::ActionRejectedReport(ActionRejectedReport {
                     component: rejection.component,
-                    reason: rejection.reason,
+                    reason: format!("{:?}", rejection.reason),
                 })
             }
         }

@@ -1,18 +1,18 @@
 use meta_signal_persona as contract;
 use meta_signal_upgrade::{ForceReason, QuarantineReason, RollbackReason};
 use nota::{NotaDecode, NotaEncode, NotaSource};
-use signal_persona::origin::EngineIdentifier;
+use signal_persona::EngineIdentifier;
 
 pub use crate::engine_event::{EngineEventBodyKind, EngineEventSourceKind};
+use crate::generated_contract::{EngineGenerationValue, PayloadString};
 pub use contract::{
-    ActionRejectionReason, ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName,
-    EnginePhase,
+    ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, EnginePhase,
 };
 
 use crate::engine_event::{
-    ComponentOperation, EngineEvent, EngineEventBody, EngineEventSource, EngineOperationKind,
-    HarnessOperationKind, MessageOperationKind, MindOperationKind, SystemOperationKind,
-    TerminalOperationKind, UnimplementedReason,
+    ComponentOperation, EngineEvent, EngineEventBody, EngineEventSource, HarnessOperationKind,
+    MessageOperationKind, MindOperationKind, SystemOperationKind, TerminalOperationKind,
+    UnimplementedReason,
 };
 use crate::upgrade::ActiveVersionChangeSource;
 
@@ -100,9 +100,9 @@ pub struct RestartExhaustedReport {
     pub attempts: u64,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EngineStateChangedReport {
-    pub phase: EnginePhase,
+    pub phase: String,
 }
 
 #[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
@@ -164,9 +164,9 @@ pub enum EngineEventBodyReport {
     VersionQuarantined(VersionQuarantinedReport),
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub enum ComponentOperationReport {
-    Engine(EngineOperationKind),
+    Engine(String),
     Message(MessageOperationKind),
     Mind(MindOperationKind),
     System(SystemOperationKind),
@@ -176,17 +176,21 @@ pub enum ComponentOperationReport {
 
 #[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EngineStatusReport {
-    pub generation: contract::EngineGeneration,
-    pub phase: EnginePhase,
-    pub components: Vec<contract::ComponentStatus>,
+    pub generation: u64,
+    pub phase: String,
+    pub components: Vec<LifecycleComponentStatusReport>,
 }
 
 impl EngineStatusReport {
-    pub fn from_contract(status: contract::EngineStatus) -> Self {
+    pub fn from_contract(status: contract::EngineStatusReport) -> Self {
         Self {
-            generation: status.generation,
-            phase: status.phase,
-            components: status.components,
+            generation: status.generation.into_u64(),
+            phase: format!("{:?}", status.phase),
+            components: status
+                .components
+                .into_iter()
+                .map(LifecycleComponentStatusReport::from_contract)
+                .collect(),
         }
     }
 
@@ -201,7 +205,15 @@ impl EngineStatusReport {
 
 #[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStatusReport {
-    pub component: contract::ComponentStatus,
+    pub component: LifecycleComponentStatusReport,
+}
+
+impl ComponentStatusReport {
+    pub fn from_contract(status: contract::LifecycleComponentStatus) -> Self {
+        Self {
+            component: LifecycleComponentStatusReport::from_contract(status),
+        }
+    }
 }
 
 #[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
@@ -217,13 +229,111 @@ pub struct RetirementAcceptanceReport {
 #[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ActionAcceptedReport {
     pub component: ComponentName,
-    pub desired_state: ComponentDesiredState,
+    pub desired_state: String,
 }
 
 #[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ActionRejectedReport {
     pub component: ComponentName,
-    pub reason: ActionRejectionReason,
+    pub reason: String,
+}
+
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+pub struct LifecycleComponentStatusReport {
+    pub component: ComponentName,
+    pub kind: String,
+    pub desired_state: String,
+    pub health: String,
+}
+
+impl LifecycleComponentStatusReport {
+    pub fn from_contract(status: contract::LifecycleComponentStatus) -> Self {
+        Self {
+            component: status.component_name,
+            kind: format!("{:?}", status.component_kind),
+            desired_state: format!("{:?}", status.component_desired_state),
+            health: format!("{:?}", status.component_health),
+        }
+    }
+}
+
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+pub struct LaunchAcceptanceReport {
+    pub engine: EngineIdentifier,
+    pub label: String,
+}
+
+impl LaunchAcceptanceReport {
+    pub fn from_contract(acceptance: contract::LaunchAcceptance) -> Self {
+        Self {
+            engine: acceptance.engine,
+            label: acceptance.label.as_str().to_owned(),
+        }
+    }
+}
+
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+pub struct LaunchRejectionReport {
+    pub label: String,
+    pub reason: String,
+}
+
+impl LaunchRejectionReport {
+    pub fn from_contract(rejection: contract::LaunchRejection) -> Self {
+        Self {
+            label: rejection.label.as_str().to_owned(),
+            reason: format!("{:?}", rejection.reason),
+        }
+    }
+}
+
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+pub struct EngineCatalogReport {
+    pub engines: Vec<EngineCatalogEntryReport>,
+}
+
+impl EngineCatalogReport {
+    pub fn from_contract(catalog: contract::EngineCatalog) -> Self {
+        Self {
+            engines: catalog
+                .into_payload()
+                .into_iter()
+                .map(EngineCatalogEntryReport::from_contract)
+                .collect(),
+        }
+    }
+}
+
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+pub struct EngineCatalogEntryReport {
+    pub engine: EngineIdentifier,
+    pub label: String,
+    pub phase: String,
+}
+
+impl EngineCatalogEntryReport {
+    pub fn from_contract(entry: contract::EngineCatalogEntry) -> Self {
+        Self {
+            engine: entry.engine,
+            label: entry.label.as_str().to_owned(),
+            phase: format!("{:?}", entry.phase),
+        }
+    }
+}
+
+#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+pub struct RetirementRejectionReport {
+    pub engine: EngineIdentifier,
+    pub reason: String,
+}
+
+impl RetirementRejectionReport {
+    pub fn from_contract(rejection: contract::RetirementRejection) -> Self {
+        Self {
+            engine: rejection.engine,
+            reason: format!("{:?}", rejection.reason),
+        }
+    }
 }
 
 impl EngineEventBodyReport {
@@ -271,7 +381,7 @@ impl EngineEventBodyReport {
             ),
             EngineEventBody::EngineStateChanged(event) => {
                 Self::EngineStateChanged(EngineStateChangedReport {
-                    phase: event.phase(),
+                    phase: format!("{:?}", event.phase()),
                 })
             }
             EngineEventBody::UpgradePrepared(event) => {
@@ -328,7 +438,7 @@ impl ComponentLifecycleEventReport {
 impl ComponentOperationReport {
     pub fn from_operation(operation: &ComponentOperation) -> Self {
         match operation {
-            ComponentOperation::Engine(kind) => Self::Engine(*kind),
+            ComponentOperation::Engine(kind) => Self::Engine(format!("{kind:?}")),
             ComponentOperation::Message(kind) => Self::Message(*kind),
             ComponentOperation::Mind(kind) => Self::Mind(*kind),
             ComponentOperation::System(kind) => Self::System(*kind),

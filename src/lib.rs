@@ -10,6 +10,7 @@ pub mod direct_process;
 pub mod engine;
 pub mod engine_event;
 pub mod error;
+pub mod generated_contract;
 pub mod launch;
 pub mod manager;
 pub mod manager_store;

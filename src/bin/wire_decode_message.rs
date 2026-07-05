@@ -82,8 +82,8 @@ fn parse_origin(spec: &str) -> MessageOrigin {
             .split_once(':')
             .expect("internal-instance origin expects component:instance");
         return MessageOrigin::InternalComponentInstance(InternalComponentInstanceOrigin {
-            component: parse_component(component),
-            instance: ComponentInstanceName::new(instance.to_owned()),
+            component_name: parse_component(component),
+            component_instance_name: ComponentInstanceName::new(instance.to_owned()),
         });
     }
     if let Some(rest) = spec.strip_prefix("internal:") {
@@ -139,23 +139,23 @@ impl Expectations {
 
     fn assert_submission(&self, submission: &signal_message::MessageSubmission) {
         assert_eq!(
-            submission.recipient.payload().as_str(),
+            submission.message_recipient.payload().as_str(),
             self.recipient.as_str(),
             "recipient mismatch (expected {}, got {})",
             self.recipient,
-            submission.recipient.payload().as_str()
+            submission.message_recipient.payload().as_str()
         );
         assert_eq!(
-            submission.body.payload().as_str(),
+            submission.message_body.payload().as_str(),
             self.body.as_str(),
             "body mismatch (expected {}, got {})",
             self.body,
-            submission.body.payload().as_str()
+            submission.message_body.payload().as_str()
         );
         eprintln!(
             "decoded MessageSubmission {{ recipient: {}, body: {} }}",
-            submission.recipient.payload().as_str(),
-            submission.body.payload().as_str()
+            submission.message_recipient.payload().as_str(),
+            submission.message_body.payload().as_str()
         );
     }
 }
@@ -197,16 +197,19 @@ fn main() {
                     }
                 }
                 (Some(ExpectedVariant::Stamped) | None, Input::SubmitStamped(stamped)) => {
-                    expect.assert_submission(&stamped.submission);
+                    expect.assert_submission(&stamped.message_submission);
                     if let Some(want_origin) = expect.origin.as_ref() {
                         assert_eq!(
-                            &stamped.origin, want_origin,
+                            &stamped.message_origin, want_origin,
                             "origin mismatch (expected {:?}, got {:?})",
-                            want_origin, stamped.origin
+                            want_origin, stamped.message_origin
                         );
-                        eprintln!("decoded origin matches expectation: {:?}", stamped.origin);
+                        eprintln!(
+                            "decoded origin matches expectation: {:?}",
+                            stamped.message_origin
+                        );
                     } else {
-                        eprintln!("decoded origin (unasserted): {:?}", stamped.origin);
+                        eprintln!("decoded origin (unasserted): {:?}", stamped.message_origin);
                     }
                 }
                 (Some(ExpectedVariant::InboxQuery), Input::QueryInbox(query)) => {

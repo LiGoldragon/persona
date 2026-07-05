@@ -1,30 +1,30 @@
-use meta_signal_persona::Reply;
 use meta_signal_persona::{
     ActionAcceptance, ActionRejection, ActionRejectionReason, ComponentDesiredState,
-    ComponentHealth, ComponentName, ComponentShutdown, ComponentStartup, ComponentStatus,
-    EngineGeneration, EnginePhase, EngineStatus,
+    ComponentHealth, ComponentName, ComponentShutdown, ComponentStartup, EngineGeneration,
+    EnginePhase, EngineStatus, EngineStatusReport, LifecycleComponentStatus, Reply,
 };
 
 use crate::engine::EngineComponent;
+use crate::generated_contract::EngineGenerationValue;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineState {
-    status: EngineStatus,
+    status: EngineStatusReport,
 }
 
 impl EngineState {
     pub fn default_catalog() -> Self {
         Self {
-            status: EngineStatus {
+            status: EngineStatusReport {
                 generation: EngineGeneration::new(0),
                 phase: EnginePhase::Starting,
                 components: EngineComponent::prototype_supervised_components()
                     .into_iter()
-                    .map(|component| ComponentStatus {
-                        name: component.component_name(),
-                        kind: component.component_kind(),
-                        desired_state: ComponentDesiredState::Running,
-                        health: ComponentHealth::Starting,
+                    .map(|component| LifecycleComponentStatus {
+                        component_name: component.component_name(),
+                        component_kind: component.component_kind(),
+                        component_desired_state: ComponentDesiredState::Running,
+                        component_health: ComponentHealth::Starting,
                     })
                     .collect(),
             },
@@ -32,80 +32,107 @@ impl EngineState {
     }
 
     pub fn from_status(status: EngineStatus) -> Self {
-        Self { status }
+        Self {
+            status: status.into_payload(),
+        }
     }
 
-    pub fn snapshot(&self) -> &EngineStatus {
+    pub fn snapshot(&self) -> &EngineStatusReport {
         &self.status
     }
 
+    pub fn status(&self) -> EngineStatus {
+        EngineStatus::new(self.status.clone())
+    }
+
     pub fn engine_status(&self) -> Reply {
-        Reply::EngineStatus(self.status.clone())
+        Reply::EngineStatus(self.status().into())
     }
 
     pub fn component_status(&self, component: ComponentName) -> Reply {
         self.status
             .components
             .iter()
-            .find(|status| status.name == component)
+            .find(|status| status.component_name == component)
             .cloned()
-            .map(Reply::ComponentStatus)
-            .unwrap_or(Reply::ComponentMissing(component))
+            .map(|status| Reply::ComponentStatus(status.into()))
+            .unwrap_or_else(|| Reply::ComponentMissing(component.into()))
     }
 
     pub fn start_component(&mut self, startup: ComponentStartup) -> Reply {
-        let component = startup.component;
+        let component = startup.into_payload();
         let Some(status) = self.component_mut(&component) else {
-            return Reply::ActionRejected(ActionRejection {
-                component,
-                reason: ActionRejectionReason::ComponentNotManaged,
-            });
+            return Reply::ActionRejected(
+                ActionRejection {
+                    component: component.clone(),
+                    reason: ActionRejectionReason::ComponentNotManaged,
+                }
+                .into(),
+            );
         };
-        if status.desired_state == ComponentDesiredState::Running {
-            return Reply::ActionRejected(ActionRejection {
-                component,
-                reason: ActionRejectionReason::ComponentAlreadyInDesiredState,
-            });
+        if status.component_desired_state == ComponentDesiredState::Running {
+            return Reply::ActionRejected(
+                ActionRejection {
+                    component: component.clone(),
+                    reason: ActionRejectionReason::ComponentAlreadyInDesiredState,
+                }
+                .into(),
+            );
         }
-        status.desired_state = ComponentDesiredState::Running;
-        status.health = ComponentHealth::Starting;
+        status.component_desired_state = ComponentDesiredState::Running;
+        status.component_health = ComponentHealth::Starting;
         self.advance_generation();
         self.refresh_phase();
-        Reply::ActionAccepted(ActionAcceptance {
-            component,
-            desired_state: ComponentDesiredState::Running,
-        })
+        Reply::ActionAccepted(
+            ActionAcceptance {
+                component,
+                desired_state: ComponentDesiredState::Running,
+            }
+            .into(),
+        )
     }
 
     pub fn stop_component(&mut self, shutdown: ComponentShutdown) -> Reply {
-        let component = shutdown.component;
+        let component = shutdown.into_payload();
         let Some(status) = self.component_mut(&component) else {
-            return Reply::ActionRejected(ActionRejection {
-                component,
-                reason: ActionRejectionReason::ComponentNotManaged,
-            });
+            return Reply::ActionRejected(
+                ActionRejection {
+                    component: component.clone(),
+                    reason: ActionRejectionReason::ComponentNotManaged,
+                }
+                .into(),
+            );
         };
-        if status.desired_state == ComponentDesiredState::Stopped {
-            return Reply::ActionRejected(ActionRejection {
-                component,
-                reason: ActionRejectionReason::ComponentAlreadyInDesiredState,
-            });
+        if status.component_desired_state == ComponentDesiredState::Stopped {
+            return Reply::ActionRejected(
+                ActionRejection {
+                    component: component.clone(),
+                    reason: ActionRejectionReason::ComponentAlreadyInDesiredState,
+                }
+                .into(),
+            );
         }
-        status.desired_state = ComponentDesiredState::Stopped;
-        status.health = ComponentHealth::Stopped;
+        status.component_desired_state = ComponentDesiredState::Stopped;
+        status.component_health = ComponentHealth::Stopped;
         self.advance_generation();
         self.refresh_phase();
-        Reply::ActionAccepted(ActionAcceptance {
-            component,
-            desired_state: ComponentDesiredState::Stopped,
-        })
+        Reply::ActionAccepted(
+            ActionAcceptance {
+                component,
+                desired_state: ComponentDesiredState::Stopped,
+            }
+            .into(),
+        )
     }
 
-    fn component_mut(&mut self, component: &ComponentName) -> Option<&mut ComponentStatus> {
+    fn component_mut(
+        &mut self,
+        component: &ComponentName,
+    ) -> Option<&mut LifecycleComponentStatus> {
         self.status
             .components
             .iter_mut()
-            .find(|status| status.name == *component)
+            .find(|status| status.component_name == *component)
     }
 
     /// Overwrite one component's `health` field from a manager snapshot row.
@@ -113,14 +140,14 @@ impl EngineState {
     /// observed runtime, while `desired_state` is operator intent.
     pub fn set_component_health(&mut self, component: &ComponentName, health: ComponentHealth) {
         if let Some(status) = self.component_mut(component) {
-            status.health = health;
+            status.component_health = health;
             self.refresh_phase();
         }
     }
 
     fn advance_generation(&mut self) {
         self.status.generation =
-            EngineGeneration::new(self.status.generation.into_u64().saturating_add(1));
+            EngineGeneration::new(self.status.generation.clone().into_u64().saturating_add(1));
     }
 
     fn refresh_phase(&mut self) {
@@ -128,12 +155,12 @@ impl EngineState {
             .status
             .components
             .iter()
-            .all(|status| status.desired_state == ComponentDesiredState::Stopped)
+            .all(|status| status.component_desired_state == ComponentDesiredState::Stopped)
         {
             EnginePhase::Stopped
         } else if self.status.components.iter().any(|status| {
             matches!(
-                status.health,
+                status.component_health,
                 ComponentHealth::Failed | ComponentHealth::Degraded
             )
         }) {
@@ -142,7 +169,7 @@ impl EngineState {
             .status
             .components
             .iter()
-            .any(|status| status.health == ComponentHealth::Starting)
+            .any(|status| status.component_health == ComponentHealth::Starting)
         {
             EnginePhase::Starting
         } else {

@@ -74,8 +74,8 @@ impl EntrySpec {
     fn into_entry(self) -> InboxEntry {
         InboxEntry {
             message_slot: MessageSlot::new(self.slot),
-            sender: MessageSender::new(self.sender),
-            body: MessageBody::new(self.body),
+            message_sender: MessageSender::new(self.sender),
+            message_body: MessageBody::new(self.body),
         }
     }
 }
@@ -145,11 +145,14 @@ fn build_reply(variant: Variant) -> Output {
         Variant::SubmissionAccepted { slot } => {
             Output::SubmissionAccepted(SubmissionAcceptance::new(MessageSlot::new(slot)))
         }
-        Variant::InboxListing { entries } => Output::InboxListing(InboxListing::new(
+        Variant::InboxListing { entries } => Output::InboxListing(InboxListing::from_entries(
             entries.into_iter().map(EntrySpec::into_entry).collect(),
         )),
         Variant::Unimplemented { operation, reason } => {
-            Output::MessageRequestUnimplemented(MessageRequestUnimplemented { operation, reason })
+            Output::MessageRequestUnimplemented(MessageRequestUnimplemented {
+                message_operation_kind: operation,
+                message_unimplemented_reason: reason,
+            })
         }
     }
 }

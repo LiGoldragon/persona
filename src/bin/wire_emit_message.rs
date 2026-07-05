@@ -130,21 +130,23 @@ impl Cli {
         let recipient = MessageRecipient::new(self.recipient);
         match self.variant {
             Variant::Submission => Input::Submit(MessageSubmission {
-                recipient,
-                kind: MessageKind::Send,
-                body: MessageBody::new(self.body.expect("--body is required for submission")),
+                message_recipient: recipient,
+                message_kind: MessageKind::Send,
+                message_body: MessageBody::new(
+                    self.body.expect("--body is required for submission"),
+                ),
             }),
             Variant::Stamped => {
                 let body = MessageBody::new(self.body.expect("--body is required for stamped"));
                 let origin = self.origin.expect("--origin is required for stamped");
                 Input::SubmitStamped(StampedMessageSubmission {
-                    submission: MessageSubmission {
-                        recipient,
-                        kind: MessageKind::Send,
-                        body,
+                    message_submission: MessageSubmission {
+                        message_recipient: recipient,
+                        message_kind: MessageKind::Send,
+                        message_body: body,
                     },
-                    origin,
-                    stamped_at: TimestampNanos::new(self.stamped_at),
+                    message_origin: origin,
+                    stamped_at: TimestampNanos::new(self.stamped_at).into(),
                 })
             }
             Variant::InboxQuery => Input::QueryInbox(InboxQuery::new(recipient)),

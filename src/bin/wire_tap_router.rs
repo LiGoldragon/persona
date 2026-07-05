@@ -95,20 +95,20 @@ fn build_reply_frame(canned: CannedReply, request_exchange: ExchangeIdentifier) 
         }
         CannedReply::UnimplementedSubmission => {
             Output::MessageRequestUnimplemented(MessageRequestUnimplemented {
-                operation: MessageOperationKind::Submit,
-                reason: MessageUnimplementedReason::NotInPrototypeScope,
+                message_operation_kind: MessageOperationKind::Submit,
+                message_unimplemented_reason: MessageUnimplementedReason::NotInPrototypeScope,
             })
         }
         CannedReply::UnimplementedStamped => {
             Output::MessageRequestUnimplemented(MessageRequestUnimplemented {
-                operation: MessageOperationKind::SubmitStamped,
-                reason: MessageUnimplementedReason::NotInPrototypeScope,
+                message_operation_kind: MessageOperationKind::SubmitStamped,
+                message_unimplemented_reason: MessageUnimplementedReason::NotInPrototypeScope,
             })
         }
         CannedReply::UnimplementedInboxQuery => {
             Output::MessageRequestUnimplemented(MessageRequestUnimplemented {
-                operation: MessageOperationKind::QueryInbox,
-                reason: MessageUnimplementedReason::NotInPrototypeScope,
+                message_operation_kind: MessageOperationKind::QueryInbox,
+                message_unimplemented_reason: MessageUnimplementedReason::NotInPrototypeScope,
             })
         }
     };
