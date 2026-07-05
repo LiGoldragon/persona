@@ -894,11 +894,11 @@
         "nixpkgs": "nixpkgs_4"
       },
       "locked": {
-        "lastModified": 1783217403,
-        "narHash": "sha256-K54q86zRixsarKiFnbzKsWXsSDo3jMWkIbdGD9zKvz0=",
+        "lastModified": 1783220134,
+        "narHash": "sha256-1pb4DPSfoUY7LKss8yp3cSWEzSUuLIgWFv92xVszNG8=",
         "owner": "LiGoldragon",
         "repo": "router",
-        "rev": "e336fa48fe9fda50de05d24c7b0b6c327e7b387a",
+        "rev": "97d701729caa07d682e7cecb144dcfbc8e556d6b",
         "type": "github"
       },
       "original": {
