@@ -1,7 +1,5 @@
 # Agent Instructions - Persona
 
-You MUST read lore's `AGENTS.md` - the workspace-wide contract.
-
 ## Repo Role
 
 Persona is the engine manager for coordinating multiple AI harnesses and
@@ -29,9 +27,8 @@ keep Git as the remote/storage compatibility layer.
   swimlanes.
 - Keep implementation code out of reports.
 - Architecture docs describe the present direction at a high level.
-- When implementation begins, Rust follows lore's Rust style: methods on
-  types, typed domain values, one object at each boundary, one crate error
-  enum, direct Kameo actors for runtime logic, and sema-engine/Sema for
-  durable typed storage.
+- When implementation begins, Rust uses methods on types, typed domain
+  values, one object at each boundary, one crate error enum, direct Kameo
+  actors for runtime logic, and sema-engine/Sema for durable typed storage.
 - Persona CLI input and output are NOTA text unless a future command is
   explicitly binary.
