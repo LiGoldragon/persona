@@ -32,3 +32,9 @@ keep Git as the remote/storage compatibility layer.
   actors for runtime logic, and sema-engine/Sema for durable typed storage.
 - Persona CLI input and output are NOTA text unless a future command is
   explicitly binary.
+
+## Protos estate status
+
+Stack: correct-new destination
+Status: active component, current checkout legacy-wired
+This checkout is not proof of correct-new adoption.
