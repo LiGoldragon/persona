@@ -88,7 +88,7 @@ impl PersonaDaemon {
         tokio::task::block_in_place(move || {
             handle.block_on(async move {
                 let manager = EngineManager::start_with_store_and_unit_controller(
-                    EngineIdentifier::new("default"),
+                    "default".to_string(),
                     store.clone(),
                     unit_controller,
                 )

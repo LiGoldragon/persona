@@ -5,7 +5,6 @@ use meta_signal_persona::{
     Query,
 };
 use meta_signal_persona::{Operation as EngineRequest, Reply as EngineReply};
-use persona::generated_contract::PayloadString;
 use persona::manager::{
     EngineManager, HandleEngineRequest, ManagerEvent, ReadTrace, StartComponentUnit,
 };

@@ -1,10 +1,9 @@
-use dotos::{DotosDecode, DotosEncode, DotosSource};
+use crate::datom_text::{DatomActualizable, DatomTextualizable};
 use meta_signal_persona as contract;
 use meta_signal_upgrade::{ForceReason, QuarantineReason, RollbackReason};
 use signal_persona::EngineIdentifier;
 
 pub use crate::engine_event::{EngineEventBodyKind, EngineEventSourceKind};
-use crate::generated_contract::{EngineGenerationValue, PayloadString};
 pub use contract::{
     ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, EnginePhase,
 };
@@ -16,7 +15,7 @@ use crate::engine_event::{
 };
 use crate::upgrade::ActiveVersionChangeSource;
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct EngineEventReport {
     pub sequence: u64,
     pub engine: EngineIdentifier,
@@ -37,12 +36,12 @@ impl EngineEventReport {
         }
     }
 
-    pub fn from_nota(text: &str) -> Result<Self, dotos::DotosDecodeError> {
-        DotosSource::new(text).parse::<Self>()
+    pub fn actualize(text: &str) -> Result<Self, datom_codec::Error> {
+        <Self as DatomActualizable>::actualize_text(text)
     }
 
-    pub fn to_nota(&self) -> String {
-        DotosEncode::to_nota(self)
+    pub fn textualize(&self) -> String {
+        DatomTextualizable::textualize(self)
     }
 }
 
@@ -64,91 +63,91 @@ impl EngineEventSourceComponent {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentLifecycleEventReport {
     pub component: ComponentName,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentUnimplementedReport {
     pub component: ComponentName,
     pub operation: ComponentOperationReport,
     pub reason: UnimplementedReason,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentExitedReport {
     pub component: ComponentName,
     pub exit_code: Option<u64>,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentOrphanedReport {
     pub component: ComponentName,
     pub spawned_sequence: u64,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct RestartScheduledReport {
     pub component: ComponentName,
     pub attempt: u64,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct RestartExhaustedReport {
     pub component: ComponentName,
     pub attempts: u64,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct EngineStateChangedReport {
     pub phase: String,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct UpgradePreparedReport {
     pub component: ComponentName,
     pub current_version: String,
     pub next_version: String,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ActiveVersionChangedReport {
     pub component: ComponentName,
     pub active_version: String,
     pub source: ActiveVersionChangeSourceReport,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub enum ActiveVersionChangeSourceReport {
     HandoverMarker(HandoverMarkerSourceReport),
     ForceFlip(ForceFlipSourceReport),
     Rollback(RollbackSourceReport),
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct HandoverMarkerSourceReport {
     pub state_sequence: u64,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ForceFlipSourceReport {
     pub reason: ForceReason,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct RollbackSourceReport {
     pub reason: RollbackReason,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct VersionQuarantinedReport {
     pub component: ComponentName,
     pub version: String,
     pub reason: QuarantineReason,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub enum EngineEventBodyReport {
     ComponentSpawned(ComponentLifecycleEventReport),
     ComponentReady(ComponentLifecycleEventReport),
@@ -164,7 +163,7 @@ pub enum EngineEventBodyReport {
     VersionQuarantined(VersionQuarantinedReport),
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub enum ComponentOperationReport {
     Engine(String),
     Message(MessageOperationKind),
@@ -174,7 +173,7 @@ pub enum ComponentOperationReport {
     Terminal(TerminalOperationKind),
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct EngineStatusReport {
     pub generation: u64,
     pub phase: String,
@@ -184,7 +183,7 @@ pub struct EngineStatusReport {
 impl EngineStatusReport {
     pub fn from_contract(status: contract::EngineStatusReport) -> Self {
         Self {
-            generation: status.generation.into_u64(),
+            generation: status.generation as u64,
             phase: format!("{:?}", status.phase),
             components: status
                 .components
@@ -194,16 +193,16 @@ impl EngineStatusReport {
         }
     }
 
-    pub fn from_nota(text: &str) -> Result<Self, dotos::DotosDecodeError> {
-        DotosSource::new(text).parse::<Self>()
+    pub fn actualize(text: &str) -> Result<Self, datom_codec::Error> {
+        <Self as DatomActualizable>::actualize_text(text)
     }
 
-    pub fn to_nota(&self) -> String {
-        DotosEncode::to_nota(self)
+    pub fn textualize(&self) -> String {
+        DatomTextualizable::textualize(self)
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStatusReport {
     pub component: LifecycleComponentStatusReport,
 }
@@ -216,29 +215,29 @@ impl ComponentStatusReport {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStatusMissingReport {
     pub component: ComponentName,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct RetirementAcceptanceReport {
     pub engine: EngineIdentifier,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ActionAcceptedReport {
     pub component: ComponentName,
     pub desired_state: String,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ActionRejectedReport {
     pub component: ComponentName,
     pub reason: String,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct LifecycleComponentStatusReport {
     pub component: ComponentName,
     pub kind: String,
@@ -257,7 +256,7 @@ impl LifecycleComponentStatusReport {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct LaunchAcceptanceReport {
     pub engine: EngineIdentifier,
     pub label: String,
@@ -272,7 +271,7 @@ impl LaunchAcceptanceReport {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct LaunchRejectionReport {
     pub label: String,
     pub reason: String,
@@ -287,7 +286,7 @@ impl LaunchRejectionReport {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct EngineCatalogReport {
     pub engines: Vec<EngineCatalogEntryReport>,
 }
@@ -304,7 +303,7 @@ impl EngineCatalogReport {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct EngineCatalogEntryReport {
     pub engine: EngineIdentifier,
     pub label: String,
@@ -321,7 +320,7 @@ impl EngineCatalogEntryReport {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct RetirementRejectionReport {
     pub engine: EngineIdentifier,
     pub reason: String,

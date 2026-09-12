@@ -17,7 +17,6 @@ use unix_ancillary::UnixStreamExt;
 
 use crate::engine::{ComponentLayout, EngineComponent, EngineTopology, PersonaDaemonPaths};
 use crate::error::{Error, Result};
-use crate::generated_contract::PayloadString;
 use crate::launch::ComponentCommandCatalog;
 use crate::manager_store::{ManagerStore, ReadActiveVersion};
 use crate::upgrade::Version;
@@ -474,8 +473,7 @@ impl PersonaLaunchPlan {
             return Ok(None);
         };
         let engine = std::env::var("PERSONA_MANAGER_ENGINE_ID")
-            .map(EngineIdentifier::new)
-            .unwrap_or_else(|_| EngineIdentifier::new("default"));
+            .unwrap_or_else(|_| "default".to_string());
         let paths = Self::paths_from_environment(endpoint)?;
         Ok(Some(Self {
             engine,

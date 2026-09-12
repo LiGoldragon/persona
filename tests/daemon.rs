@@ -5,7 +5,6 @@ use std::time::{Duration, Instant};
 use persona::configuration::PersonaDaemonConfiguration;
 use persona::engine::{EngineComponent, EngineTopology};
 use persona::engine_event::EngineEventBody;
-use persona::generated_contract::PayloadString;
 
 mod support;
 

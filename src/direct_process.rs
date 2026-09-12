@@ -25,7 +25,6 @@ use crate::engine_event::{
     ComponentExited, ComponentExitedInput, EngineEventBody, EngineEventDraft,
     EngineEventDraftInput, EngineEventSource,
 };
-use crate::generated_contract::{PayloadString, UnixUserIdentifierValue};
 use crate::manager_store::{AppendEngineEvent, ManagerStore};
 
 type DirectProcessSerializer<'archive> = rkyv::api::high::HighSerializer<
@@ -549,7 +548,7 @@ impl DirectProcessLauncher {
         owner: &signal_persona::OwnerIdentity,
     ) -> Result<u32, DirectProcessFailure> {
         match owner {
-            signal_persona::OwnerIdentity::UnixUser(user) => Ok(user.as_u32()),
+            signal_persona::OwnerIdentity::UnixUser(user) => Ok((user as u32)),
             signal_persona::OwnerIdentity::System(_) => {
                 Err(DirectProcessFailure::MessageOwnerIdentityUnsupportedSystem)
             }
@@ -607,7 +606,7 @@ impl DirectProcessLauncher {
         match owner {
             signal_persona::OwnerIdentity::UnixUser(user) => {
                 Ok(signal_router::OwnerIdentity::UnixUser(
-                    signal_router::UnixUserIdentifier::new(u64::from(user.as_u32())),
+                    signal_router::UnixUserIdentifier::new((user as u64)),
                 ))
             }
             signal_persona::OwnerIdentity::System(_) => {
@@ -691,7 +690,7 @@ impl DirectProcessLauncher {
     ) -> signal_terminal::OwnerIdentity {
         match owner {
             signal_persona::OwnerIdentity::UnixUser(user) => {
-                signal_terminal::OwnerIdentity::UnixUser(i64::from(user.as_u32()))
+                signal_terminal::OwnerIdentity::UnixUser(user)
             }
             signal_persona::OwnerIdentity::System(principal) => {
                 signal_terminal::OwnerIdentity::System(principal.as_str().to_owned())

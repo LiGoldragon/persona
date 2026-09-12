@@ -13,7 +13,6 @@ use tokio::process::Command;
 use zbus::zvariant::OwnedObjectPath;
 use zbus::zvariant::Value;
 
-use crate::generated_contract::PayloadString;
 use crate::launch::ComponentCommand;
 use crate::upgrade::Version;
 

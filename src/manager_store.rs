@@ -18,7 +18,6 @@ use crate::engine_event::{
     ComponentExited, ComponentOrphaned, ComponentOrphanedInput, EngineEvent, EngineEventBody,
     EngineEventDraft, EngineEventDraftInput, EngineEventSequence, EngineEventSource,
 };
-use crate::generated_contract::PayloadString;
 use crate::upgrade::{ActiveVersion, ActiveVersionChanged};
 
 const MANAGER_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(4);
@@ -209,7 +208,7 @@ impl StoredActiveVersion {
     pub fn from_change(engine: &EngineIdentifier, change: &ActiveVersionChanged) -> Self {
         Self::new(
             engine.clone(),
-            ComponentName::new(change.component().payload()),
+            change.component().clone(),
             ActiveVersion::from_change(change),
         )
     }

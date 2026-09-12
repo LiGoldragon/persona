@@ -1,11 +1,12 @@
 use meta_signal_persona::{
-    ActionAcceptance, ActionRejection, ActionRejectionReason, ComponentDesiredState,
-    ComponentHealth, ComponentName, ComponentShutdown, ComponentStartup, EngineGeneration,
-    EnginePhase, EngineStatus, EngineStatusReport, LifecycleComponentStatus, Reply,
+    ActionAcceptance, ActionRejection, ActionRejectionReason, ComponentShutdown, ComponentStartup,
+    EnginePhase, EngineStatusReport, Response,
+};
+use signal_persona::{
+    ComponentDesiredState, ComponentHealth, ComponentName, ComponentStatus,
 };
 
 use crate::engine::EngineComponent;
-use crate::generated_contract::EngineGenerationValue;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineState {
@@ -16,11 +17,11 @@ impl EngineState {
     pub fn default_catalog() -> Self {
         Self {
             status: EngineStatusReport {
-                generation: EngineGeneration::new(0),
-                phase: EnginePhase::Starting,
-                components: EngineComponent::prototype_supervised_components()
+                engine_generation: 0,
+                engine_phase: EnginePhase::Starting,
+                component_status_vector: EngineComponent::prototype_supervised_components()
                     .into_iter()
-                    .map(|component| LifecycleComponentStatus {
+                    .map(|component| ComponentStatus {
                         component_name: component.component_name(),
                         component_kind: component.component_kind(),
                         component_desired_state: ComponentDesiredState::Running,
@@ -31,106 +32,100 @@ impl EngineState {
         }
     }
 
-    pub fn from_status(status: EngineStatus) -> Self {
-        Self {
-            status: status.into_payload(),
-        }
+    pub fn from_status(status: EngineStatusReport) -> Self {
+        Self { status }
     }
 
     pub fn snapshot(&self) -> &EngineStatusReport {
         &self.status
     }
 
-    pub fn status(&self) -> EngineStatus {
-        EngineStatus::new(self.status.clone())
+    pub fn status(&self) -> EngineStatusReport {
+        self.status.clone()
     }
 
-    pub fn engine_status(&self) -> Reply {
-        Reply::EngineStatus(self.status().into())
+    pub fn engine_status(&self) -> Response {
+        Response::EngineStatus(self.status())
     }
 
-    pub fn component_status(&self, component: ComponentName) -> Reply {
+    pub fn component_status(&self, component: ComponentName) -> Response {
         self.status
-            .components
+            .component_status_vector
             .iter()
             .find(|status| status.component_name == component)
             .cloned()
-            .map(|status| Reply::ComponentStatus(status.into()))
-            .unwrap_or_else(|| Reply::ComponentMissing(component.into()))
+            .map(Response::ComponentStatus)
+            .unwrap_or(Response::ComponentMissing(component))
     }
 
-    pub fn start_component(&mut self, startup: ComponentStartup) -> Reply {
-        let component = startup.into_payload();
+    pub fn start_component(&mut self, startup: ComponentStartup) -> Response {
+        let component = startup;
         let Some(status) = self.component_mut(&component) else {
-            return Reply::ActionRejected(
+            return Response::ActionRejected(
                 ActionRejection {
-                    component: component.clone(),
-                    reason: ActionRejectionReason::ComponentNotManaged,
-                }
-                .into(),
+                    component_name: component.clone(),
+                    action_rejection_reason: ActionRejectionReason::ComponentNotManaged,
+                },
             );
         };
         if status.component_desired_state == ComponentDesiredState::Running {
-            return Reply::ActionRejected(
+            return Response::ActionRejected(
                 ActionRejection {
-                    component: component.clone(),
-                    reason: ActionRejectionReason::ComponentAlreadyInDesiredState,
-                }
-                .into(),
+                    component_name: component.clone(),
+                    action_rejection_reason:
+                        ActionRejectionReason::ComponentAlreadyInDesiredState,
+                },
             );
         }
         status.component_desired_state = ComponentDesiredState::Running;
         status.component_health = ComponentHealth::Starting;
         self.advance_generation();
         self.refresh_phase();
-        Reply::ActionAccepted(
+        Response::ActionAccepted(
             ActionAcceptance {
-                component,
-                desired_state: ComponentDesiredState::Running,
-            }
-            .into(),
+                component_name: component,
+                component_desired_state: ComponentDesiredState::Running,
+            },
         )
     }
 
-    pub fn stop_component(&mut self, shutdown: ComponentShutdown) -> Reply {
-        let component = shutdown.into_payload();
+    pub fn stop_component(&mut self, shutdown: ComponentShutdown) -> Response {
+        let component = shutdown;
         let Some(status) = self.component_mut(&component) else {
-            return Reply::ActionRejected(
+            return Response::ActionRejected(
                 ActionRejection {
-                    component: component.clone(),
-                    reason: ActionRejectionReason::ComponentNotManaged,
-                }
-                .into(),
+                    component_name: component.clone(),
+                    action_rejection_reason: ActionRejectionReason::ComponentNotManaged,
+                },
             );
         };
         if status.component_desired_state == ComponentDesiredState::Stopped {
-            return Reply::ActionRejected(
+            return Response::ActionRejected(
                 ActionRejection {
-                    component: component.clone(),
-                    reason: ActionRejectionReason::ComponentAlreadyInDesiredState,
-                }
-                .into(),
+                    component_name: component.clone(),
+                    action_rejection_reason:
+                        ActionRejectionReason::ComponentAlreadyInDesiredState,
+                },
             );
         }
         status.component_desired_state = ComponentDesiredState::Stopped;
         status.component_health = ComponentHealth::Stopped;
         self.advance_generation();
         self.refresh_phase();
-        Reply::ActionAccepted(
+        Response::ActionAccepted(
             ActionAcceptance {
-                component,
-                desired_state: ComponentDesiredState::Stopped,
-            }
-            .into(),
+                component_name: component,
+                component_desired_state: ComponentDesiredState::Stopped,
+            },
         )
     }
 
     fn component_mut(
         &mut self,
         component: &ComponentName,
-    ) -> Option<&mut LifecycleComponentStatus> {
+    ) -> Option<&mut ComponentStatus> {
         self.status
-            .components
+            .component_status_vector
             .iter_mut()
             .find(|status| status.component_name == *component)
     }
@@ -146,19 +141,18 @@ impl EngineState {
     }
 
     fn advance_generation(&mut self) {
-        self.status.generation =
-            EngineGeneration::new(self.status.generation.clone().into_u64().saturating_add(1));
+        self.status.engine_generation = self.status.engine_generation.saturating_add(1);
     }
 
     fn refresh_phase(&mut self) {
-        self.status.phase = if self
+        self.status.engine_phase = if self
             .status
-            .components
+            .component_status_vector
             .iter()
             .all(|status| status.component_desired_state == ComponentDesiredState::Stopped)
         {
             EnginePhase::Stopped
-        } else if self.status.components.iter().any(|status| {
+        } else if self.status.component_status_vector.iter().any(|status| {
             matches!(
                 status.component_health,
                 ComponentHealth::Failed | ComponentHealth::Degraded
@@ -167,7 +161,7 @@ impl EngineState {
             EnginePhase::Degraded
         } else if self
             .status
-            .components
+            .component_status_vector
             .iter()
             .any(|status| status.component_health == ComponentHealth::Starting)
         {

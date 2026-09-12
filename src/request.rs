@@ -1,8 +1,9 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-use dotos::{DotosDecode, DotosEncode, DotosSource};
+use crate::datom_text::{DatomActualizable, DatomTextualizable};
 use meta_signal_persona as contract;
+use signal_persona::ComponentName;
 
 use crate::error::Error;
 use crate::schema::{
@@ -11,32 +12,32 @@ use crate::schema::{
     LaunchRejectionReport, RetirementAcceptanceReport, RetirementRejectionReport,
 };
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EngineStatusScope {
     WholeEngine,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct EngineStatusQuery {
     pub scope: EngineStatusScope,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStatusQuery {
-    pub component: contract::ComponentName,
+    pub component: ComponentName,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStartup {
-    pub component: contract::ComponentName,
+    pub component: ComponentName,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentShutdown {
-    pub component: contract::ComponentName,
+    pub component: ComponentName,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub enum PersonaRequest {
     EngineStatusQuery(EngineStatusQuery),
     ComponentStatusQuery(ComponentStatusQuery),
@@ -45,32 +46,27 @@ pub enum PersonaRequest {
 }
 
 impl PersonaRequest {
-    pub fn from_nota(text: &str) -> crate::Result<Self> {
-        Ok(DotosSource::new(text).parse::<Self>()?)
+    pub fn actualize(text: &str) -> crate::Result<Self> {
+        Ok(<Self as DatomActualizable>::actualize_text(text)?)
     }
 
-    pub fn into_engine_request(self) -> contract::Operation {
+    pub fn into_engine_request(self) -> contract::Query {
         match self {
             Self::EngineStatusQuery(request) => match request.scope {
-                EngineStatusScope::WholeEngine => contract::Operation::Query(
-                    contract::MetaQuery::EngineStatus(contract::EngineStatusScope::WholeEngine)
-                        .into(),
+                EngineStatusScope::WholeEngine => contract::Query::Query(
+                    contract::MetaQuery::EngineStatus(contract::EngineStatusScope::WholeEngine),
                 ),
             },
-            Self::ComponentStatusQuery(request) => contract::Operation::Query(
-                contract::MetaQuery::ComponentStatus(request.component).into(),
-            ),
-            Self::ComponentStartup(request) => contract::Operation::Start(
-                contract::ComponentStartup::new(request.component).into(),
-            ),
-            Self::ComponentShutdown(request) => contract::Operation::Stop(
-                contract::ComponentShutdown::new(request.component).into(),
-            ),
+            Self::ComponentStatusQuery(request) => {
+                contract::Query::Query(contract::MetaQuery::ComponentStatus(request.component))
+            }
+            Self::ComponentStartup(request) => contract::Query::Start(request.component),
+            Self::ComponentShutdown(request) => contract::Query::Stop(request.component),
         }
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub enum PersonaOutput {
     LaunchAccepted(LaunchAcceptanceReport),
     LaunchRejected(LaunchRejectionReport),
@@ -85,58 +81,51 @@ pub enum PersonaOutput {
 }
 
 impl PersonaOutput {
-    pub fn from_engine_reply(reply: contract::Reply) -> Self {
+    pub fn from_engine_reply(reply: contract::Response) -> Self {
         match reply {
-            contract::Reply::Launched(acceptance) => Self::LaunchAccepted(
-                LaunchAcceptanceReport::from_contract(acceptance.into_payload()),
-            ),
-            contract::Reply::LaunchRejected(rejection) => Self::LaunchRejected(
-                LaunchRejectionReport::from_contract(rejection.into_payload()),
-            ),
-            contract::Reply::Catalog(catalog) => {
-                Self::EngineCatalog(EngineCatalogReport::from_contract(catalog.into_payload()))
+            contract::Response::Launched(acceptance) => {
+                Self::LaunchAccepted(LaunchAcceptanceReport::from_contract(acceptance))
             }
-            contract::Reply::Retired(engine) => {
-                Self::RetirementAccepted(RetirementAcceptanceReport {
-                    engine: engine.into_payload(),
-                })
+            contract::Response::LaunchRejected(rejection) => {
+                Self::LaunchRejected(LaunchRejectionReport::from_contract(rejection))
             }
-            contract::Reply::RetireRejected(rejection) => Self::RetirementRejected(
-                RetirementRejectionReport::from_contract(rejection.into_payload()),
-            ),
-            contract::Reply::EngineStatus(status) => {
-                Self::EngineStatusReport(EngineStatusReport::from_contract(status.into_payload()))
+            contract::Response::Catalog(catalog) => {
+                Self::EngineCatalog(EngineCatalogReport::from_contract(catalog))
             }
-            contract::Reply::ComponentStatus(status) => {
+            contract::Response::Retired(engine) => {
+                Self::RetirementAccepted(RetirementAcceptanceReport { engine })
+            }
+            contract::Response::RetireRejected(rejection) => {
+                Self::RetirementRejected(RetirementRejectionReport::from_contract(rejection))
+            }
+            contract::Response::EngineStatus(status) => {
+                Self::EngineStatusReport(EngineStatusReport::from_contract(status))
+            }
+            contract::Response::ComponentStatus(status) => {
                 Self::ComponentStatusReport(ComponentStatusReport {
-                    component: ComponentStatusReport::from_contract(status.into_payload())
-                        .component,
+                    component: ComponentStatusReport::from_contract(status).component,
                 })
             }
-            contract::Reply::ComponentMissing(component) => {
-                Self::ComponentStatusMissingReport(ComponentStatusMissingReport {
-                    component: component.into_payload(),
-                })
+            contract::Response::ComponentMissing(component) => {
+                Self::ComponentStatusMissingReport(ComponentStatusMissingReport { component })
             }
-            contract::Reply::ActionAccepted(acceptance) => {
-                let acceptance = acceptance.into_payload();
+            contract::Response::ActionAccepted(acceptance) => {
                 Self::ActionAcceptedReport(ActionAcceptedReport {
-                    component: acceptance.component,
-                    desired_state: format!("{:?}", acceptance.desired_state),
+                    component: acceptance.component_name,
+                    desired_state: format!("{:?}", acceptance.component_desired_state),
                 })
             }
-            contract::Reply::ActionRejected(rejection) => {
-                let rejection = rejection.into_payload();
+            contract::Response::ActionRejected(rejection) => {
                 Self::ActionRejectedReport(ActionRejectedReport {
-                    component: rejection.component,
-                    reason: format!("{:?}", rejection.reason),
+                    component: rejection.component_name,
+                    reason: format!("{:?}", rejection.action_rejection_reason),
                 })
             }
         }
     }
 
-    pub fn to_nota(&self) -> crate::Result<String> {
-        Ok(DotosEncode::to_nota(self))
+    pub fn textualize(&self) -> String {
+        DatomTextualizable::textualize(self)
     }
 }
 
@@ -163,7 +152,7 @@ impl CommandLine {
     pub fn decode_request(&self) -> crate::Result<PersonaRequest> {
         match self.arguments.first() {
             Some(first) if CommandLineArgument::new(first).starts_inline_record() => {
-                PersonaRequest::from_nota(&self.inline_nota_text()?)
+                PersonaRequest::actualize(&self.inline_datom_text()?)
             }
             Some(first) => {
                 self.require_single_path_argument()?;
@@ -175,11 +164,11 @@ impl CommandLine {
         }
     }
 
-    fn inline_nota_text(&self) -> crate::Result<String> {
+    fn inline_datom_text(&self) -> crate::Result<String> {
         let mut parts = Vec::new();
         for argument in &self.arguments {
             let Some(text) = argument.to_str() else {
-                return Err(Error::InvalidInlineNotaArgument {
+                return Err(Error::InvalidInlineDatomArgument {
                     got: format!("{argument:?}"),
                 });
             };
@@ -210,7 +199,7 @@ impl RequestFile {
 
     pub fn decode(&self) -> crate::Result<PersonaRequest> {
         let text = std::fs::read_to_string(&self.path)?;
-        PersonaRequest::from_nota(&text)
+        PersonaRequest::actualize(&text)
     }
 }
 

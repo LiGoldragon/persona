@@ -2,16 +2,14 @@ use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use meta_signal_persona::{
-    ComponentName, ComponentShutdown, ComponentStartup, EngineCatalog, EngineCatalogEntry,
-    LaunchRejection, LaunchRejectionReason, MetaQuery, RetirementRejection,
+    ComponentShutdown, ComponentStartup, EngineCatalogEntry, LaunchRejection,
+    LaunchRejectionReason, MetaQuery, Query, Response, RetirementRejection,
     RetirementRejectionReason,
 };
-use meta_signal_persona::{Operation, Reply};
-use signal_persona::EngineIdentifier;
+use signal_persona::{ComponentName, EngineIdentifier};
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
-use crate::generated_contract::PayloadString;
 use crate::manager_store::{
     AppendOrphansFromEventLog, ComponentStatusSnapshotRow, ManagerStore, PersistEngineRecord,
     ReadEngineRecord, ReadEngineStatusSnapshot,
@@ -45,7 +43,7 @@ pub struct EngineManager {
 impl EngineManager {
     pub fn new(state: EngineState) -> Self {
         Self {
-            engine: EngineIdentifier::new("default"),
+            engine: "default".to_string(),
             state,
             store: None,
             unit_manager: ComponentUnitManager::start_with_controller(Arc::new(
@@ -169,49 +167,45 @@ impl EngineManager {
         Ok(())
     }
 
-    async fn handle_request(&mut self, request: Operation) -> Result<Reply> {
+    async fn handle_request(&mut self, request: Query) -> Result<Response> {
         self.events.push(ManagerEvent::EngineRequestAccepted);
-        let should_persist = matches!(request, Operation::Start(_) | Operation::Stop(_));
+        let should_persist = matches!(request, Query::Start(_) | Query::Stop(_));
         let reply = match request {
-            Operation::Query(query) => self.handle_query(query),
-            Operation::Start(startup) => self.state.start_component(startup.into_payload()),
-            Operation::Stop(shutdown) => self.state.stop_component(shutdown.into_payload()),
-            Operation::Launch(proposal) => Reply::LaunchRejected(
-                LaunchRejection {
-                    label: proposal.into_payload().into_payload(),
-                    reason: LaunchRejectionReason::LaunchPlanRejected,
-                }
-                .into(),
-            ),
-            Operation::Retire(engine) => {
-                let engine = engine.into_payload();
-                let reason = if engine == self.engine {
+            Query::Query(query) => self.handle_query(query),
+            Query::Start(startup) => self.state.start_component(startup),
+            Query::Stop(shutdown) => self.state.stop_component(shutdown),
+            Query::Launch(proposal) => Response::LaunchRejected(LaunchRejection {
+                engine_label: proposal,
+                launch_rejection_reason: LaunchRejectionReason::LaunchPlanRejected,
+            }),
+            Query::Retire(engine_identifier) => {
+                let retirement_rejection_reason = if engine_identifier == self.engine {
                     RetirementRejectionReason::EngineStillRunning
                 } else {
                     RetirementRejectionReason::EngineNotFound
                 };
-                Reply::RetireRejected(RetirementRejection { engine, reason }.into())
+                Response::RetireRejected(RetirementRejection {
+                    engine_identifier,
+                    retirement_rejection_reason,
+                })
             }
         };
-        if should_persist && matches!(reply, Reply::ActionAccepted(_)) {
+        if should_persist && matches!(reply, Response::ActionAccepted(_)) {
             self.persist_state().await?;
         }
         self.events.push(ManagerEvent::EngineReplyCreated);
         Ok(reply)
     }
 
-    fn handle_query(&self, query: meta_signal_persona::schema::lib::Query) -> Reply {
-        match query.into_payload() {
+    fn handle_query(&self, query: MetaQuery) -> Response {
+        match query {
             MetaQuery::EngineStatus(_) => self.state.engine_status(),
             MetaQuery::ComponentStatus(component) => self.state.component_status(component),
-            MetaQuery::Catalog(_) => Reply::Catalog(
-                EngineCatalog::new(vec![EngineCatalogEntry {
-                    engine: self.engine.clone(),
-                    label: meta_signal_persona::EngineLabel::new(self.engine.as_str()),
-                    phase: self.state.snapshot().phase,
-                }])
-                .into(),
-            ),
+            MetaQuery::Catalog(_) => Response::Catalog(vec![EngineCatalogEntry {
+                engine_identifier: self.engine.clone(),
+                engine_label: self.engine.clone(),
+                engine_phase: self.state.snapshot().engine_phase,
+            }]),
         }
     }
 
@@ -284,17 +278,17 @@ impl Actor for EngineManager {
 
 #[derive(Debug)]
 pub struct HandleEngineRequest {
-    request: Operation,
+    request: Query,
 }
 
 impl HandleEngineRequest {
-    pub fn new(request: Operation) -> Self {
+    pub fn new(request: Query) -> Self {
         Self { request }
     }
 }
 
 impl Message<HandleEngineRequest> for EngineManager {
-    type Reply = Result<Reply>;
+    type Reply = Result<Response>;
 
     async fn handle(
         &mut self,
@@ -376,12 +370,12 @@ impl Message<ReadTrace> for EngineManager {
 
 impl From<ComponentStartup> for HandleEngineRequest {
     fn from(startup: ComponentStartup) -> Self {
-        Self::new(Operation::Start(startup.into()))
+        Self::new(Query::Start(startup))
     }
 }
 
 impl From<ComponentShutdown> for HandleEngineRequest {
     fn from(shutdown: ComponentShutdown) -> Self {
-        Self::new(Operation::Stop(shutdown.into()))
+        Self::new(Query::Stop(shutdown))
     }
 }

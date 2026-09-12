@@ -3,7 +3,6 @@ use meta_signal_persona::{
     ActionRejectionReason, ComponentDesiredState, ComponentHealth, ComponentName,
     ComponentShutdown, ComponentStartup,
 };
-use persona::generated_contract::{EngineGenerationValue, PayloadString};
 use persona::state::EngineState;
 
 #[test]
@@ -39,7 +38,7 @@ fn component_shutdown_advances_generation_and_updates_status() {
     )));
 
     assert!(matches!(reply, Reply::ActionAccepted(_)));
-    assert_eq!(state.snapshot().generation.clone().into_u64(), 1);
+    assert_eq!(state.snapshot().generation as u64, 1);
 
     let status = state.component_status(ComponentName::new("persona-terminal"));
     match status {

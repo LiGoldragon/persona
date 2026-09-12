@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use kameo::actor::Spawn;
 use persona::engine::{EngineComponent, EngineTopology, PersonaDaemonPaths};
 use persona::engine_event::EngineEventBody;
-use persona::generated_contract::PayloadString;
 use persona::launch::{ComponentCommandCatalog, EngineLaunchConfiguration};
 use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadEngineEvents};
 use persona::supervisor::{

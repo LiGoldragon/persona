@@ -1,11 +1,10 @@
-use dotos::{DotosDecode, DotosEncode};
 use thiserror::Error;
 
 use crate::engine::{EngineComponent, EngineTopology};
 
 use super::command::{ComponentCommand, ExecutablePath};
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentCommandEntry {
     component: EngineComponent,
     command: ComponentCommand,
@@ -159,7 +158,7 @@ impl ComponentCommandCatalog {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct EngineLaunchConfiguration {
     overrides: Vec<ComponentCommandOverride>,
 }
@@ -197,7 +196,7 @@ impl EngineLaunchConfiguration {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentCommandOverride {
     component: EngineComponent,
     command: ComponentCommand,

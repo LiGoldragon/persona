@@ -8,7 +8,6 @@ use persona::engine_event::{
     ComponentUnimplementedInput, EngineEventBody, EngineEventDraft, EngineEventDraftInput,
     EngineEventSource, HarnessOperationKind, UnimplementedReason,
 };
-use persona::generated_contract::{EngineGenerationValue, PayloadString};
 use persona::manager::EngineManager;
 use persona::manager_store::AppendOrphansFromEventLog;
 use persona::manager_store::{
@@ -202,7 +201,7 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
             .payload()
             .generation
             .clone()
-            .into_u64(),
+             as u64,
         0
     );
 
@@ -225,7 +224,7 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
             .payload()
             .generation
             .clone()
-            .into_u64(),
+             as u64,
         1
     );
 
@@ -303,7 +302,7 @@ async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_
         .await
         .expect("stored record read through store actor")
         .expect("stored engine record exists");
-    assert_eq!(record.status().payload().generation.clone().into_u64(), 1);
+    assert_eq!(record.status().payload().generation as u64, 1);
 
     EngineManager::stop(restored)
         .await

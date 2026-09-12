@@ -7,7 +7,6 @@ use meta_signal_persona::{
 use meta_signal_persona::{
     Frame as PersonaFrame, FrameBody, Operation as EngineRequest, Reply as EngineReply,
 };
-use persona::generated_contract::PayloadString;
 use persona::request::{
     CommandLine, EngineStatusQuery, EngineStatusScope, PersonaOutput, PersonaRequest,
 };

@@ -7,8 +7,8 @@ pub enum Error {
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("nota decode: {0}")]
-    DotosDecode(#[from] dotos::DotosDecodeError),
+    #[error("datom: {0}")]
+    Datom(#[from] datom_codec::Error),
 
     #[error("sema engine: {0}")]
     SemaEngine(#[from] sema_engine::Error),
@@ -16,8 +16,8 @@ pub enum Error {
     #[error("sema kernel: {0}")]
     SemaKernel(#[from] sema_engine::StorageKernelError),
 
-    #[error("inline Nota argument must be UTF-8: {got:?}")]
-    InvalidInlineNotaArgument { got: String },
+    #[error("inline datom argument must be UTF-8: {got:?}")]
+    InvalidInlineDatomArgument { got: String },
 
     #[error("unexpected command-line argument: {got:?}")]
     UnexpectedArgument { got: String },

@@ -15,7 +15,6 @@ use persona::engine::{
     PersonaDaemonPaths,
 };
 use persona::engine_event::EngineEventBody;
-use persona::generated_contract::PayloadString;
 use persona::launch::{
     ComponentCommand, ComponentCommandCatalog, ComponentCommandEntry, ComponentCommandEntryInput,
     ComponentCommandInput, ComponentCommandResolver, EngineLaunchConfiguration,

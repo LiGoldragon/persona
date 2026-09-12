@@ -3,7 +3,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use dotos::{Delimiter, DotosBlock, DotosDecode, DotosDecodeError, DotosEncode, DotosSource};
 use persona::PersonaDaemonConfiguration;
 use thiserror::Error;
 use triad_runtime::{ArgumentError, ComponentArgument, ComponentCommand};
@@ -30,7 +29,7 @@ struct ConfigurationWriteRequest {
     output_path: ConfigurationWriterPath,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, DotosDecode, DotosEncode)]
+#[derive(Debug, Clone, PartialEq, Eq, datom_codec::Datomizable, datom_codec::Compositional)]
 struct ConfigurationWriterPath(String);
 
 #[derive(Debug, Clone, PartialEq, Eq)]

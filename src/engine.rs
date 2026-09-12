@@ -1,9 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use dotos::{DotosDecode, DotosEncode};
 use signal_persona::{EngineIdentifier, OwnerIdentity, UnixUserIdentifier};
 
-use crate::generated_contract::PayloadString;
 use crate::launch::{ComponentCommand, ResolvedComponentCommands};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,9 +116,7 @@ impl PersonaDaemonPaths {
     }
 
     fn current_owner_identity() -> OwnerIdentity {
-        OwnerIdentity::UnixUser(UnixUserIdentifier::new(u64::from(unsafe {
-            libc::geteuid()
-        })))
+        OwnerIdentity::UnixUser(i64::from(unsafe { libc::geteuid() }))
     }
 }
 
@@ -328,7 +324,7 @@ impl ComponentTopologyEntry {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EngineComponent {
     Mind,
     Orchestrate,
@@ -434,7 +430,7 @@ impl EngineComponent {
     }
 
     pub fn component_name(self) -> signal_persona::ComponentName {
-        signal_persona::ComponentName::new(self.as_component_name())
+        self.as_component_name().to_string()
     }
 
     pub const fn exposes_engine_management_supervision(self) -> bool {
@@ -783,31 +779,27 @@ impl ComponentSpawnEnvelope {
     }
 
     pub fn signal_spawn_envelope(&self) -> signal_persona::SpawnEnvelope {
-        signal_persona::SpawnEnvelope::new(
-            self.engine.clone(),
-            self.component.component_kind(),
-            self.component.component_principal(),
-            self.owner_identity.clone(),
-            signal_persona::StateDirectoryPath::new(self.state_dir.to_string_lossy().into_owned()),
-            signal_persona::DomainSocketPath::new(
-                self.domain_socket_path.to_string_lossy().into_owned(),
-            ),
-            signal_persona::DomainSocketMode::new(u64::from(self.domain_socket_mode.as_octal())),
-            signal_persona::EngineManagementSocketPath::new(
-                self.supervision_socket_path.to_string_lossy().into_owned(),
-            ),
-            signal_persona::EngineManagementSocketMode::new(u64::from(
-                self.supervision_socket_mode.as_octal(),
-            )),
-            self.peers
+        signal_persona::SpawnEnvelope {
+            engine_identifier: self.engine.clone(),
+            component_kind: self.component.component_kind(),
+            component_principal: self.component.component_principal(),
+            owner_identity: self.owner_identity.clone(),
+            state_directory_path: self.state_dir.to_string_lossy().into_owned(),
+            domain_socket_path: self.domain_socket_path.to_string_lossy().into_owned(),
+            domain_socket_mode: i64::from(self.domain_socket_mode.as_octal()),
+            engine_management_socket_path: self
+                .supervision_socket_path
+                .to_string_lossy()
+                .into_owned(),
+            engine_management_socket_mode: i64::from(self.supervision_socket_mode.as_octal()),
+            peer_socket_vector: self
+                .peers
                 .iter()
                 .map(ComponentPeerSocket::signal_peer_socket)
                 .collect(),
-            signal_persona::ManagerSocketPath::new(
-                self.manager_socket.to_string_lossy().into_owned(),
-            ),
-            signal_persona::EngineManagementProtocolVersion::new(1),
-        )
+            manager_socket_path: self.manager_socket.to_string_lossy().into_owned(),
+            engine_management_protocol_version: 1,
+        }
     }
 }
 
@@ -842,9 +834,7 @@ impl ComponentPeerSocket {
     pub fn signal_peer_socket(&self) -> signal_persona::PeerSocket {
         signal_persona::PeerSocket {
             component_principal: self.component.component_principal(),
-            domain_socket_path: signal_persona::DomainSocketPath::new(
-                self.domain_socket_path.to_string_lossy().into_owned(),
-            ),
+            domain_socket_path: self.domain_socket_path.to_string_lossy().into_owned(),
         }
     }
 }

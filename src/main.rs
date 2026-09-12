@@ -1,5 +1,6 @@
 use std::process::ExitCode;
 
+use persona::datom_text::DatomTextualizable;
 use persona::request::{CommandLine, PersonaOutput};
 use persona::transport::PersonaClient;
 
@@ -24,13 +25,7 @@ async fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let output = match PersonaOutput::from_engine_reply(reply).to_nota() {
-        Ok(output) => output,
-        Err(error) => {
-            eprintln!("error: {error}");
-            return ExitCode::from(2);
-        }
-    };
+    let output = PersonaOutput::from_engine_reply(reply).textualize();
 
     println!("{output}");
     ExitCode::SUCCESS

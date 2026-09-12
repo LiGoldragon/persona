@@ -1,8 +1,7 @@
 use std::path::Path;
 
-use dotos::{DotosDecode, DotosEncode};
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ExecutablePath(String);
 
 impl ExecutablePath {
@@ -19,7 +18,7 @@ impl ExecutablePath {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct CommandArgument(String);
 
 impl CommandArgument {
@@ -32,7 +31,7 @@ impl CommandArgument {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct EnvironmentVariableName(String);
 
 impl EnvironmentVariableName {
@@ -45,7 +44,7 @@ impl EnvironmentVariableName {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct EnvironmentVariableValue(String);
 
 impl EnvironmentVariableValue {
@@ -58,7 +57,7 @@ impl EnvironmentVariableValue {
     }
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct EnvironmentVariable {
     name: EnvironmentVariableName,
     value: EnvironmentVariableValue,
@@ -87,7 +86,7 @@ pub struct EnvironmentVariableInput {
     pub value: EnvironmentVariableValue,
 }
 
-#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentCommand {
     executable_path: ExecutablePath,
     arguments: Vec<CommandArgument>,

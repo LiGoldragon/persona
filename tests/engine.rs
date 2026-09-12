@@ -6,7 +6,6 @@ use kameo::error::SendError;
 use persona::engine::{
     ComponentInstanceName, EngineComponent, EngineTopology, PersonaDaemonPaths, SocketMode,
 };
-use persona::generated_contract::PayloadString;
 use persona::launch::{
     CommandArgument, CommandResolutionFailure, ComponentCommand, ComponentCommandCatalog,
     ComponentCommandEntry, ComponentCommandEntryInput, ComponentCommandInput,

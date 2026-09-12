@@ -3,7 +3,6 @@ use meta_signal_persona::{
     ComponentKind as ContractKind, ComponentName, EngineGeneration, EnginePhase as ContractPhase,
     EngineStatus, EngineStatusReport as ContractEngineStatusReport, LifecycleComponentStatus,
 };
-use persona::generated_contract::PayloadString;
 use persona::schema::EngineStatusReport;
 
 struct SchemaFixture {

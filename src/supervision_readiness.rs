@@ -244,7 +244,7 @@ impl ComponentSupervisionExpectation {
             envelope.supervision_socket_path().to_path_buf(),
             envelope.component().component_name(),
             envelope.component().component_kind(),
-            EngineManagementProtocolVersion::new(1),
+            1,
         )
     }
 

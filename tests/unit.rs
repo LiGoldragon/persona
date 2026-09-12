@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use meta_signal_persona::ComponentName;
-use persona::generated_contract::PayloadString;
 use persona::launch::{
     CommandArgument, ComponentCommand, ComponentCommandInput, EnvironmentVariable,
     EnvironmentVariableInput, EnvironmentVariableName, EnvironmentVariableValue, ExecutablePath,
