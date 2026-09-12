@@ -116,7 +116,7 @@ fn read_length_prefixed_frame(stream: &mut std::os::unix::net::UnixStream) -> Ve
     stream
         .read_exact(&mut length_bytes)
         .expect("read frame length prefix");
-    // signal-frame writes the length prefix as big-endian.
+    // The Signal wire writes its length prefix as big-endian.
     let length = u32::from_be_bytes(length_bytes) as usize;
     let mut payload = vec![0u8; length];
     stream.read_exact(&mut payload).expect("read frame payload");
