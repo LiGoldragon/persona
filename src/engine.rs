@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use nota::{NotaDecode, NotaEncode};
+use dotos::{DotosDecode, DotosEncode};
 use signal_persona::{EngineIdentifier, OwnerIdentity, UnixUserIdentifier};
 
 use crate::generated_contract::PayloadString;
@@ -328,7 +328,7 @@ impl ComponentTopologyEntry {
     }
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EngineComponent {
     Mind,
     Orchestrate,

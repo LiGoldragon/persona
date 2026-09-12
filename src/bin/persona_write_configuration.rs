@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use nota::{Delimiter, NotaBlock, NotaDecode, NotaDecodeError, NotaEncode, NotaSource};
+use dotos::{Delimiter, DotosBlock, DotosDecode, DotosDecodeError, DotosEncode, DotosSource};
 use persona::PersonaDaemonConfiguration;
 use thiserror::Error;
 use triad_runtime::{ArgumentError, ComponentArgument, ComponentCommand};
@@ -30,7 +30,7 @@ struct ConfigurationWriteRequest {
     output_path: ConfigurationWriterPath,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, NotaDecode, NotaEncode)]
+#[derive(Debug, Clone, PartialEq, Eq, DotosDecode, DotosEncode)]
 struct ConfigurationWriterPath(String);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,8 +76,8 @@ impl ConfigurationWriterInput {
         Self { text }
     }
 
-    fn parse_request(&self) -> Result<ConfigurationWriteRequest, NotaDecodeError> {
-        NotaSource::new(&self.text).parse()
+    fn parse_request(&self) -> Result<ConfigurationWriteRequest, DotosDecodeError> {
+        DotosSource::new(&self.text).parse()
     }
 }
 
@@ -103,13 +103,13 @@ impl ConfigurationWriteRequest {
     }
 }
 
-impl NotaDecode for ConfigurationWriteRequest {
-    fn from_nota_block(block: &nota::Block) -> Result<Self, NotaDecodeError> {
-        let body = NotaBlock::new(block)
+impl DotosDecode for ConfigurationWriteRequest {
+    fn from_nota_block(block: &dotos::Block) -> Result<Self, DotosDecodeError> {
+        let body = DotosBlock::new(block)
             .expect_body(Delimiter::Parenthesis, "ConfigurationWriteRequest")?;
         let objects = body.root_objects();
         if objects.len() != 4 {
-            return Err(NotaDecodeError::ExpectedRootCount {
+            return Err(DotosDecodeError::ExpectedRootCount {
                 type_name: "ConfigurationWriteRequest",
                 expected: 4,
                 found: objects.len(),
@@ -118,13 +118,13 @@ impl NotaDecode for ConfigurationWriteRequest {
         match objects[0].demote_to_string() {
             Some("ConfigurationWriteRequest") => {}
             Some(variant) => {
-                return Err(NotaDecodeError::UnknownVariant {
+                return Err(DotosDecodeError::UnknownVariant {
                     enum_name: "ConfigurationWriteRequest",
                     variant: variant.to_owned(),
                 });
             }
             None => {
-                return Err(NotaDecodeError::ExpectedAtom {
+                return Err(DotosDecodeError::ExpectedAtom {
                     type_name: "ConfigurationWriteRequest",
                 });
             }
@@ -137,7 +137,7 @@ impl NotaDecode for ConfigurationWriteRequest {
     }
 }
 
-impl NotaEncode for ConfigurationWriteOutput {
+impl DotosEncode for ConfigurationWriteOutput {
     fn to_nota(&self) -> String {
         format!("(ConfigurationWritten {})", self.output_path.to_nota())
     }
@@ -172,7 +172,7 @@ enum ConfigurationWriterError {
     SignalInput { path: PathBuf },
 
     #[error("decode NOTA request: {0}")]
-    Decode(#[from] NotaDecodeError),
+    Decode(#[from] DotosDecodeError),
 
     #[error("write daemon configuration archive {path}: {source}")]
     WriteArchive {

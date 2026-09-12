@@ -1,6 +1,6 @@
+use dotos::{DotosDecode, DotosEncode, DotosSource};
 use meta_signal_persona as contract;
 use meta_signal_upgrade::{ForceReason, QuarantineReason, RollbackReason};
-use nota::{NotaDecode, NotaEncode, NotaSource};
 use signal_persona::EngineIdentifier;
 
 pub use crate::engine_event::{EngineEventBodyKind, EngineEventSourceKind};
@@ -16,7 +16,7 @@ use crate::engine_event::{
 };
 use crate::upgrade::ActiveVersionChangeSource;
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EngineEventReport {
     pub sequence: u64,
     pub engine: EngineIdentifier,
@@ -37,12 +37,12 @@ impl EngineEventReport {
         }
     }
 
-    pub fn from_nota(text: &str) -> Result<Self, nota::NotaDecodeError> {
-        NotaSource::new(text).parse::<Self>()
+    pub fn from_nota(text: &str) -> Result<Self, dotos::DotosDecodeError> {
+        DotosSource::new(text).parse::<Self>()
     }
 
     pub fn to_nota(&self) -> String {
-        NotaEncode::to_nota(self)
+        DotosEncode::to_nota(self)
     }
 }
 
@@ -64,91 +64,91 @@ impl EngineEventSourceComponent {
     }
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentLifecycleEventReport {
     pub component: ComponentName,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentUnimplementedReport {
     pub component: ComponentName,
     pub operation: ComponentOperationReport,
     pub reason: UnimplementedReason,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentExitedReport {
     pub component: ComponentName,
     pub exit_code: Option<u64>,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentOrphanedReport {
     pub component: ComponentName,
     pub spawned_sequence: u64,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct RestartScheduledReport {
     pub component: ComponentName,
     pub attempt: u64,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct RestartExhaustedReport {
     pub component: ComponentName,
     pub attempts: u64,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EngineStateChangedReport {
     pub phase: String,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct UpgradePreparedReport {
     pub component: ComponentName,
     pub current_version: String,
     pub next_version: String,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ActiveVersionChangedReport {
     pub component: ComponentName,
     pub active_version: String,
     pub source: ActiveVersionChangeSourceReport,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub enum ActiveVersionChangeSourceReport {
     HandoverMarker(HandoverMarkerSourceReport),
     ForceFlip(ForceFlipSourceReport),
     Rollback(RollbackSourceReport),
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct HandoverMarkerSourceReport {
     pub state_sequence: u64,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ForceFlipSourceReport {
     pub reason: ForceReason,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct RollbackSourceReport {
     pub reason: RollbackReason,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct VersionQuarantinedReport {
     pub component: ComponentName,
     pub version: String,
     pub reason: QuarantineReason,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub enum EngineEventBodyReport {
     ComponentSpawned(ComponentLifecycleEventReport),
     ComponentReady(ComponentLifecycleEventReport),
@@ -164,7 +164,7 @@ pub enum EngineEventBodyReport {
     VersionQuarantined(VersionQuarantinedReport),
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub enum ComponentOperationReport {
     Engine(String),
     Message(MessageOperationKind),
@@ -174,7 +174,7 @@ pub enum ComponentOperationReport {
     Terminal(TerminalOperationKind),
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EngineStatusReport {
     pub generation: u64,
     pub phase: String,
@@ -194,16 +194,16 @@ impl EngineStatusReport {
         }
     }
 
-    pub fn from_nota(text: &str) -> Result<Self, nota::NotaDecodeError> {
-        NotaSource::new(text).parse::<Self>()
+    pub fn from_nota(text: &str) -> Result<Self, dotos::DotosDecodeError> {
+        DotosSource::new(text).parse::<Self>()
     }
 
     pub fn to_nota(&self) -> String {
-        NotaEncode::to_nota(self)
+        DotosEncode::to_nota(self)
     }
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStatusReport {
     pub component: LifecycleComponentStatusReport,
 }
@@ -216,29 +216,29 @@ impl ComponentStatusReport {
     }
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStatusMissingReport {
     pub component: ComponentName,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct RetirementAcceptanceReport {
     pub engine: EngineIdentifier,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ActionAcceptedReport {
     pub component: ComponentName,
     pub desired_state: String,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ActionRejectedReport {
     pub component: ComponentName,
     pub reason: String,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct LifecycleComponentStatusReport {
     pub component: ComponentName,
     pub kind: String,
@@ -257,7 +257,7 @@ impl LifecycleComponentStatusReport {
     }
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct LaunchAcceptanceReport {
     pub engine: EngineIdentifier,
     pub label: String,
@@ -272,7 +272,7 @@ impl LaunchAcceptanceReport {
     }
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct LaunchRejectionReport {
     pub label: String,
     pub reason: String,
@@ -287,7 +287,7 @@ impl LaunchRejectionReport {
     }
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EngineCatalogReport {
     pub engines: Vec<EngineCatalogEntryReport>,
 }
@@ -304,7 +304,7 @@ impl EngineCatalogReport {
     }
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EngineCatalogEntryReport {
     pub engine: EngineIdentifier,
     pub label: String,
@@ -321,7 +321,7 @@ impl EngineCatalogEntryReport {
     }
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct RetirementRejectionReport {
     pub engine: EngineIdentifier,
     pub reason: String,

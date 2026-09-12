@@ -1,3 +1,4 @@
+use dotos::DotosSource;
 use meta_signal_persona::{
     ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, EngineGeneration,
     EnginePhase, EngineStatus, EngineStatusReport as ContractEngineStatusReport,
@@ -6,7 +7,6 @@ use meta_signal_persona::{
 use meta_signal_persona::{
     Frame as PersonaFrame, FrameBody, Operation as EngineRequest, Reply as EngineReply,
 };
-use nota::NotaSource;
 use persona::generated_contract::PayloadString;
 use persona::request::{
     CommandLine, EngineStatusQuery, EngineStatusScope, PersonaOutput, PersonaRequest,
@@ -145,7 +145,7 @@ fn output_round_trips_through_nota() {
         }],
     });
     let encoded = output.to_nota().unwrap();
-    let recovered = NotaSource::new(&encoded).parse::<PersonaOutput>().unwrap();
+    let recovered = DotosSource::new(&encoded).parse::<PersonaOutput>().unwrap();
 
     assert_eq!(recovered, output);
 }

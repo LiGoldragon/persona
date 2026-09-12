@@ -641,43 +641,25 @@ impl DirectProcessLauncher {
             .domain_socket_path()
             .to_path_buf();
         let configuration = signal_introspect::IntrospectDaemonConfiguration {
-            introspect_socket_path: signal_introspect::WirePath::new(
-                envelope.domain_socket_path().to_string_lossy().into_owned(),
-            ),
-            introspect_socket_mode: signal_introspect::SocketMode::new(u64::from(
-                envelope.domain_socket_mode().as_octal(),
-            )),
-            supervision_socket_path: signal_introspect::WirePath::new(
-                envelope
-                    .supervision_socket_path()
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
-            supervision_socket_mode: signal_introspect::SocketMode::new(u64::from(
-                envelope.supervision_socket_mode().as_octal(),
-            )),
-            store_path: signal_introspect::WirePath::new(
-                envelope.state_path().to_string_lossy().into_owned(),
-            ),
-            manager_socket_path: signal_introspect::WirePath::new(
-                envelope.manager_socket().to_string_lossy().into_owned(),
-            ),
-            router_socket_path: signal_introspect::WirePath::new(
-                router_socket_path.to_string_lossy().into_owned(),
-            ),
-            terminal_socket_path: signal_introspect::WirePath::new(
-                terminal_socket_path.to_string_lossy().into_owned(),
-            ),
-            trace_socket_path: signal_introspect::WirePath::new(
-                envelope
-                    .domain_socket_path()
-                    .with_file_name(format!(
-                        "{}-trace.sock",
-                        envelope.component_instance().as_str()
-                    ))
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
+            introspect_socket_path: envelope.domain_socket_path().to_string_lossy().into_owned(),
+            introspect_socket_mode: i64::from(envelope.domain_socket_mode().as_octal()),
+            supervision_socket_path: envelope
+                .supervision_socket_path()
+                .to_string_lossy()
+                .into_owned(),
+            supervision_socket_mode: i64::from(envelope.supervision_socket_mode().as_octal()),
+            store_path: envelope.state_path().to_string_lossy().into_owned(),
+            manager_socket_path: envelope.manager_socket().to_string_lossy().into_owned(),
+            router_socket_path: router_socket_path.to_string_lossy().into_owned(),
+            terminal_socket_path: terminal_socket_path.to_string_lossy().into_owned(),
+            trace_socket_path: envelope
+                .domain_socket_path()
+                .with_file_name(format!(
+                    "{}-trace.sock",
+                    envelope.component_instance().as_str()
+                ))
+                .to_string_lossy()
+                .into_owned(),
             owner_identity: envelope.owner_identity().clone(),
         };
         Self::write_configuration_binary_file(envelope, &configuration)
@@ -687,39 +669,18 @@ impl DirectProcessLauncher {
         envelope: &ComponentSpawnEnvelope,
     ) -> Result<PathBuf, DirectProcessFailure> {
         let configuration = signal_terminal::TerminalDaemonConfiguration {
-            terminal_socket_path: signal_terminal::WirePath::new(
-                envelope.domain_socket_path().to_string_lossy().into_owned(),
-            )
-            .into(),
-            terminal_socket_mode: signal_terminal::SocketMode::new(u64::from(
-                envelope.domain_socket_mode().as_octal(),
-            ))
-            .into(),
-            meta_terminal_socket_path: signal_terminal::WirePath::new(
-                Self::meta_socket_path(envelope)
-                    .to_string_lossy()
-                    .into_owned(),
-            )
-            .into(),
-            meta_terminal_socket_mode: signal_terminal::SocketMode::new(u64::from(
-                envelope.domain_socket_mode().as_octal(),
-            ))
-            .into(),
-            supervision_socket_path: signal_terminal::WirePath::new(
-                envelope
-                    .supervision_socket_path()
-                    .to_string_lossy()
-                    .into_owned(),
-            )
-            .into(),
-            supervision_socket_mode: signal_terminal::SocketMode::new(u64::from(
-                envelope.supervision_socket_mode().as_octal(),
-            ))
-            .into(),
-            store_path: signal_terminal::WirePath::new(
-                envelope.state_path().to_string_lossy().into_owned(),
-            )
-            .into(),
+            terminal_socket_path: envelope.domain_socket_path().to_string_lossy().into_owned(),
+            terminal_socket_mode: i64::from(envelope.domain_socket_mode().as_octal()),
+            meta_terminal_socket_path: Self::meta_socket_path(envelope)
+                .to_string_lossy()
+                .into_owned(),
+            meta_terminal_socket_mode: i64::from(envelope.domain_socket_mode().as_octal()),
+            supervision_socket_path: envelope
+                .supervision_socket_path()
+                .to_string_lossy()
+                .into_owned(),
+            supervision_socket_mode: i64::from(envelope.supervision_socket_mode().as_octal()),
+            store_path: envelope.state_path().to_string_lossy().into_owned(),
             owner_identity: Self::terminal_owner_identity(envelope.owner_identity()),
         };
         Self::write_configuration_binary_file(envelope, &configuration)
@@ -730,14 +691,10 @@ impl DirectProcessLauncher {
     ) -> signal_terminal::OwnerIdentity {
         match owner {
             signal_persona::OwnerIdentity::UnixUser(user) => {
-                signal_terminal::OwnerIdentity::UnixUser(signal_terminal::UnixUserIdentifier::new(
-                    u64::from(user.as_u32()),
-                ))
+                signal_terminal::OwnerIdentity::UnixUser(i64::from(user.as_u32()))
             }
             signal_persona::OwnerIdentity::System(principal) => {
-                signal_terminal::OwnerIdentity::System(signal_terminal::SystemPrincipal::new(
-                    principal.as_str().to_owned(),
-                ))
+                signal_terminal::OwnerIdentity::System(principal.as_str().to_owned())
             }
         }
     }

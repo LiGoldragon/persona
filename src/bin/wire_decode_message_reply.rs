@@ -24,7 +24,7 @@
 use std::io::{Read, Write};
 
 use signal_frame::{Reply, SubReply};
-use signal_message::{Frame, FrameBody, MessageOperationKind, NotaEncode, Output};
+use signal_message::{DotosEncode, Frame, FrameBody, MessageOperationKind, Output};
 
 #[derive(Debug)]
 enum Expectation {

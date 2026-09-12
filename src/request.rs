@@ -1,8 +1,8 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
+use dotos::{DotosDecode, DotosEncode, DotosSource};
 use meta_signal_persona as contract;
-use nota::{NotaDecode, NotaEncode, NotaSource};
 
 use crate::error::Error;
 use crate::schema::{
@@ -11,32 +11,32 @@ use crate::schema::{
     LaunchRejectionReport, RetirementAcceptanceReport, RetirementRejectionReport,
 };
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EngineStatusScope {
     WholeEngine,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EngineStatusQuery {
     pub scope: EngineStatusScope,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStatusQuery {
     pub component: contract::ComponentName,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentStartup {
     pub component: contract::ComponentName,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentShutdown {
     pub component: contract::ComponentName,
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub enum PersonaRequest {
     EngineStatusQuery(EngineStatusQuery),
     ComponentStatusQuery(ComponentStatusQuery),
@@ -46,7 +46,7 @@ pub enum PersonaRequest {
 
 impl PersonaRequest {
     pub fn from_nota(text: &str) -> crate::Result<Self> {
-        Ok(NotaSource::new(text).parse::<Self>()?)
+        Ok(DotosSource::new(text).parse::<Self>()?)
     }
 
     pub fn into_engine_request(self) -> contract::Operation {
@@ -70,7 +70,7 @@ impl PersonaRequest {
     }
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub enum PersonaOutput {
     LaunchAccepted(LaunchAcceptanceReport),
     LaunchRejected(LaunchRejectionReport),
@@ -136,7 +136,7 @@ impl PersonaOutput {
     }
 
     pub fn to_nota(&self) -> crate::Result<String> {
-        Ok(NotaEncode::to_nota(self))
+        Ok(DotosEncode::to_nota(self))
     }
 }
 

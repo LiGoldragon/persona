@@ -1,6 +1,6 @@
+use dotos::{DotosDecode, DotosEncode};
 pub use meta_signal_persona::OperationKind as EngineOperationKind;
 use meta_signal_persona::{ComponentName, EnginePhase};
-use nota::{NotaDecode, NotaEncode};
 pub use signal_harness::HarnessOperationKind;
 pub use signal_message::MessageOperationKind;
 pub use signal_mind::MindOperationKind;
@@ -131,7 +131,7 @@ pub struct EngineEventDraftInput {
     __C::Error: rkyv::rancor::Source
 )))]
 #[strum_discriminants(name(EngineEventSourceKind))]
-#[strum_discriminants(derive(NotaEncode, NotaDecode))]
+#[strum_discriminants(derive(DotosEncode, DotosDecode))]
 pub enum EngineEventSource {
     Manager,
     /// Manager-observed component fact. The component does not write the log.
@@ -153,7 +153,7 @@ pub enum EngineEventSource {
     __C::Error: rkyv::rancor::Source
 )))]
 #[strum_discriminants(name(EngineEventBodyKind))]
-#[strum_discriminants(derive(NotaEncode, NotaDecode))]
+#[strum_discriminants(derive(DotosEncode, DotosDecode))]
 pub enum EngineEventBody {
     ComponentSpawned(ComponentLifecycleEvent),
     ComponentReady(ComponentLifecycleEvent),
@@ -252,8 +252,8 @@ pub enum ComponentOperation {
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
-    NotaEncode,
-    NotaDecode,
+    DotosEncode,
+    DotosDecode,
     Debug,
     Clone,
     Copy,

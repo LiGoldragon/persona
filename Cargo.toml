@@ -25,39 +25,39 @@ name = "persona-write-configuration"
 path = "src/bin/persona_write_configuration.rs"
 
 [dependencies]
-kameo                  = { git = "https://github.com/LiGoldragon/kameo.git", branch = "main", default-features = false }
+kameo                  = { git = "https://github.com/LiGoldragon/kameo.git", rev = "3486e4f63ea4e87123476cfbdefeb12403540306", default-features = false }
 libc                   = "0.2"
-message                = { git = "https://github.com/LiGoldragon/message.git", branch = "main" }
-meta-signal-upgrade    = { git = "https://github.com/LiGoldragon/meta-signal-upgrade.git", branch = "main", features = ["nota-text"] }
-nota              = { git = "https://github.com/LiGoldragon/nota.git", branch = "main" }
-meta-signal-persona   = { git = "https://github.com/LiGoldragon/meta-signal-persona.git", branch = "main" }
+message                = { git = "https://github.com/LiGoldragon/message.git", rev = "38345dae42ac04caad0204ddbb94daf8f92c3367" }
+meta-signal-upgrade    = { git = "https://github.com/LiGoldragon/meta-signal-upgrade.git", rev = "a319e1ba35aedec650aeeffdcb1378e495aa9407" }
+dotos             = { package = "dotos", git = "https://github.com/LiGoldragon/dotos.git", rev = "80c7b17f7ad3cf547d2624c6a243e5de5f85c9f3" }
+meta-signal-persona   = { git = "https://github.com/LiGoldragon/meta-signal-persona.git", rev = "7891445ef98d321b6add102a26164312c5e9cd8d" }
 rkyv                   = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
-sema-engine            = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
-signal-frame           = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "main" }
-signal-harness            = { git = "https://github.com/LiGoldragon/signal-harness.git", branch = "main" }
-signal-introspect         = { git = "https://github.com/LiGoldragon/signal-introspect.git", branch = "main" }
-signal-message            = { git = "https://github.com/LiGoldragon/signal-message.git", branch = "main" }
-signal-mind               = { git = "https://github.com/LiGoldragon/signal-mind.git", branch = "main" }
-signal-persona            = { git = "https://github.com/LiGoldragon/signal-persona.git", branch = "main" }
-signal-router             = { git = "https://github.com/LiGoldragon/signal-router.git", branch = "main" }
-signal-system             = { git = "https://github.com/LiGoldragon/signal-system.git", branch = "main" }
-signal-terminal           = { git = "https://github.com/LiGoldragon/signal-terminal.git", branch = "main" }
+sema-engine            = { git = "https://github.com/LiGoldragon/sema-engine.git", rev = "27e814a721439af67721c530d48b4d2101141f74" }
+signal-frame           = { git = "https://github.com/LiGoldragon/signal-frame.git", rev = "000d86684d91ab6b38dd0bce7a5d8bae6db7b147" }
+signal-harness            = { git = "https://github.com/LiGoldragon/signal-harness.git", rev = "90e2878d96283d800d71699bb03e0a4ed4d05a8c" }
+signal-introspect         = { git = "https://github.com/LiGoldragon/signal-introspect.git", rev = "8de16e35a1aa993b059fcab72a2c2aa4b3a785bf" }
+signal-message            = { git = "https://github.com/LiGoldragon/signal-message.git", rev = "2da9c6dde92dda11ba53aedaa75a3f3605b51454" }
+signal-mind               = { git = "https://github.com/LiGoldragon/signal-mind.git", rev = "cf5d22c050aba99baf47015435cec53560ccc562" }
+signal-persona            = { git = "https://github.com/LiGoldragon/signal-persona.git", rev = "48118557368f26b7292f6b0fb2f98df5cec29fc5" }
+signal-router             = { git = "https://github.com/LiGoldragon/signal-router.git", rev = "03ed6bc2217d6a8d0ed5e1291e417ea4d4de168f" }
+signal-system             = { git = "https://github.com/LiGoldragon/signal-system.git", rev = "2acbdfd88798419848b0411ff1beb72adc451b66" }
+signal-terminal           = { git = "https://github.com/LiGoldragon/signal-terminal.git", rev = "bb6963650cdd507c25b3650d85fd3bfc232f9a07" }
 strum                  = { version = "0.28", features = ["derive"] }
 thiserror              = "2"
 tokio                  = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "process", "time"] }
-triad-runtime          = { git = "https://github.com/LiGoldragon/triad-runtime.git", branch = "main" }
+triad-runtime          = { git = "https://github.com/LiGoldragon/triad-runtime.git", rev = "02cdd49df63a1769b3cf1b2761261a87eeaa75a4" }
 unix-ancillary         = "0.2"
-upgrade                = { git = "https://github.com/LiGoldragon/upgrade.git", branch = "main" }
-version-projection     = { git = "https://github.com/LiGoldragon/version-projection.git", branch = "main" }
+upgrade                = { git = "https://github.com/LiGoldragon/upgrade.git", rev = "a3cdf23319f87118f7e0040e1aeb5b449f05df28" }
+version-projection     = { git = "https://github.com/LiGoldragon/version-projection.git", rev = "a6a79025cb28b02008a55481e2fc78047e45505e" }
 zbus                   = { version = "5.15", default-features = false, features = ["tokio"] }
 
 [build-dependencies]
-schema-rust = { git = "https://github.com/LiGoldragon/schema-rust.git", branch = "main" }
+schema-rust = { git = "https://github.com/LiGoldragon/schema-rust.git", rev = "55e3eaa6fba19504f7ce55955ecc42e00e072582" }
 
 [dev-dependencies]
-schema = { git = "https://github.com/LiGoldragon/schema.git", branch = "main" }
-signal-sema = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "main" }
-signal-upgrade = { git = "https://github.com/LiGoldragon/signal-upgrade.git", branch = "main" }
+schema = { git = "https://github.com/LiGoldragon/schema.git", rev = "16545698fbe165004d1c76d6c7ad6c58ce1e61a8" }
+signal-sema = { git = "https://github.com/LiGoldragon/signal-sema.git", rev = "6050e62254b619bd4ba31efa7c8b03cd4d772fc8" }
+signal-upgrade = { git = "https://github.com/LiGoldragon/signal-upgrade.git", rev = "b1bec686f4067fb1be16b47120b47225d1bf8d20" }
 
 # ─── Wire-test shim binaries (for nix-chained tests) ──────
 # These exercise signal-message end-to-end through
@@ -96,4 +96,4 @@ unused = "warn"
 dead_code = "warn"
 
 [patch.crates-io]
-kameo = { git = "https://github.com/LiGoldragon/kameo.git", branch = "main" }
+kameo = { git = "https://github.com/LiGoldragon/kameo.git", rev = "3486e4f63ea4e87123476cfbdefeb12403540306" }

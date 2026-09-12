@@ -35,8 +35,8 @@
 use std::io::{Read, Write};
 
 use signal_message::{
-    ComponentInstanceName, ComponentName, ConnectionClass, Frame, FrameBody, Input,
-    InternalComponentInstanceOrigin, MessageOrigin, NetworkPeer, NotaEncode, UnixUserIdentifier,
+    ComponentInstanceName, ComponentName, ConnectionClass, DotosEncode, Frame, FrameBody, Input,
+    InternalComponentInstanceOrigin, MessageOrigin, NetworkPeer, UnixUserIdentifier,
 };
 
 struct Expectations {

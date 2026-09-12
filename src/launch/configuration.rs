@@ -1,11 +1,11 @@
-use nota::{NotaDecode, NotaEncode};
+use dotos::{DotosDecode, DotosEncode};
 use thiserror::Error;
 
 use crate::engine::{EngineComponent, EngineTopology};
 
 use super::command::{ComponentCommand, ExecutablePath};
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentCommandEntry {
     component: EngineComponent,
     command: ComponentCommand,
@@ -159,7 +159,7 @@ impl ComponentCommandCatalog {
     }
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct EngineLaunchConfiguration {
     overrides: Vec<ComponentCommandOverride>,
 }
@@ -197,7 +197,7 @@ impl EngineLaunchConfiguration {
     }
 }
 
-#[derive(NotaEncode, NotaDecode, Debug, Clone, PartialEq, Eq)]
+#[derive(DotosEncode, DotosDecode, Debug, Clone, PartialEq, Eq)]
 pub struct ComponentCommandOverride {
     component: EngineComponent,
     command: ComponentCommand,
