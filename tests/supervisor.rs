@@ -29,7 +29,7 @@ impl SupervisorFixture {
         std::fs::create_dir_all(&root).expect("fixture root created");
         Self {
             root,
-            engine: EngineIdentifier::new("supervisor-test"),
+            engine: "supervisor-test".to_string(),
         }
     }
 
@@ -348,8 +348,8 @@ async fn constraint_engine_supervisor_launches_prototype_supervised_components_t
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_supervisor_scopes_spirit_per_engine() {
     let fixture = SupervisorFixture::new("spirit-per-engine-supervision");
-    let first_engine = EngineIdentifier::new("spirit-engine-one");
-    let second_engine = EngineIdentifier::new("spirit-engine-two");
+    let first_engine = "spirit-engine-one".to_string();
+    let second_engine = "spirit-engine-two".to_string();
     let store = ManagerStore::start(ManagerStoreLocation::new(fixture.manager_store()))
         .expect("manager store starts");
     let first_supervisor = EngineSupervisor::spawn(EngineSupervisor::new(EngineSupervisorInput {

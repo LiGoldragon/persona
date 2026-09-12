@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use kameo::actor::{ActorRef, Spawn};
 use kameo::error::SendError;
 use meta_signal_persona::{
-    EngineStatusScope, Operation as EngineRequest, Query, Reply as EngineReply,
+    EngineStatusScope, MetaQuery, Query as EngineRequest, Response as EngineReply,
 };
 use persona::direct_process::{
     DirectProcessFailure, DirectProcessLauncher, ExitNotifier, LaunchComponent,
@@ -24,7 +24,6 @@ use persona::launch::{
 use persona::manager::{EngineManager, HandleEngineRequest};
 use persona::manager_store::{ManagerStore, ManagerStoreLocation, ReadEngineEvents};
 use signal_harness::{HarnessDaemonConfiguration, HarnessKind};
-use signal_persona::EngineIdentifier;
 use signal_router::{
     EndpointKind, RouterBootstrapDocument, RouterBootstrapOperation, RouterDaemonConfiguration,
 };
@@ -251,7 +250,7 @@ impl DirectProcessFixture {
 
     async fn envelope(&self, component: EngineComponent) -> ComponentSpawnEnvelope {
         let paths = PersonaDaemonPaths::new(self.state_root(), self.run_root());
-        let layout = paths.engine_layout(EngineIdentifier::new("engine-direct-process"));
+        let layout = paths.engine_layout("engine-direct-process".to_string());
         layout
             .prepare_directories()
             .expect("engine directories prepared");
@@ -266,7 +265,7 @@ impl DirectProcessFixture {
         command: ComponentCommand,
     ) -> ComponentSpawnEnvelope {
         let paths = PersonaDaemonPaths::new(self.state_root(), self.run_root());
-        let layout = paths.engine_layout(EngineIdentifier::new("engine-direct-process"));
+        let layout = paths.engine_layout("engine-direct-process".to_string());
         layout
             .prepare_directories()
             .expect("engine directories prepared");
@@ -402,7 +401,7 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
     let paths = PersonaDaemonPaths::new(fixture.state_root(), fixture.run_root());
     let layout = paths.engine_layout_with_topology(
-        EngineIdentifier::new("engine-three-harness-router-bootstrap"),
+        "engine-three-harness-router-bootstrap".to_string(),
         EngineTopology::ThreeHarnessChain,
     );
     layout
@@ -481,7 +480,7 @@ async fn constraint_three_harness_chain_message_launch_writes_runtime_daemon_con
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
     let paths = PersonaDaemonPaths::new(fixture.state_root(), fixture.run_root());
     let layout = paths.engine_layout_with_topology(
-        EngineIdentifier::new("engine-three-harness-message-ingress"),
+        "engine-three-harness-message-ingress".to_string(),
         EngineTopology::ThreeHarnessChain,
     );
     layout
@@ -495,10 +494,7 @@ async fn constraint_three_harness_chain_message_launch_writes_runtime_daemon_con
         .expect("message spawn envelope exists");
     let envelope_path = envelope.envelope_path().to_path_buf();
     let expected_message_socket = envelope.domain_socket_path().to_path_buf();
-    let expected_meta_socket = envelope
-        .domain_socket_path()
-        .with_file_name("meta-message.sock");
-    let expected_state_path = envelope.state_path().to_path_buf();
+    let expected_supervision_socket = envelope.supervision_socket_path().to_path_buf();
     let expected_router_socket = envelope
         .peers()
         .iter()
@@ -512,15 +508,26 @@ async fn constraint_three_harness_chain_message_launch_writes_runtime_daemon_con
         .expect("message component launches");
 
     let configuration_path = envelope_path.with_file_name("message-daemon.rkyv");
-    let configuration = DirectProcessFixture::decode_archive::<message::Configuration>(
+    let configuration = DirectProcessFixture::decode_archive::<signal_message::MessageDaemonConfiguration>(
         &configuration_path,
         "message configuration decodes",
     );
-    assert_eq!(configuration.socket_path(), expected_message_socket);
-    assert_eq!(configuration.meta_socket_path(), expected_meta_socket);
-    assert_eq!(configuration.router_socket_path(), expected_router_socket);
-    assert_eq!(configuration.database_path(), expected_state_path);
-    assert_eq!(configuration.owner_name(), "message");
+    assert_eq!(
+        configuration.message_socket_path,
+        expected_message_socket.to_string_lossy()
+    );
+    assert_eq!(
+        configuration.supervision_socket_path,
+        expected_supervision_socket.to_string_lossy()
+    );
+    assert_eq!(
+        configuration.router_socket_path,
+        expected_router_socket.to_string_lossy()
+    );
+    assert_eq!(
+        configuration.owner_identity,
+        signal_message::OwnerIdentity::UnixUser(i64::from(unsafe { libc::geteuid() }))
+    );
 
     DirectProcessFixture::stop(&launcher, EngineComponent::Message)
         .await
@@ -535,7 +542,7 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
     let launcher = DirectProcessLauncher::spawn(DirectProcessLauncher::new());
     let paths = PersonaDaemonPaths::new(fixture.state_root(), fixture.run_root());
     let layout = paths.engine_layout_with_topology(
-        EngineIdentifier::new("engine-three-harness-instance-configurations"),
+        "engine-three-harness-instance-configurations".to_string(),
         EngineTopology::ThreeHarnessChain,
     );
     layout
@@ -580,19 +587,20 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
         );
     }
 
-    let message_configuration = DirectProcessFixture::decode_archive::<message::Configuration>(
+    let message_configuration = DirectProcessFixture::decode_archive::<signal_message::MessageDaemonConfiguration>(
         &engine_run_root.join("message-daemon.rkyv"),
         "message configuration decodes",
     );
     assert_eq!(
-        message_configuration.socket_path(),
-        engine_run_root.join("message.sock")
+        message_configuration.message_socket_path,
+        engine_run_root.join("message.sock").to_string_lossy()
     );
     assert_eq!(
-        message_configuration.meta_socket_path(),
-        engine_run_root.join("meta-message.sock")
+        message_configuration.supervision_socket_path,
+        engine_run_root
+            .join("message.supervision.sock")
+            .to_string_lossy()
     );
-    assert_eq!(message_configuration.owner_name(), "message");
 
     for agent_name in ["initiator", "responder", "reviewer"] {
         let terminal_instance_name = format!("{agent_name}-terminal");
@@ -604,58 +612,48 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
         assert!(
             terminal_configuration
                 .terminal_socket_path
-                .payload()
                 .as_str()
                 .ends_with(&format!("{terminal_instance_name}.sock")),
             "terminal socket path belongs to {terminal_instance_name}: {}",
             terminal_configuration
                 .terminal_socket_path
-                .payload()
                 .as_str()
         );
         assert_eq!(
-            *terminal_configuration
-                .terminal_socket_mode
-                .payload()
-                .payload(),
+            terminal_configuration
+                .terminal_socket_mode,
             0o600
         );
         assert!(
             terminal_configuration
                 .supervision_socket_path
-                .payload()
                 .as_str()
                 .ends_with(&format!("{terminal_instance_name}.supervision.sock")),
             "terminal supervision socket belongs to {terminal_instance_name}: {}",
             terminal_configuration
                 .supervision_socket_path
-                .payload()
                 .as_str()
         );
         assert_eq!(
-            *terminal_configuration
-                .supervision_socket_mode
-                .payload()
-                .payload(),
+            terminal_configuration
+                .supervision_socket_mode,
             0o600
         );
         assert!(
             terminal_configuration
                 .store_path
-                .payload()
                 .as_str()
                 .ends_with(&format!("{terminal_instance_name}.sema")),
             "terminal store path belongs to {terminal_instance_name}: {}",
-            terminal_configuration.store_path.payload().as_str()
+            terminal_configuration.store_path.as_str()
         );
         assert!(
             terminal_configuration
                 .store_path
-                .payload()
                 .as_str()
                 .starts_with(engine_state_root.to_string_lossy().as_ref()),
             "terminal store path stays in engine state root: {}",
-            terminal_configuration.store_path.payload().as_str()
+            terminal_configuration.store_path.as_str()
         );
 
         let harness_configuration =
@@ -671,7 +669,7 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
             "harness socket path belongs to {agent_name}: {}",
             harness_configuration.domain_socket_path.as_str()
         );
-        assert_eq!(*harness_configuration.domain_socket_mode.payload(), 0o600);
+        assert_eq!(harness_configuration.domain_socket_mode, 0o600);
         assert!(
             harness_configuration
                 .engine_management_socket_path
@@ -681,19 +679,19 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
             harness_configuration.engine_management_socket_path.as_str()
         );
         assert_eq!(
-            *harness_configuration
+            harness_configuration
                 .engine_management_socket_mode
-                .payload(),
+                ,
             0o600
         );
         let harness_instance = harness_configuration
-            .harnesses
+            .harness_instance_configurations
             .first()
             .unwrap_or_else(|| panic!("harness {agent_name} has an instance entry"));
         assert_eq!(harness_instance.harness_name.as_str(), agent_name);
         assert_eq!(harness_instance.harness_kind, HarnessKind::Fixture);
         let terminal_socket_path = harness_instance
-            .terminal_socket_path
+            .terminal_socket_path_option
             .as_ref()
             .unwrap_or_else(|| panic!("harness {agent_name} has paired terminal socket"));
         assert!(
@@ -804,7 +802,7 @@ async fn constraint_component_launcher_does_not_block_manager_mailbox() {
 
     let manager_reply = manager
         .ask(HandleEngineRequest::new(EngineRequest::Query(
-            Query::EngineStatus(EngineStatusScope::WholeEngine).into(),
+            MetaQuery::EngineStatus(EngineStatusScope::WholeEngine),
         )))
         .await
         .expect("manager mailbox replies while launched child runs");
@@ -920,7 +918,7 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
             .as_str()
             .ends_with("mind.sock")
     );
-    assert_eq!(*signal_envelope.domain_socket_mode.payload(), 0o600);
+    assert_eq!(signal_envelope.domain_socket_mode, 0o600);
     assert!(
         signal_envelope
             .engine_management_socket_path
@@ -928,11 +926,11 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
             .ends_with("mind.supervision.sock")
     );
     assert_eq!(
-        *signal_envelope.engine_management_socket_mode.payload(),
+        signal_envelope.engine_management_socket_mode,
         0o600
     );
     assert_eq!(
-        *signal_envelope.engine_management_protocol_version.payload(),
+        signal_envelope.engine_management_protocol_version,
         1
     );
 
@@ -946,7 +944,7 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_component_launcher_observes_natural_child_exit_and_appends_event() {
     let fixture = DirectProcessFixture::new("natural-exit");
-    let engine = EngineIdentifier::new("engine-direct-process");
+    let engine = "engine-direct-process".to_string();
     let manager_store_path = fixture.root.join("manager.sema");
     let store = ManagerStore::start(ManagerStoreLocation::new(&manager_store_path))
         .expect("manager store starts");

@@ -1,17 +1,14 @@
 use std::sync::Arc;
 
-use meta_signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, EngineStatusScope,
-    Query,
-};
-use meta_signal_persona::{Operation as EngineRequest, Reply as EngineReply};
+use meta_signal_persona::{EngineStatusScope, MetaQuery};
+use signal_persona::{ComponentDesiredState, ComponentHealth};
+use meta_signal_persona::{Query as EngineRequest, Response as EngineReply};
 use persona::manager::{
     EngineManager, HandleEngineRequest, ManagerEvent, ReadTrace, StartComponentUnit,
 };
 use persona::manager_store::{ManagerStore, ManagerStoreLocation};
 use persona::unit::{ComponentUnit, UnitController, UnitFuture, UnitReceipt, UnitStatusReport};
 use persona::upgrade::Version;
-use signal_persona::EngineIdentifier;
 
 struct StoreFixture {
     root: std::path::PathBuf,
@@ -93,7 +90,7 @@ async fn constraint_engine_request_reply_is_created_by_kameo_manager_path() {
 
     let reply = manager
         .ask(HandleEngineRequest::new(EngineRequest::Query(
-            Query::EngineStatus(EngineStatusScope::WholeEngine).into(),
+            MetaQuery::EngineStatus(EngineStatusScope::WholeEngine),
         )))
         .await
         .expect("request handled by actor");
@@ -123,7 +120,7 @@ async fn constraint_engine_request_reply_is_created_by_kameo_manager_path() {
 async fn constraint_engine_manager_keeps_component_state_between_messages() {
     let manager = EngineManager::start().await;
 
-    let shutdown = ComponentShutdown::new(ComponentName::new("persona-terminal"));
+    let shutdown = "persona-terminal".to_string();
     let acceptance = manager
         .ask(HandleEngineRequest::new(EngineRequest::Stop(
             shutdown.into(),
@@ -135,14 +132,14 @@ async fn constraint_engine_manager_keeps_component_state_between_messages() {
 
     let status = manager
         .ask(HandleEngineRequest::new(EngineRequest::Query(
-            Query::ComponentStatus(ComponentName::new("persona-terminal")).into(),
+            MetaQuery::ComponentStatus("persona-terminal".to_string()),
         )))
         .await
         .expect("status handled by actor");
 
     match status {
         EngineReply::ComponentStatus(component) => {
-            let component = component.into_payload();
+            let component = component;
             assert_eq!(
                 component.component_desired_state,
                 ComponentDesiredState::Stopped
@@ -160,7 +157,7 @@ async fn constraint_engine_manager_keeps_component_state_between_messages() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_persona_keeps_versioned_unit_start_authority_only() {
     let fixture = StoreFixture::new("persona-manager-start-component-unit");
-    let engine = EngineIdentifier::new("engine-start-component-unit");
+    let engine = "engine-start-component-unit".to_string();
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let unit_controller = RecordingUnitController::default();
     let manager = EngineManager::start_with_store_and_unit_controller(
@@ -173,7 +170,7 @@ async fn constraint_persona_keeps_versioned_unit_start_authority_only() {
 
     let receipt = manager
         .ask(StartComponentUnit::new(
-            ComponentName::new("persona-spirit"),
+            "persona-spirit".to_string(),
             Version::new("v0.1.1"),
         ))
         .await

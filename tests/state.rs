@@ -1,8 +1,6 @@
-use meta_signal_persona::Reply;
-use meta_signal_persona::{
-    ActionRejectionReason, ComponentDesiredState, ComponentHealth, ComponentName,
-    ComponentShutdown, ComponentStartup,
-};
+use meta_signal_persona::Response;
+use meta_signal_persona::ActionRejectionReason;
+use signal_persona::{ComponentDesiredState, ComponentHealth};
 use persona::state::EngineState;
 
 #[test]
@@ -10,7 +8,7 @@ fn default_catalog_names_engine_components() {
     let state = EngineState::default_catalog();
     let names: Vec<&str> = state
         .snapshot()
-        .components
+        .component_status_vector
         .iter()
         .map(|component| component.component_name.as_str())
         .collect();
@@ -33,17 +31,15 @@ fn default_catalog_names_engine_components() {
 #[test]
 fn component_shutdown_advances_generation_and_updates_status() {
     let mut state = EngineState::default_catalog();
-    let reply = state.stop_component(ComponentShutdown::new(ComponentName::new(
-        "persona-terminal",
-    )));
+    let reply = state.stop_component("persona-terminal".to_string());
 
-    assert!(matches!(reply, Reply::ActionAccepted(_)));
-    assert_eq!(state.snapshot().generation as u64, 1);
+    assert!(matches!(reply, Response::ActionAccepted(_)));
+    assert_eq!(state.snapshot().engine_generation as u64, 1);
 
-    let status = state.component_status(ComponentName::new("persona-terminal"));
+    let status = state.component_status("persona-terminal".to_string());
     match status {
-        Reply::ComponentStatus(component) => {
-            let component = component.into_payload();
+        Response::ComponentStatus(component) => {
+            let component = component;
             assert_eq!(
                 component.component_desired_state,
                 ComponentDesiredState::Stopped
@@ -57,11 +53,11 @@ fn component_shutdown_advances_generation_and_updates_status() {
 #[test]
 fn missing_component_query_returns_typed_missing_reply() {
     let state = EngineState::default_catalog();
-    let reply = state.component_status(ComponentName::new("persona-missing"));
+    let reply = state.component_status("persona-missing".to_string());
 
     match reply {
-        Reply::ComponentMissing(missing) => {
-            assert_eq!(missing.into_payload().as_str(), "persona-missing");
+        Response::ComponentMissing(missing) => {
+            assert_eq!(missing.as_str(), "persona-missing");
         }
         other => panic!("expected missing component reply, got {other:?}"),
     }
@@ -70,13 +66,13 @@ fn missing_component_query_returns_typed_missing_reply() {
 #[test]
 fn repeated_startup_returns_already_desired_rejection() {
     let mut state = EngineState::default_catalog();
-    let reply = state.start_component(ComponentStartup::new(ComponentName::new("persona-router")));
+    let reply = state.start_component("persona-router".to_string());
 
     match reply {
-        Reply::ActionRejected(rejection) => {
-            let rejection = rejection.into_payload();
+        Response::ActionRejected(rejection) => {
+            let rejection = rejection;
             assert_eq!(
-                rejection.reason,
+                rejection.action_rejection_reason,
                 ActionRejectionReason::ComponentAlreadyInDesiredState
             );
         }

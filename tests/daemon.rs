@@ -251,7 +251,7 @@ async fn constraint_persona_daemon_launches_three_harness_chain_topology_through
     .expect("manager store starts for inspection");
     let events = store
         .ask(persona::manager_store::ReadEngineEvents::new(
-            signal_persona::EngineIdentifier::new("default"),
+            "default".to_string(),
         ))
         .await
         .expect("default engine events read through manager store actor");
@@ -297,7 +297,7 @@ async fn constraint_persona_daemon_launches_message_router_topology_through_engi
     .expect("manager store starts for inspection");
     let events = store
         .ask(persona::manager_store::ReadEngineEvents::new(
-            signal_persona::EngineIdentifier::new("default"),
+            "default".to_string(),
         ))
         .await
         .expect("default engine events read through manager store actor");
@@ -354,21 +354,21 @@ async fn constraint_persona_daemon_persists_cli_mutation_to_manager_store() {
     .expect("manager store starts for inspection");
     let record = store
         .ask(persona::manager_store::ReadEngineRecord::new(
-            signal_persona::EngineIdentifier::new("default"),
+            "default".to_string(),
         ))
         .await
         .expect("stored record read through manager store actor")
         .expect("default engine record exists");
     let terminal = record
         .status()
-        .payload()
-        .components
+        
+        .component_status_vector
         .iter()
         .find(|component| component.component_name.as_str() == "persona-terminal")
         .expect("terminal component stored");
     assert_eq!(
         terminal.component_desired_state,
-        meta_signal_persona::ComponentDesiredState::Stopped
+        signal_persona::ComponentDesiredState::Stopped
     );
 
     store.stop_gracefully().await.expect("manager store stops");
@@ -438,7 +438,7 @@ async fn constraint_persona_daemon_launches_prototype_supervised_components_thro
     .expect("manager store starts for inspection");
     let events = store
         .ask(persona::manager_store::ReadEngineEvents::new(
-            signal_persona::EngineIdentifier::new("default"),
+            "default".to_string(),
         ))
         .await
         .expect("default engine events read through manager store actor");

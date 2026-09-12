@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use meta_signal_persona::ComponentName;
 use persona::launch::{
     CommandArgument, ComponentCommand, ComponentCommandInput, EnvironmentVariable,
     EnvironmentVariableInput, EnvironmentVariableName, EnvironmentVariableValue, ExecutablePath,
@@ -11,7 +10,6 @@ use persona::unit::{
     UnitController, UnitFuture, UnitReceipt, UnitRestartPolicy, UnitStatus, UnitStatusReport,
 };
 use persona::upgrade::Version;
-use signal_persona::EngineIdentifier;
 
 #[derive(Debug, Clone, Default)]
 struct RecordingController {
@@ -63,8 +61,8 @@ impl UnitController for RecordingController {
 
 fn spirit_unit() -> ComponentUnit {
     ComponentUnit::new(
-        EngineIdentifier::new("default"),
-        ComponentName::new("persona-spirit"),
+        "default".to_string(),
+        "persona-spirit".to_string(),
         Version::new("v0.1.1"),
     )
 }

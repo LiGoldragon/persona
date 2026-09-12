@@ -1,13 +1,13 @@
 use kameo::actor::{ActorStateAbsence, ActorTerminalReason};
-use meta_signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentName, ComponentShutdown, Query,
-};
-use meta_signal_persona::{Operation as EngineRequest, Reply as EngineReply};
+use meta_signal_persona::MetaQuery;
+use signal_persona::{ComponentDesiredState, ComponentHealth};
+use meta_signal_persona::{Query as EngineRequest, Response as EngineReply};
 use persona::engine_event::{
     ComponentLifecycleEvent, ComponentOperation, ComponentUnimplemented,
     ComponentUnimplementedInput, EngineEventBody, EngineEventDraft, EngineEventDraftInput,
     EngineEventSource, HarnessOperationKind, UnimplementedReason,
 };
+use persona::datom_text::DatomActualizable;
 use persona::manager::EngineManager;
 use persona::manager_store::AppendOrphansFromEventLog;
 use persona::manager_store::{
@@ -22,19 +22,18 @@ use persona::schema::{
 use persona::state::EngineState;
 use signal_persona::EngineIdentifier;
 use signal_upgrade::{
-    ComponentName as UpgradeComponentName, ContractVersion, Date, HandoverMarker, RawByte,
-    RawBytes, Time,
+    Date, HandoverMarkerData, Time,
 };
 
 use persona::upgrade::SocketPath as UpgradeSocketPath;
 use persona::upgrade::{ActiveVersionChanged, PreparedEvent, Target, TargetInput, Version};
 
 fn stop_component_request(component: &str) -> EngineRequest {
-    EngineRequest::Stop(ComponentShutdown::new(ComponentName::new(component)).into())
+    EngineRequest::Stop(component.to_string())
 }
 
 fn component_status_request(component: &str) -> EngineRequest {
-    EngineRequest::Query(Query::ComponentStatus(ComponentName::new(component)).into())
+    EngineRequest::Query(MetaQuery::ComponentStatus(component.to_string()))
 }
 
 struct StoreFixture {
@@ -59,7 +58,7 @@ impl StoreFixture {
     }
 
     fn spawned_event(engine: EngineIdentifier, component: &str) -> EngineEventDraft {
-        let component = ComponentName::new(component);
+        let component = component.to_string();
         EngineEventDraft::from_input(EngineEventDraftInput {
             engine,
             source: EngineEventSource::Manager,
@@ -68,14 +67,14 @@ impl StoreFixture {
     }
 
     fn unimplemented_event(engine: EngineIdentifier, component: &str) -> EngineEventDraft {
-        let component = ComponentName::new(component);
+        let component = component.to_string();
         EngineEventDraft::from_input(EngineEventDraftInput {
             engine,
             source: EngineEventSource::Component(component.clone()),
             body: EngineEventBody::ComponentUnimplemented(ComponentUnimplemented::from_input(
                 ComponentUnimplementedInput {
                     component,
-                    operation: ComponentOperation::Harness(HarnessOperationKind::MessageDelivery),
+                    operation: ComponentOperation::Harness(HarnessOperationKind::DeliverMessage),
                     reason: UnimplementedReason::NotBuiltYet,
                 },
             )),
@@ -84,7 +83,7 @@ impl StoreFixture {
 
     fn spirit_upgrade_target() -> Target {
         Target::from_input(TargetInput {
-            component: UpgradeComponentName::new("persona-spirit"),
+            component: "persona-spirit".to_string(),
             current_version: Version::new("v0.1.0"),
             next_version: Version::new("v0.1.1"),
             current_meta_socket_path: UpgradeSocketPath::new(
@@ -102,10 +101,10 @@ impl StoreFixture {
         })
     }
 
-    fn spirit_handover_marker(state_sequence: u64) -> HandoverMarker {
-        HandoverMarker {
-            component: UpgradeComponentName::new("persona-spirit"),
-            schema_hash: ContractVersion::new(RawBytes::new(vec![RawByte::new(7); 32])),
+    fn spirit_handover_marker(state_sequence: i64) -> HandoverMarkerData {
+        HandoverMarkerData {
+            component: "persona-spirit".to_string(),
+            schema_hash: vec![7_i64; 32],
             state_sequence,
             mirrored_write_count: 99,
             record_frontier: Some(210),
@@ -150,7 +149,7 @@ impl UniqueName {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_manager_store_writes_engine_status_through_writer_actor() {
     let fixture = StoreFixture::new("persona-manager-store-writer");
-    let engine = EngineIdentifier::new("engine-store-writer");
+    let engine = "engine-store-writer".to_string();
     let status = EngineState::default_catalog().snapshot().clone();
 
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
@@ -176,7 +175,7 @@ async fn constraint_manager_store_writes_engine_status_through_writer_actor() {
         .expect("record read through actor")
         .expect("engine record exists");
     assert_eq!(record.engine(), &engine);
-    assert_eq!(record.status().payload(), &status);
+    assert_eq!(record.status(), &status);
     store.stop_gracefully().await.expect("manager store stops");
     let _shutdown_completion = store.wait_for_shutdown().await;
 }
@@ -184,7 +183,7 @@ async fn constraint_manager_store_writes_engine_status_through_writer_actor() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_persists_component_mutation_through_manager_store() {
     let fixture = StoreFixture::new("persona-engine-manager-store-path");
-    let engine = EngineIdentifier::new("engine-manager-store-path");
+    let engine = "engine-manager-store-path".to_string();
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
         .await
@@ -198,8 +197,8 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
     assert_eq!(
         initial_record
             .status()
-            .payload()
-            .generation
+            
+            .engine_generation
             .clone()
              as u64,
         0
@@ -221,8 +220,8 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
     assert_eq!(
         stored_record
             .status()
-            .payload()
-            .generation
+            
+            .engine_generation
             .clone()
              as u64,
         1
@@ -230,8 +229,8 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
 
     let terminal_status = stored_record
         .status()
-        .payload()
-        .components
+        
+        .component_status_vector
         .iter()
         .find(|component| component.component_name.as_str() == "persona-terminal")
         .expect("terminal component stored");
@@ -259,7 +258,7 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_status() {
     let fixture = StoreFixture::new("persona-engine-manager-restore");
-    let engine = EngineIdentifier::new("engine-manager-restore");
+    let engine = "engine-manager-restore".to_string();
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let manager = EngineManager::start_with_store(engine.clone(), store.clone())
         .await
@@ -290,7 +289,7 @@ async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_
     let EngineReply::ComponentStatus(status) = status else {
         panic!("expected restored component status");
     };
-    let status = status.into_payload();
+    let status = status;
     assert_eq!(
         status.component_desired_state,
         ComponentDesiredState::Stopped
@@ -302,7 +301,7 @@ async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_
         .await
         .expect("stored record read through store actor")
         .expect("stored engine record exists");
-    assert_eq!(record.status().payload().generation as u64, 1);
+    assert_eq!(record.status().engine_generation as u64, 1);
 
     EngineManager::stop(restored)
         .await
@@ -314,7 +313,7 @@ async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_event_log_records_typed_manager_events() {
     let fixture = StoreFixture::new("persona-manager-event-log");
-    let engine = EngineIdentifier::new("engine-event-log");
+    let engine = "engine-event-log".to_string();
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
 
     let first = store
@@ -349,7 +348,7 @@ async fn constraint_engine_event_log_records_typed_manager_events() {
         events[1].body(),
         EngineEventBody::ComponentUnimplemented(unimplemented)
             if unimplemented.operation()
-                == &ComponentOperation::Harness(HarnessOperationKind::MessageDelivery)
+                == &ComponentOperation::Harness(HarnessOperationKind::DeliverMessage)
     ));
 
     store.stop_gracefully().await.expect("manager store stops");
@@ -359,7 +358,7 @@ async fn constraint_engine_event_log_records_typed_manager_events() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_manager_store_projects_active_component_version_from_event_log() {
     let fixture = StoreFixture::new("persona-manager-active-version");
-    let engine = EngineIdentifier::new("engine-active-version");
+    let engine = "engine-active-version".to_string();
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let target = StoreFixture::spirit_upgrade_target();
     let marker = StoreFixture::spirit_handover_marker(45);
@@ -389,16 +388,13 @@ async fn constraint_manager_store_projects_active_component_version_from_event_l
     let active = store
         .ask(ReadActiveVersion::new(
             engine.clone(),
-            ComponentName::new("persona-spirit"),
+            "persona-spirit".to_string(),
         ))
         .await
         .expect("active version snapshot reads")
         .expect("active version exists");
     assert_eq!(active.active_version().as_str(), "v0.1.1");
-    assert_eq!(
-        active.schema_hash(),
-        ContractVersion::new(RawBytes::new(vec![RawByte::new(7); 32]))
-    );
+    assert_eq!(active.schema_hash(), vec![7_i64; 32]);
     assert_eq!(active.state_sequence(), Some(45));
 
     store
@@ -408,7 +404,7 @@ async fn constraint_manager_store_projects_active_component_version_from_event_l
     let rebuilt = store
         .ask(ReadActiveVersion::new(
             engine.clone(),
-            ComponentName::new("persona-spirit"),
+            "persona-spirit".to_string(),
         ))
         .await
         .expect("active version snapshot reads after rebuild")
@@ -423,7 +419,7 @@ async fn constraint_manager_store_projects_active_component_version_from_event_l
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_event_log_nota_projection_is_view() {
     let fixture = StoreFixture::new("persona-manager-event-log-projection");
-    let engine = EngineIdentifier::new("engine-event-projection");
+    let engine = "engine-event-projection".to_string();
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
 
     store
@@ -438,8 +434,9 @@ async fn constraint_engine_event_log_nota_projection_is_view() {
         .await
         .expect("events read through store actor");
     let projection = EngineEventReport::from_event(&events[0]);
-    let nota = projection.to_nota();
-    let recovered = EngineEventReport::from_nota(&nota).expect("event projection decodes");
+    let text = projection.textualize();
+    let recovered = EngineEventReport::actualize_text(&text)
+        .unwrap_or_else(|fault| panic!("event projection restores from {text}: {fault:?}"));
 
     assert_eq!(recovered, projection);
     assert_eq!(projection.sequence, 1);
@@ -458,15 +455,9 @@ async fn constraint_engine_event_log_nota_projection_is_view() {
         EngineEventBodyReport::ComponentUnimplemented(ref unimplemented)
             if unimplemented.component.as_str() == "persona-harness"
                 && unimplemented.operation
-                    == ComponentOperationReport::Harness(HarnessOperationKind::MessageDelivery)
+                    == ComponentOperationReport::Harness(HarnessOperationKind::DeliverMessage)
                 && unimplemented.reason == UnimplementedReason::NotBuiltYet
     ));
-    assert!(
-        nota.starts_with(
-            "(1 engine-event-projection Component (Some persona-harness) (ComponentUnimplemented"
-        ),
-        "unexpected event projection: {nota}"
-    );
 
     store.stop_gracefully().await.expect("manager store stops");
     let _shutdown_completion = store.wait_for_shutdown().await;
@@ -475,7 +466,7 @@ async fn constraint_engine_event_log_nota_projection_is_view() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables() {
     let fixture = StoreFixture::new("persona-manager-store-snapshot-reduce");
-    let engine = EngineIdentifier::new("engine-snapshot-reduce");
+    let engine = "engine-snapshot-reduce".to_string();
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
 
     store
@@ -508,15 +499,13 @@ async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables(
     assert_eq!(status_after_spawn[0].component().as_str(), "persona-router");
     assert_eq!(
         status_after_spawn[0].health(),
-        meta_signal_persona::ComponentHealth::Starting
+        signal_persona::ComponentHealth::Starting
     );
 
     let ready_draft = EngineEventDraft::from_input(EngineEventDraftInput {
         engine: engine.clone(),
         source: EngineEventSource::Manager,
-        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(ComponentName::new(
-            "persona-router",
-        ))),
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new("persona-router".to_string())),
     });
     store
         .ask(AppendEngineEvent::new(ready_draft))
@@ -539,7 +528,7 @@ async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables(
         .expect("status snapshot reads");
     assert_eq!(
         status_after_ready[0].health(),
-        meta_signal_persona::ComponentHealth::Running
+        signal_persona::ComponentHealth::Running
     );
 
     store.stop_gracefully().await.expect("manager store stops");
@@ -549,7 +538,7 @@ async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables(
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
     let fixture = StoreFixture::new("persona-engine-manager-snapshot-hydrate");
-    let engine = EngineIdentifier::new("engine-snapshot-hydrate");
+    let engine = "engine-snapshot-hydrate".to_string();
 
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     store
@@ -562,9 +551,7 @@ async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
     let ready_draft = EngineEventDraft::from_input(EngineEventDraftInput {
         engine: engine.clone(),
         source: EngineEventSource::Manager,
-        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(ComponentName::new(
-            "persona-terminal",
-        ))),
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new("persona-terminal".to_string())),
     });
     store
         .ask(AppendEngineEvent::new(ready_draft))
@@ -589,8 +576,8 @@ async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
         panic!("expected terminal component status, got {reply:?}");
     };
     assert_eq!(
-        status.into_payload().component_health,
-        meta_signal_persona::ComponentHealth::Running
+        status.component_health,
+        signal_persona::ComponentHealth::Running
     );
 
     EngineManager::stop(manager)
@@ -608,7 +595,7 @@ async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapshot_truncation() {
     let fixture = StoreFixture::new("persona-manager-store-snapshot-rebuild");
-    let engine = EngineIdentifier::new("engine-snapshot-rebuild");
+    let engine = "engine-snapshot-rebuild".to_string();
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
 
     // Append a lifecycle arc that fully exercises both reducers.
@@ -623,9 +610,7 @@ async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapsh
     let ready_router = EngineEventDraft::from_input(EngineEventDraftInput {
         engine: engine.clone(),
         source: EngineEventSource::Manager,
-        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(ComponentName::new(
-            "persona-router",
-        ))),
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new("persona-router".to_string())),
     });
     store
         .ask(AppendEngineEvent::new(ready_router))
@@ -702,7 +687,7 @@ async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapsh
         .expect("router status row present");
     assert_eq!(
         router_status.health(),
-        meta_signal_persona::ComponentHealth::Running
+        signal_persona::ComponentHealth::Running
     );
 
     let terminal_lifecycle = lifecycle_after
@@ -719,7 +704,7 @@ async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapsh
         .expect("terminal status row present");
     assert_eq!(
         terminal_status.health(),
-        meta_signal_persona::ComponentHealth::Starting
+        signal_persona::ComponentHealth::Starting
     );
 
     store.stop_gracefully().await.expect("manager store stops");
@@ -734,7 +719,7 @@ async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapsh
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_manager_store_close_protocol_releases_storage_lock_before_shutdown() {
     let fixture = StoreFixture::new("persona-manager-store-release");
-    let engine = EngineIdentifier::new("engine-store-release");
+    let engine = "engine-store-release".to_string();
 
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     store
@@ -796,7 +781,7 @@ fn sorted_status(mut rows: Vec<ComponentStatusSnapshotRow>) -> Vec<ComponentStat
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_spawn() {
     let fixture = StoreFixture::new("persona-manager-orphan-detection");
-    let engine = EngineIdentifier::new("engine-orphan-detection");
+    let engine = "engine-orphan-detection".to_string();
 
     // Simulate a prior daemon arc: spawn two components, mark one
     // ready, leave the other in the open arc that the prior daemon
@@ -818,9 +803,7 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
     let router_ready = EngineEventDraft::from_input(EngineEventDraftInput {
         engine: engine.clone(),
         source: EngineEventSource::Manager,
-        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(ComponentName::new(
-            "persona-router",
-        ))),
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new("persona-router".to_string())),
     });
     store
         .ask(AppendEngineEvent::new(router_ready))
@@ -874,7 +857,7 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
         .expect("terminal status row present");
     assert_eq!(
         terminal_status.health(),
-        meta_signal_persona::ComponentHealth::Failed
+        signal_persona::ComponentHealth::Failed
     );
 
     // Router was ready before "crash"; it must not be marked orphaned.
@@ -892,7 +875,7 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
         .expect("router status row present");
     assert_eq!(
         router_status.health(),
-        meta_signal_persona::ComponentHealth::Running
+        signal_persona::ComponentHealth::Running
     );
 
     // Second orphan-scan must be idempotent: the orphan arc gained a

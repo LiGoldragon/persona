@@ -151,7 +151,7 @@ impl CommandLine {
 
     pub fn decode_request(&self) -> crate::Result<PersonaRequest> {
         match self.arguments.first() {
-            Some(first) if CommandLineArgument::new(first).starts_inline_record() => {
+            Some(first) if CommandLineArgument::new(first).is_inline_datom() => {
                 PersonaRequest::actualize(&self.inline_datom_text()?)
             }
             Some(first) => {
@@ -212,7 +212,12 @@ impl<'argument> CommandLineArgument<'argument> {
         Self { argument }
     }
 
-    fn starts_inline_record(&self) -> bool {
-        self.argument.to_string_lossy().starts_with('(')
+    /// A request reaches Persona either as one inline datom value or as the
+    /// path of a file holding one. A path is what names a place on disk: it
+    /// is absolute, or explicitly relative. Everything else is the value
+    /// itself — a datom head, a struct, a vector or a map.
+    fn is_inline_datom(&self) -> bool {
+        let text = self.argument.to_string_lossy();
+        !(text.starts_with('/') || text.starts_with("./") || text.starts_with("../"))
     }
 }
