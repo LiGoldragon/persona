@@ -65,9 +65,9 @@ below**, not by the Rust integration-test runner directly.
 | Binary | Role |
 |---|---|
 | `wire-emit-message` | Construct a `signal_persona_message::MessageRequest` frame (`--variant submission` / `stamped` / `inbox-query`), encode length-prefixed, write to stdout. Stamped takes `--origin` (`internal:<component>` / `external:owner` / `external:non-owner-user:<uid>` / `external:network:<peer>`). |
-| `wire-decode-message` | Read length-prefixed bytes from stdin; decode as `MessageRequest`; assert `--expect-recipient`, `--expect-body`, optional `--expect-variant`, optional `--expect-origin`. Optional `--capture-nota <path>` dumps the decoded record as NOTA text into a peer-derivation-readable file. |
+| `wire-decode-message` | Read length-prefixed bytes from stdin; decode as `MessageRequest`; assert `--expect-recipient`, `--expect-body`, optional `--expect-variant`, optional `--expect-origin`. Optional `--capture-datom <path>` dumps the decoded record as datom text into a peer-derivation-readable file. |
 | `wire-emit-message-reply` | Construct a `signal_persona_message::MessageReply` frame (`--variant submission-accepted` / `inbox-listing` / `unimplemented`), encode length-prefixed, write to stdout. `--entry slot=N,sender=S,body=B` for inbox-listing. |
-| `wire-decode-message-reply` | Read length-prefixed bytes from stdin; decode as `MessageReply`; assert per `--expect` plus per-variant fields (`--expect-slot` / `--expect-entry-count` / `--expect-entry-body` / `--expect-entry-sender` / `--expect-operation`). Optional `--capture-nota <path>`. |
+| `wire-decode-message-reply` | Read length-prefixed bytes from stdin; decode as `MessageReply`; assert per `--expect` plus per-variant fields (`--expect-slot` / `--expect-entry-count` / `--expect-entry-body` / `--expect-entry-sender` / `--expect-operation`). Optional `--capture-datom <path>`. |
 | `wire-router-client` | Connect to a Unix socket, write length-prefixed request bytes from stdin, read length-prefixed reply bytes from the socket, write them to stdout. The bytes-in / bytes-out connector for driving a real daemon from a Nix derivation. |
 | `wire-tap-router` | One-shot tap server. Binds `--socket`, accepts one connection, reads one length-prefixed frame, writes the raw bytes to `--capture`, echoes the request's exchange identifier on a canned reply (`--reply submission-accepted-slot=N` / `unimplemented-stamped` / etc.), exits. Used to capture what a real producer (e.g. `persona-message-daemon`) actually puts on the wire. |
 
@@ -105,9 +105,9 @@ flowchart LR
     end
     subgraph T4["T4 midway witnesses (chained, real daemon)"]
         t4a["wire-chain-request-bytes"]
-        t4b["wire-chain-request-nota"]
+        t4b["wire-chain-request-datom"]
         t4c["wire-chain-reply-bytes"]
-        t4d["wire-chain-reply-nota"]
+        t4d["wire-chain-reply-datom"]
         t4e["wire-chain-summary"]
         t4f["persona-message-daemon-stamps-origin-via-tap"]
         t4a --> t4b --> t4e
@@ -135,9 +135,9 @@ What each tier proves:
 | T3 · `wire-malformed-bytes-decode-rejects` | The decoder rejects garbage bytes with a typed error and a non-zero exit, not a silent pass or a panic-free hang. Stderr is preserved as a forensic artifact in `/nix/store/.../stderr.txt`. |
 | T3 · `wire-truncated-frame-decode-rejects` | Same for a half-frame (first 8 bytes only) — confirms the decoder catches premature EOF rather than waiting forever or accepting partial content. |
 | T3 · `wire-wrong-frame-kind-decode-rejects` | The request-decoder rejects a reply frame fed on its stdin (not a panic, not silent acceptance). |
-| T4 · `wire-chain-request-bytes` → `wire-chain-request-nota` | One derivation produces real wire bytes; a downstream derivation decodes them and writes the decoded NOTA text into `/nix/store/.../request.nota` as a peer-readable artifact. |
-| T4 · `wire-chain-reply-bytes` → `wire-chain-reply-nota` | Same for the reply side. The two artifacts live independently and are joined by the summary check. |
-| T4 · `wire-chain-summary` | Lands `request.bytes` + `request.nota` + `reply.bytes` + `reply.nota` together under one output and asserts the body string travels byte-stable across all 4 intermediate artifacts. Failures point at the specific intermediate that diverged. |
+| T4 · `wire-chain-request-bytes` → `wire-chain-request-datom` | One derivation produces real wire bytes; a downstream derivation decodes them and writes the decoded NOTA text into `/nix/store/.../request.datom` as a peer-readable artifact. |
+| T4 · `wire-chain-reply-bytes` → `wire-chain-reply-datom` | Same for the reply side. The two artifacts live independently and are joined by the summary check. |
+| T4 · `wire-chain-summary` | Lands `request.bytes` + `request.datom` + `reply.bytes` + `reply.datom` together under one output and asserts the body string travels byte-stable across all 4 intermediate artifacts. Failures point at the specific intermediate that diverged. |
 | T4 · `persona-message-daemon-stamps-origin-via-tap` | The midway witness: spawns the real `persona-message-daemon`, hands it `wire-tap-router` as its forwarding target, sends a `Send` through the `message` CLI, the tap captures the actual bytes the daemon emitted, then we decode those bytes through `wire-decode-message --expect-variant stamped --expect-origin external:owner`. Proves the daemon's SO_PEERCRED origin stamping produces the right wire shape under a Nix builder uid. Captured bytes, decoded NOTA, daemon stderr, and CLI output all land in `/nix/store/`. |
 | T5 · `persona-router-daemon-accepts-stamped-submission` | Spawns the real `persona-router-daemon daemon --socket router.sock`, drives a `StampedMessageSubmission` (origin `external:owner`) through `wire-router-client`, decodes the reply through `wire-decode-message-reply`, asserts `SubmissionAccepted` at slot 1. Captured request bytes, reply bytes, reply NOTA, and router stderr all land in `/nix/store/`. Final NOTA witness: `(SubmissionAcceptance 1)`. |
 | T5 · `persona-router-daemon-rejects-unstamped-submission` | The signal-catching negative pair: same router setup, sends a raw `MessageSubmission` (NOT stamped). The router's contract says only `StampedMessageSubmission` is acceptable; raw submissions must reject as `MessageRequestUnimplemented`. Proves the daemon doesn't silently accept unstamped traffic. NOTA witness: `(MessageRequestUnimplemented MessageSubmission (NotInPrototypeScope))`. |

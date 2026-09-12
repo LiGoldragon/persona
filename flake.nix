@@ -870,12 +870,12 @@
               --stamped-at 99 \
               > $out
           '';
-          wire-chain-request-nota = context.pkgs.runCommand "wire-chain-request-nota" { } ''
+          wire-chain-request-datom = context.pkgs.runCommand "wire-chain-request-datom" { } ''
             ${personaShims}/bin/wire-decode-message \
               --expect-recipient designer \
               --expect-body 'chained-midway-witness' \
               --expect-origin 'external:owner' \
-              --capture-nota $out \
+              --capture-datom $out \
               < ${self.checks.${system}.wire-chain-request-bytes}
           '';
           wire-chain-reply-bytes = context.pkgs.runCommand "wire-chain-reply-bytes" { } ''
@@ -884,12 +884,12 @@
               --entry 'slot=1,sender=owner,body=chained-midway-witness' \
               > $out
           '';
-          wire-chain-reply-nota = context.pkgs.runCommand "wire-chain-reply-nota" { } ''
+          wire-chain-reply-datom = context.pkgs.runCommand "wire-chain-reply-datom" { } ''
             ${personaShims}/bin/wire-decode-message-reply \
               --expect inbox-listing \
               --expect-entry-count 1 \
               --expect-entry-body 'chained-midway-witness' \
-              --capture-nota $out \
+              --capture-datom $out \
               < ${self.checks.${system}.wire-chain-reply-bytes}
           '';
           # T4-bonus: real-daemon midway witness. Spawn the actual
@@ -986,47 +986,47 @@
                   --expect-body 'tap-captured-body' \
                   --expect-variant stamped \
                   --expect-origin 'internal-instance:harness:message' \
-                  --capture-nota "$workdir/stamped.nota" \
+                  --capture-datom "$workdir/stamped.datom" \
                   < "$captured_bytes"
 
                 # 7. Land artifacts in /nix/store/ for forensic inspection.
                 mkdir -p $out
                 cp "$captured_bytes" $out/captured.bytes
-                cp "$workdir/stamped.nota" $out/stamped.nota
+                cp "$workdir/stamped.datom" $out/stamped.datom
                 cp "$cli_out" $out/cli.out
                 cp "$cli_err" $out/cli.err
                 cp "$daemon_stderr" $out/daemon.stderr
                 printf 'midway witness: persona-message-daemon stamped origin in flight\n' > $out/witness.txt
                 printf '  cli exit:        %s\n' "$cli_exit" >> $out/witness.txt
                 printf '  captured bytes:  %s\n' "$(wc -c < $out/captured.bytes)" >> $out/witness.txt
-                printf '  decoded nota:    %s\n' "$(cat $out/stamped.nota)" >> $out/witness.txt
+                printf '  decoded datom:    %s\n' "$(cat $out/stamped.datom)" >> $out/witness.txt
                 printf '  expected origin: External(Owner) (Nix builder uid)\n' >> $out/witness.txt
               '';
 
           wire-chain-summary = context.pkgs.runCommand "wire-chain-summary" { } ''
             mkdir -p $out
             cp ${self.checks.${system}.wire-chain-request-bytes} $out/request.bytes
-            cp ${self.checks.${system}.wire-chain-request-nota} $out/request.nota
+            cp ${self.checks.${system}.wire-chain-request-datom} $out/request.datom
             cp ${self.checks.${system}.wire-chain-reply-bytes} $out/reply.bytes
-            cp ${self.checks.${system}.wire-chain-reply-nota} $out/reply.nota
+            cp ${self.checks.${system}.wire-chain-reply-datom} $out/reply.datom
             # Consistency: the body string travels byte-stable across
             # all 4 intermediate artifacts. If any link mutates the
             # body, this final assertion catches it.
-            grep -Fq 'chained-midway-witness' $out/request.nota || {
-              printf 'request.nota missing expected body string\n' >&2
+            grep -Fq 'chained-midway-witness' $out/request.datom || {
+              printf 'request.datom missing expected body string\n' >&2
               exit 1
             }
-            grep -Fq 'chained-midway-witness' $out/reply.nota || {
-              printf 'reply.nota missing expected body string\n' >&2
+            grep -Fq 'chained-midway-witness' $out/reply.datom || {
+              printf 'reply.datom missing expected body string\n' >&2
               exit 1
             }
             request_size=$(wc -c < $out/request.bytes)
             reply_size=$(wc -c < $out/reply.bytes)
             printf 'chained witness: 4 intermediate artifacts consistent\n' > $out/chain-summary.txt
             printf '  request.bytes:  %s bytes\n' "$request_size" >> $out/chain-summary.txt
-            printf '  request.nota:   %s\n' "$(cat $out/request.nota)" >> $out/chain-summary.txt
+            printf '  request.datom:   %s\n' "$(cat $out/request.datom)" >> $out/chain-summary.txt
             printf '  reply.bytes:    %s bytes\n' "$reply_size" >> $out/chain-summary.txt
-            printf '  reply.nota:     %s\n' "$(cat $out/reply.nota)" >> $out/chain-summary.txt
+            printf '  reply.datom:     %s\n' "$(cat $out/reply.datom)" >> $out/chain-summary.txt
           '';
 
           # T5 — single-daemon witnesses against the real
@@ -1082,18 +1082,18 @@
                 ${personaShims}/bin/wire-decode-message-reply \
                   --expect submission-accepted \
                   --expect-slot 1 \
-                  --capture-nota "$workdir/reply.nota" \
+                  --capture-datom "$workdir/reply.datom" \
                   < "$reply_bytes"
 
                 mkdir -p $out
                 cp "$request_bytes" $out/request.bytes
                 cp "$reply_bytes" $out/reply.bytes
-                cp "$workdir/reply.nota" $out/reply.nota
+                cp "$workdir/reply.datom" $out/reply.datom
                 cp "$router_stderr" $out/router.stderr
                 printf 'router accepted stamped submission at slot 1\n' > $out/witness.txt
                 printf '  request bytes:  %s\n' "$(wc -c < $out/request.bytes)" >> $out/witness.txt
                 printf '  reply bytes:    %s\n' "$(wc -c < $out/reply.bytes)" >> $out/witness.txt
-                printf '  reply nota:     %s\n' "$(cat $out/reply.nota)" >> $out/witness.txt
+                printf '  reply datom:     %s\n' "$(cat $out/reply.datom)" >> $out/witness.txt
               '';
           persona-router-daemon-rejects-unstamped-submission =
             context.pkgs.runCommand "persona-router-daemon-rejects-unstamped-submission"
@@ -1140,15 +1140,15 @@
                 ${personaShims}/bin/wire-decode-message-reply \
                   --expect unimplemented \
                   --expect-operation submission \
-                  --capture-nota "$workdir/reply.nota" \
+                  --capture-datom "$workdir/reply.datom" \
                   < "$reply_bytes"
 
                 mkdir -p $out
                 cp "$reply_bytes" $out/reply.bytes
-                cp "$workdir/reply.nota" $out/reply.nota
+                cp "$workdir/reply.datom" $out/reply.datom
                 cp "$router_stderr" $out/router.stderr
                 printf 'router rejected unstamped submission (signal caught)\n' > $out/witness.txt
-                printf '  reply nota:     %s\n' "$(cat $out/reply.nota)" >> $out/witness.txt
+                printf '  reply datom:     %s\n' "$(cat $out/reply.datom)" >> $out/witness.txt
               '';
           persona-router-daemon-serves-inbox-after-submit =
             context.pkgs.runCommand "persona-router-daemon-serves-inbox-after-submit"
@@ -1199,7 +1199,7 @@
                 ${personaShims}/bin/wire-decode-message-reply \
                   --expect submission-accepted \
                   --expect-slot 1 \
-                  --capture-nota "$workdir/submit-reply.nota" \
+                  --capture-datom "$workdir/submit-reply.datom" \
                   < "$submit_reply"
 
                 # Step 2: query the inbox. The router must return the
@@ -1225,20 +1225,20 @@
                   --expect inbox-listing \
                   --expect-entry-count 1 \
                   --expect-entry-body 'router-inbox-chain-body' \
-                  --capture-nota "$workdir/query-reply.nota" \
+                  --capture-datom "$workdir/query-reply.datom" \
                   < "$query_reply"
 
                 mkdir -p $out
                 cp "$submit_request" $out/submit-request.bytes
                 cp "$submit_reply"   $out/submit-reply.bytes
-                cp "$workdir/submit-reply.nota" $out/submit-reply.nota
+                cp "$workdir/submit-reply.datom" $out/submit-reply.datom
                 cp "$query_request" $out/query-request.bytes
                 cp "$query_reply"   $out/query-reply.bytes
-                cp "$workdir/query-reply.nota"  $out/query-reply.nota
+                cp "$workdir/query-reply.datom"  $out/query-reply.datom
                 cp "$router_stderr" $out/router.stderr
                 printf 'router served inbox after stamped submit\n' > $out/witness.txt
-                printf '  submit reply:  %s\n' "$(cat $out/submit-reply.nota)" >> $out/witness.txt
-                printf '  query  reply:  %s\n' "$(cat $out/query-reply.nota)" >> $out/witness.txt
+                printf '  submit reply:  %s\n' "$(cat $out/submit-reply.datom)" >> $out/witness.txt
+                printf '  query  reply:  %s\n' "$(cat $out/query-reply.datom)" >> $out/witness.txt
               '';
           persona-dev-stack-script-builds = context.pkgs.runCommand "persona-dev-stack-script-builds" { } ''
             test -x ${self.packages.${system}.persona-dev-stack}/bin/persona-dev-stack
@@ -1269,15 +1269,15 @@
                   test -d "$root/home"
                   test -d "$root/work"
                   test -d "$root/artifacts"
-                  test -f "$root/artifacts/sandbox-manifest.nota"
-                  test -f "$root/artifacts/credential-policy.nota"
+                  test -f "$root/artifacts/sandbox-manifest.datom"
+                  test -f "$root/artifacts/credential-policy.datom"
                   test -f "$root/artifacts/systemd-command.txt"
-                  test -f "$root/artifacts/bwrap-profile.nota"
+                  test -f "$root/artifacts/bwrap-profile.datom"
                 done
-                grep -Fq '(Harness Pi)' "$out/pi/artifacts/sandbox-manifest.nota"
-                grep -Fq '(Harness Claude)' "$out/claude/artifacts/sandbox-manifest.nota"
-                grep -Fq '(Harness Codex)' "$out/codex/artifacts/sandbox-manifest.nota"
-                grep -Fq '(Harness CodexApi)' "$out/codex-api/artifacts/sandbox-manifest.nota"
+                grep -Fq '(Harness Pi)' "$out/pi/artifacts/sandbox-manifest.datom"
+                grep -Fq '(Harness Claude)' "$out/claude/artifacts/sandbox-manifest.datom"
+                grep -Fq '(Harness Codex)' "$out/codex/artifacts/sandbox-manifest.datom"
+                grep -Fq '(Harness CodexApi)' "$out/codex-api/artifacts/sandbox-manifest.datom"
               '';
           persona-engine-sandbox-documents-dedicated-auth =
             context.pkgs.runCommand "persona-engine-sandbox-documents-dedicated-auth" { }
@@ -1289,8 +1289,8 @@
                   --dry-run \
                   --harness codex \
                   --sandbox-dir "$root"
-                grep -Fq 'DedicatedRunnerHome' "$root/artifacts/credential-policy.nota"
-                grep -Fq 'live host auth.json is not copied' "$root/artifacts/credential-policy.nota"
+                grep -Fq 'DedicatedRunnerHome' "$root/artifacts/credential-policy.datom"
+                grep -Fq 'live host auth.json is not copied' "$root/artifacts/credential-policy.datom"
 
                 root=$out/claude
                 mkdir -p "$root"
@@ -1298,8 +1298,8 @@
                   --dry-run \
                   --harness claude \
                   --sandbox-dir "$root"
-                grep -Fq 'DedicatedRunnerHome' "$root/artifacts/credential-policy.nota"
-                grep -Fq 'live host credentials are not copied' "$root/artifacts/credential-policy.nota"
+                grep -Fq 'DedicatedRunnerHome' "$root/artifacts/credential-policy.datom"
+                grep -Fq 'live host credentials are not copied' "$root/artifacts/credential-policy.datom"
               '';
           persona-engine-sandbox-bootstrap-auth-dry-run =
             context.pkgs.runCommand "persona-engine-sandbox-bootstrap-auth-dry-run" { }
@@ -1316,20 +1316,20 @@
                     --sandbox-dir "$root/sandbox" \
                     --credential-root "$root/credentials" \
                     > "$root/bootstrap.stdout"
-                  test -f "$root/sandbox/artifacts/auth-bootstrap.nota"
+                  test -f "$root/sandbox/artifacts/auth-bootstrap.datom"
                   test -f "$root/sandbox/artifacts/auth-bootstrap-env.sh"
                   test ! -e "$root/credentials"
                 done
                 grep -Fq 'CODEX_HOME=' "$out/codex/sandbox/artifacts/auth-bootstrap-env.sh"
-                grep -Fq 'codex login --device-auth' "$out/codex/sandbox/artifacts/auth-bootstrap.nota"
+                grep -Fq 'codex login --device-auth' "$out/codex/sandbox/artifacts/auth-bootstrap.datom"
                 grep -Fq 'CLAUDE_CONFIG_DIR=' "$out/claude/sandbox/artifacts/auth-bootstrap-env.sh"
                 grep -Fq 'CLAUDE_CODE_OAUTH_TOKEN=' "$out/claude/sandbox/artifacts/auth-bootstrap-env.sh"
-                grep -Fq 'claude auth login --claudeai' "$out/claude/sandbox/artifacts/auth-bootstrap.nota"
+                grep -Fq 'claude auth login --claudeai' "$out/claude/sandbox/artifacts/auth-bootstrap.datom"
                 grep -Fq 'PI_CODING_AGENT_DIR=' "$out/pi/sandbox/artifacts/auth-bootstrap-env.sh"
                 grep -Fq 'PI_CODING_AGENT_SESSION_DIR=' "$out/pi/sandbox/artifacts/auth-bootstrap-env.sh"
                 grep -Fq "PI_PACKAGE_DIR='$out/pi/pi-package'" "$out/pi/sandbox/artifacts/auth-bootstrap-env.sh"
                 grep -Fq 'OPENAI_API_KEY=' "$out/codex-api/sandbox/artifacts/auth-bootstrap-env.sh"
-                grep -Fq 'PERSONA_OPENAI_API_KEY_FILE' "$out/codex-api/sandbox/artifacts/auth-bootstrap.nota"
+                grep -Fq 'PERSONA_OPENAI_API_KEY_FILE' "$out/codex-api/sandbox/artifacts/auth-bootstrap.datom"
               '';
           persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs =
             context.pkgs.runCommand "persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs" { }
@@ -1353,8 +1353,8 @@
                   self.packages.${system}.persona-engine-sandbox
                 }/bin/persona-engine-sandbox \
                   ${context.pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox-auth-isolation-witness} "$out"
-                test -f "$out/auth-isolation-witness.nota"
-                grep -Fq '(AuthIsolationWitness Passed)' "$out/auth-isolation-witness.nota"
+                test -f "$out/auth-isolation-witness.datom"
+                grep -Fq '(AuthIsolationWitness Passed)' "$out/auth-isolation-witness.datom"
               '';
           persona-engine-sandbox-attach-script-builds =
             context.pkgs.runCommand "persona-engine-sandbox-attach-script-builds" { }
@@ -1424,9 +1424,9 @@
                     --dry-run \
                     --sandbox-dir "$out" \
                     > "$out/attach.stdout"
-                test -f "$out/artifacts/host-attach.nota"
+                test -f "$out/artifacts/host-attach.datom"
                 test -f "$out/artifacts/host-attach-command.txt"
-                grep -Fq '(WaylandIntoSandbox false)' "$out/artifacts/host-attach.nota"
+                grep -Fq '(WaylandIntoSandbox false)' "$out/artifacts/host-attach.datom"
                 grep -Fq "$out/run/cell.sock" "$out/artifacts/host-attach-command.txt"
                 grep -Fq 'terminal-cell-view' "$out/artifacts/host-attach-command.txt"
                 if grep -R -Fq 'WAYLAND_DISPLAY' "$out/artifacts"; then
@@ -1442,7 +1442,7 @@
                   --harness pi \
                   --sandbox-dir "$out/sandbox" \
                   > "$out/dry-run.stdout"
-                profile="$out/sandbox/artifacts/bwrap-profile.nota"
+                profile="$out/sandbox/artifacts/bwrap-profile.datom"
                 grep -Fq '(ReadOnlyBind "/nix")' "$profile"
                 grep -Fq '(ReadOnlyBind "/run/current-system")' "$profile"
                 grep -Fq "(ReadWriteBind \"$out/sandbox\")" "$profile"
@@ -1461,8 +1461,8 @@
                   --credential-root "$out/credentials" \
                   > "$out/dry-run.stdout"
                 command="$sandbox/artifacts/systemd-command.txt"
-                manifest="$sandbox/artifacts/sandbox-manifest.nota"
-                profile="$sandbox/artifacts/bwrap-profile.nota"
+                manifest="$sandbox/artifacts/sandbox-manifest.datom"
+                profile="$sandbox/artifacts/bwrap-profile.datom"
                 grep -Fq -- '--property=ProtectHome=tmpfs' "$command"
                 grep -Fq -- "--property=ReadWritePaths=$sandbox" "$command"
                 grep -Fq -- "--property=BindPaths=$out/credentials" "$command"
@@ -1582,11 +1582,11 @@
               cargoTestExtraArgs = "--test manager_store constraint_engine_event_log_records_typed_manager_events -- --exact";
             }
           );
-          persona-engine-event-log-nota-projection-is-view = context.craneLib.cargoTest (
+          persona-engine-event-log-datom-projection-is-view = context.craneLib.cargoTest (
             context.commonArgs
             // {
               inherit (context) cargoArtifacts;
-              cargoTestExtraArgs = "--test manager_store constraint_engine_event_log_nota_projection_is_view -- --exact";
+              cargoTestExtraArgs = "--test manager_store constraint_engine_event_log_datom_projection_is_view -- --exact";
             }
           );
           persona-manager-store-reduces-lifecycle-events-into-snapshots = context.craneLib.cargoTest (
@@ -2119,9 +2119,9 @@
                 test ! -S "$work/run/default/router.supervision.sock"
                 echo "message-router old supervision socket absence checks passed"
 
-                send_output="$work/message-send.nota"
+                send_output="$work/message-send.datom"
                 send_error="$work/message-send.stderr"
-                inbox_output="$work/message-inbox.nota"
+                inbox_output="$work/message-inbox.datom"
                 inbox_error="$work/message-inbox.stderr"
 
                 MESSAGE_SOCKET="$work/run/default/message.sock" \
@@ -2141,9 +2141,9 @@
                 mkdir -p "$out"
                 cp "$work/persona-daemon.stdout" "$out/persona-daemon.stdout"
                 cp "$work/persona-daemon.stderr" "$out/persona-daemon.stderr"
-                cp "$send_output" "$out/message-send.nota"
+                cp "$send_output" "$out/message-send.datom"
                 cp "$send_error" "$out/message-send.stderr"
-                cp "$inbox_output" "$out/message-inbox.nota"
+                cp "$inbox_output" "$out/message-inbox.datom"
                 cp "$inbox_error" "$out/message-inbox.stderr"
                 cp "$work/state/default"/*.env "$out/"
                 touch "$out/passed"

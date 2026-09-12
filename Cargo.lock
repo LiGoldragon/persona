@@ -153,25 +153,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dotos"
-version = "0.10.0"
-source = "git+https://github.com/LiGoldragon/dotos.git?rev=80c7b17f7ad3cf547d2624c6a243e5de5f85c9f3#80c7b17f7ad3cf547d2624c6a243e5de5f85c9f3"
-dependencies = [
- "dotos-derive",
- "rkyv",
-]
-
-[[package]]
-name = "dotos-derive"
-version = "0.5.0"
-source = "git+https://github.com/LiGoldragon/dotos.git?rev=80c7b17f7ad3cf547d2624c6a243e5de5f85c9f3#80c7b17f7ad3cf547d2624c6a243e5de5f85c9f3"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "downcast-rs"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -586,7 +567,6 @@ name = "persona"
 version = "0.4.0"
 dependencies = [
  "datom-codec",
- "dotos",
  "kameo 0.20.0 (git+https://github.com/LiGoldragon/kameo.git?rev=3486e4f63ea4e87123476cfbdefeb12403540306)",
  "libc",
  "meta-signal-persona",

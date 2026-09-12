@@ -211,7 +211,7 @@ when `PERSONA_ORCHESTRATE_EXECUTABLE` points at the launcher or daemon.
 | `signal-terminal` | Ordinary terminal transport, prompt-gate, injection, session-registry-read, and worker-lifecycle contract. |
 | `meta-signal-terminal` | Policy terminal session lifecycle mutation contract (`CreateSession`, `RetireSession`) used by the orchestrate/harness/terminal authority chain. |
 | `nexus` | Semantic text vocabulary written in NOTA syntax. |
-| `nota` | NOTA language, typed codec, and derive support. |
+| `datom-codec` | Datom dialect: the typed codec and its derives, which every Persona request and report crosses. |
 
 ```mermaid
 graph LR
@@ -1630,7 +1630,7 @@ The apex repo owns tests that prove cross-component shape:
 | full topology starts from Nix-built prototype launchers | `nix build .#checks.x86_64-linux.persona-daemon-launches-nix-built-prototype-topology` |
 | message-router topology starts from Nix-built prototype launchers and carries a real message payload | `nix build .#checks.x86_64-linux.persona-daemon-launches-nix-built-message-router-topology` |
 | engine events are typed manager state | `nix build .#checks.x86_64-linux.persona-engine-event-log-records-typed-manager-events` |
-| NOTA event logs are projections | `nix build .#checks.x86_64-linux.persona-engine-event-log-nota-projection-is-view` |
+| Datom event logs are projections | `nix build .#checks.x86_64-linux.persona-engine-event-log-datom-projection-is-view` |
 | component launcher does not block manager request handling | `nix build .#checks.x86_64-linux.persona-component-launcher-does-not-block-manager-mailbox` |
 | component launcher passes spawn envelope to child environment | `nix build .#checks.x86_64-linux.persona-component-launcher-passes-spawn-envelope-environment` |
 | component stop cleans up the child process tree | `nix build .#checks.x86_64-linux.persona-component-launcher-reaps-process-group` |

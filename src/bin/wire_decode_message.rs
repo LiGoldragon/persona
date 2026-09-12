@@ -25,7 +25,7 @@
 //!                                 external:non-owner-user:<uid>
 //!                                 external:network:<peer>
 //!
-//!   --capture-nota <path>       Optional. Write the decoded request
+//!   --capture-datom <path>       Optional. Write the decoded request
 //!                               as a NOTA text record to this file
 //!                               so a peer derivation can consume it.
 //!
@@ -46,7 +46,7 @@ struct Expectations {
     body: String,
     variant: Option<ExpectedVariant>,
     origin: Option<MessageOrigin>,
-    capture_nota: Option<String>,
+    capture_datom: Option<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -114,14 +114,14 @@ impl Expectations {
         let mut body = None;
         let mut variant = None;
         let mut origin = None;
-        let mut capture_nota = None;
+        let mut capture_datom = None;
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--expect-recipient" => recipient = args.next(),
                 "--expect-body" => body = args.next(),
                 "--expect-variant" => variant = args.next().map(|v| parse_variant(&v)),
                 "--expect-origin" => origin = args.next().map(|v| parse_origin(&v)),
-                "--capture-nota" => capture_nota = args.next(),
+                "--capture-datom" => capture_datom = args.next(),
                 other => panic!("unknown arg: {other}"),
             }
         }
@@ -133,7 +133,7 @@ impl Expectations {
             body: body.expect("--expect-body is required"),
             variant,
             origin,
-            capture_nota,
+            capture_datom,
         }
     }
 
@@ -189,7 +189,7 @@ fn main() {
         .restore()
         .expect("restore request from frame");
 
-    if let Some(path) = expect.capture_nota.as_deref() {
+    if let Some(path) = expect.capture_datom.as_deref() {
         write_datom(&operation, path);
     }
 

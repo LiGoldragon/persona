@@ -13,7 +13,7 @@
 //!   --expect unimplemented --expect-operation <submission|stamped|inbox-query>
 //!
 //! Optional:
-//!   --capture-nota <path>  Write the decoded reply's NOTA-text form
+//!   --capture-datom <path>  Write the decoded reply's NOTA-text form
 //!                          to this file so a downstream derivation
 //!                          can inspect / consume it.
 //!
@@ -59,7 +59,7 @@ fn parse() -> (Expectation, Option<String>) {
     let mut body = None;
     let mut sender = None;
     let mut operation = None;
-    let mut capture_nota = None;
+    let mut capture_datom = None;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--expect" => variant = args.next(),
@@ -72,7 +72,7 @@ fn parse() -> (Expectation, Option<String>) {
             "--expect-entry-body" => body = args.next(),
             "--expect-entry-sender" => sender = args.next(),
             "--expect-operation" => operation = args.next().map(|v| parse_operation(&v)),
-            "--capture-nota" => capture_nota = args.next(),
+            "--capture-datom" => capture_datom = args.next(),
             other => panic!("unknown arg: {other}"),
         }
     }
@@ -91,7 +91,7 @@ fn parse() -> (Expectation, Option<String>) {
         Some(other) => panic!("unknown expect variant: {other}"),
         None => panic!("--expect is required"),
     };
-    (expectation, capture_nota)
+    (expectation, capture_datom)
 }
 
 fn write_datom(reply: &Response, path: &str) {
@@ -102,7 +102,7 @@ fn write_datom(reply: &Response, path: &str) {
 }
 
 fn main() {
-    let (expect, capture_nota) = parse();
+    let (expect, capture_datom) = parse();
 
     let mut bytes = Vec::new();
     std::io::stdin()
@@ -120,7 +120,7 @@ fn main() {
         .restore()
         .expect("restore reply from frame");
 
-    if let Some(path) = capture_nota.as_deref() {
+    if let Some(path) = capture_datom.as_deref() {
         write_datom(&reply_payload, path);
     }
 

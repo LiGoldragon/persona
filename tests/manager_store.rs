@@ -394,7 +394,7 @@ async fn constraint_manager_store_projects_active_component_version_from_event_l
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn constraint_engine_event_log_nota_projection_is_view() {
+async fn constraint_engine_event_log_datom_projection_is_view() {
     let fixture = StoreFixture::new("persona-manager-event-log-projection");
     let engine = "engine-event-projection".to_string();
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");

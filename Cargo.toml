@@ -29,7 +29,6 @@ datom-codec            = { git = "https://github.com/LiGoldragon/datom-codec", r
 libc                   = "0.2"
 protos                 = { git = "https://github.com/LiGoldragon/protos", rev = "171b21f65337983ab624b7b906397a4f1f92c5a3" }
 meta-signal-upgrade    = { git = "https://github.com/LiGoldragon/meta-signal-upgrade.git", rev = "a319e1ba35aedec650aeeffdcb1378e495aa9407", features = ["datom"] }
-dotos             = { package = "dotos", git = "https://github.com/LiGoldragon/dotos.git", rev = "80c7b17f7ad3cf547d2624c6a243e5de5f85c9f3" }
 meta-signal-system    = { git = "https://github.com/LiGoldragon/meta-signal-system.git", rev = "17591d96dd770b7a1c30dc895aa7a26e7534eeb5", features = ["datom"] }
 meta-signal-persona   = { git = "https://github.com/LiGoldragon/meta-signal-persona.git", rev = "88657088a4f499c758bc3af3e625ab7e7618e038", features = ["datom"] }
 rkyv                   = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
