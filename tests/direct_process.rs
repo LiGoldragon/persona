@@ -508,10 +508,9 @@ async fn constraint_three_harness_chain_message_launch_writes_runtime_daemon_con
         .expect("message component launches");
 
     let configuration_path = envelope_path.with_file_name("message-daemon.rkyv");
-    let configuration = DirectProcessFixture::decode_archive::<signal_message::MessageDaemonConfiguration>(
-        &configuration_path,
-        "message configuration decodes",
-    );
+    let configuration = DirectProcessFixture::decode_archive::<
+        signal_message::MessageDaemonConfiguration,
+    >(&configuration_path, "message configuration decodes");
     assert_eq!(
         configuration.message_socket_path,
         expected_message_socket.to_string_lossy()
@@ -587,10 +586,11 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
         );
     }
 
-    let message_configuration = DirectProcessFixture::decode_archive::<signal_message::MessageDaemonConfiguration>(
-        &engine_run_root.join("message-daemon.rkyv"),
-        "message configuration decodes",
-    );
+    let message_configuration =
+        DirectProcessFixture::decode_archive::<signal_message::MessageDaemonConfiguration>(
+            &engine_run_root.join("message-daemon.rkyv"),
+            "message configuration decodes",
+        );
     assert_eq!(
         message_configuration.message_socket_path,
         engine_run_root.join("message.sock").to_string_lossy()
@@ -615,30 +615,18 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
                 .as_str()
                 .ends_with(&format!("{terminal_instance_name}.sock")),
             "terminal socket path belongs to {terminal_instance_name}: {}",
-            terminal_configuration
-                .terminal_socket_path
-                .as_str()
+            terminal_configuration.terminal_socket_path.as_str()
         );
-        assert_eq!(
-            terminal_configuration
-                .terminal_socket_mode,
-            0o600
-        );
+        assert_eq!(terminal_configuration.terminal_socket_mode, 0o600);
         assert!(
             terminal_configuration
                 .supervision_socket_path
                 .as_str()
                 .ends_with(&format!("{terminal_instance_name}.supervision.sock")),
             "terminal supervision socket belongs to {terminal_instance_name}: {}",
-            terminal_configuration
-                .supervision_socket_path
-                .as_str()
+            terminal_configuration.supervision_socket_path.as_str()
         );
-        assert_eq!(
-            terminal_configuration
-                .supervision_socket_mode,
-            0o600
-        );
+        assert_eq!(terminal_configuration.supervision_socket_mode, 0o600);
         assert!(
             terminal_configuration
                 .store_path
@@ -678,12 +666,7 @@ async fn constraint_three_harness_chain_writes_instance_specific_daemon_configur
             "harness supervision socket belongs to {agent_name}: {}",
             harness_configuration.engine_management_socket_path.as_str()
         );
-        assert_eq!(
-            harness_configuration
-                .engine_management_socket_mode
-                ,
-            0o600
-        );
+        assert_eq!(harness_configuration.engine_management_socket_mode, 0o600);
         let harness_instance = harness_configuration
             .harness_instance_configurations
             .first()
@@ -925,14 +908,8 @@ async fn constraint_component_launcher_passes_spawn_envelope_to_child_environmen
             .as_str()
             .ends_with("mind.supervision.sock")
     );
-    assert_eq!(
-        signal_envelope.engine_management_socket_mode,
-        0o600
-    );
-    assert_eq!(
-        signal_envelope.engine_management_protocol_version,
-        1
-    );
+    assert_eq!(signal_envelope.engine_management_socket_mode, 0o600);
+    assert_eq!(signal_envelope.engine_management_protocol_version, 1);
 
     DirectProcessFixture::stop(&launcher, EngineComponent::Mind)
         .await

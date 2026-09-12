@@ -432,11 +432,14 @@ pub enum UnitFailure {
     Bus {
         action: UnitAction,
         unit: UnitName,
-        source: zbus::Error,
+        source: Box<zbus::Error>,
     },
 
     #[error("read systemd D-Bus status for {unit}: {source}")]
-    Status { unit: UnitName, source: zbus::Error },
+    Status {
+        unit: UnitName,
+        source: Box<zbus::Error>,
+    },
 
     #[error("read systemctl status for {unit}: {source}")]
     StatusCommand {
@@ -505,7 +508,7 @@ impl SystemdUnitController {
         let connection = self.connection().await.map_err(|source| UnitFailure::Bus {
             action,
             unit: unit.name().clone(),
-            source,
+            source: Box::new(source),
         })?;
         let proxy = zbus::Proxy::new(
             &connection,
@@ -517,7 +520,7 @@ impl SystemdUnitController {
         .map_err(|source| UnitFailure::Bus {
             action,
             unit: unit.name().clone(),
-            source,
+            source: Box::new(source),
         })?;
         let _job: OwnedObjectPath = proxy
             .call(
@@ -528,7 +531,7 @@ impl SystemdUnitController {
             .map_err(|source| UnitFailure::Bus {
                 action,
                 unit: unit.name().clone(),
-                source,
+                source: Box::new(source),
             })?;
         Ok(UnitReceipt::from_action(unit, action))
     }
@@ -560,7 +563,7 @@ impl UnitController for SystemdUnitController {
                 .await
                 .map_err(|source| UnitFailure::Status {
                     unit: unit.name().clone(),
-                    source,
+                    source: Box::new(source),
                 })?;
             let manager = zbus::Proxy::new(
                 &connection,
@@ -571,14 +574,14 @@ impl UnitController for SystemdUnitController {
             .await
             .map_err(|source| UnitFailure::Status {
                 unit: unit.name().clone(),
-                source,
+                source: Box::new(source),
             })?;
             let path: OwnedObjectPath = manager
                 .call("GetUnit", &(unit.name().as_str()))
                 .await
                 .map_err(|source| UnitFailure::Status {
                     unit: unit.name().clone(),
-                    source,
+                    source: Box::new(source),
                 })?;
             let unit_proxy = zbus::Proxy::new(
                 &connection,
@@ -589,7 +592,7 @@ impl UnitController for SystemdUnitController {
             .await
             .map_err(|source| UnitFailure::Status {
                 unit: unit.name().clone(),
-                source,
+                source: Box::new(source),
             })?;
             let active_state: String =
                 unit_proxy
@@ -597,7 +600,7 @@ impl UnitController for SystemdUnitController {
                     .await
                     .map_err(|source| UnitFailure::Status {
                         unit: unit.name().clone(),
-                        source,
+                        source: Box::new(source),
                     })?;
             Ok(UnitStatusReport::new(
                 unit,
@@ -664,7 +667,7 @@ impl SystemdTransientUnitController {
         let connection = self.connection().await.map_err(|source| UnitFailure::Bus {
             action: UnitAction::Start,
             unit: unit.name().clone(),
-            source,
+            source: Box::new(source),
         })?;
         let proxy = zbus::Proxy::new(
             &connection,
@@ -676,7 +679,7 @@ impl SystemdTransientUnitController {
         .map_err(|source| UnitFailure::Bus {
             action: UnitAction::Start,
             unit: unit.name().clone(),
-            source,
+            source: Box::new(source),
         })?;
         let properties = definition.transient_properties();
         let argument_references: Vec<&str> = properties
@@ -714,7 +717,7 @@ impl SystemdTransientUnitController {
             .map_err(|source| UnitFailure::Bus {
                 action: UnitAction::Start,
                 unit: unit.name().clone(),
-                source,
+                source: Box::new(source),
             })?;
         Ok(UnitReceipt::started(unit))
     }

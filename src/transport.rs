@@ -323,9 +323,8 @@ impl PersonaFrameCodec {
 
     async fn write_signal<T>(&self, stream: &mut UnixStream, signal: &Signal<T>) -> Result<()> {
         let bytes = signal.bytes();
-        let length = u32::try_from(bytes.len()).map_err(|_| Error::DaemonFrameTooLarge {
-            bytes: bytes.len(),
-        })?;
+        let length = u32::try_from(bytes.len())
+            .map_err(|_| Error::DaemonFrameTooLarge { bytes: bytes.len() })?;
         stream.write_all(&length.to_be_bytes()).await?;
         stream.write_all(bytes).await?;
         stream.flush().await?;
@@ -421,8 +420,8 @@ impl PersonaLaunchPlan {
         else {
             return Ok(None);
         };
-        let engine = std::env::var("PERSONA_MANAGER_ENGINE_ID")
-            .unwrap_or_else(|_| "default".to_string());
+        let engine =
+            std::env::var("PERSONA_MANAGER_ENGINE_ID").unwrap_or_else(|_| "default".to_string());
         let paths = Self::paths_from_environment(endpoint)?;
         Ok(Some(Self {
             engine,

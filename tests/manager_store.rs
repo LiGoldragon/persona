@@ -1,13 +1,12 @@
 use kameo::actor::{ActorStateAbsence, ActorTerminalReason};
 use meta_signal_persona::MetaQuery;
-use signal_persona::{ComponentDesiredState, ComponentHealth};
 use meta_signal_persona::{Query as EngineRequest, Response as EngineReply};
+use persona::datom_text::DatomActualizable;
 use persona::engine_event::{
     ComponentLifecycleEvent, ComponentOperation, ComponentUnimplemented,
     ComponentUnimplementedInput, EngineEventBody, EngineEventDraft, EngineEventDraftInput,
     EngineEventSource, HarnessOperationKind, UnimplementedReason,
 };
-use persona::datom_text::DatomActualizable;
 use persona::manager::EngineManager;
 use persona::manager_store::AppendOrphansFromEventLog;
 use persona::manager_store::{
@@ -21,9 +20,8 @@ use persona::schema::{
 };
 use persona::state::EngineState;
 use signal_persona::EngineIdentifier;
-use signal_upgrade::{
-    Date, HandoverMarkerData, Time,
-};
+use signal_persona::{ComponentDesiredState, ComponentHealth};
+use signal_upgrade::{Date, HandoverMarkerData, Time};
 
 use persona::upgrade::SocketPath as UpgradeSocketPath;
 use persona::upgrade::{ActiveVersionChanged, PreparedEvent, Target, TargetInput, Version};
@@ -154,10 +152,7 @@ async fn constraint_manager_store_writes_engine_status_through_writer_actor() {
 
     let store = ManagerStore::start(fixture.location()).expect("manager store starts");
     let receipt = store
-        .ask(PersistEngineRecord::new(
-            engine.clone(),
-            status.clone().into(),
-        ))
+        .ask(PersistEngineRecord::new(engine.clone(), status.clone()))
         .await
         .expect("record persisted through actor");
     assert_eq!(receipt.engine(), &engine);
@@ -194,15 +189,7 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
         .await
         .expect("initial record read through store actor")
         .expect("initial record exists");
-    assert_eq!(
-        initial_record
-            .status()
-            
-            .engine_generation
-            .clone()
-             as u64,
-        0
-    );
+    assert_eq!(initial_record.status().engine_generation as u64, 0);
 
     let reply = manager
         .ask(persona::manager::HandleEngineRequest::new(
@@ -217,19 +204,10 @@ async fn constraint_engine_manager_persists_component_mutation_through_manager_s
         .await
         .expect("stored record read through store actor")
         .expect("stored record exists");
-    assert_eq!(
-        stored_record
-            .status()
-            
-            .engine_generation
-            .clone()
-             as u64,
-        1
-    );
+    assert_eq!(stored_record.status().engine_generation as u64, 1);
 
     let terminal_status = stored_record
         .status()
-        
         .component_status_vector
         .iter()
         .find(|component| component.component_name.as_str() == "persona-terminal")
@@ -289,7 +267,6 @@ async fn constraint_engine_manager_restores_persisted_snapshot_before_answering_
     let EngineReply::ComponentStatus(status) = status else {
         panic!("expected restored component status");
     };
-    let status = status;
     assert_eq!(
         status.component_desired_state,
         ComponentDesiredState::Stopped
@@ -505,7 +482,9 @@ async fn constraint_manager_store_reduces_lifecycle_events_into_snapshot_tables(
     let ready_draft = EngineEventDraft::from_input(EngineEventDraftInput {
         engine: engine.clone(),
         source: EngineEventSource::Manager,
-        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new("persona-router".to_string())),
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(
+            "persona-router".to_string(),
+        )),
     });
     store
         .ask(AppendEngineEvent::new(ready_draft))
@@ -551,7 +530,9 @@ async fn constraint_engine_manager_hydrates_component_health_from_snapshot() {
     let ready_draft = EngineEventDraft::from_input(EngineEventDraftInput {
         engine: engine.clone(),
         source: EngineEventSource::Manager,
-        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new("persona-terminal".to_string())),
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(
+            "persona-terminal".to_string(),
+        )),
     });
     store
         .ask(AppendEngineEvent::new(ready_draft))
@@ -610,7 +591,9 @@ async fn constraint_manager_store_rebuilds_snapshots_from_event_log_after_snapsh
     let ready_router = EngineEventDraft::from_input(EngineEventDraftInput {
         engine: engine.clone(),
         source: EngineEventSource::Manager,
-        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new("persona-router".to_string())),
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(
+            "persona-router".to_string(),
+        )),
     });
     store
         .ask(AppendEngineEvent::new(ready_router))
@@ -803,7 +786,9 @@ async fn constraint_manager_startup_appends_component_orphaned_for_unfinished_sp
     let router_ready = EngineEventDraft::from_input(EngineEventDraftInput {
         engine: engine.clone(),
         source: EngineEventSource::Manager,
-        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new("persona-router".to_string())),
+        body: EngineEventBody::ComponentReady(ComponentLifecycleEvent::new(
+            "persona-router".to_string(),
+        )),
     });
     store
         .ask(AppendEngineEvent::new(router_ready))

@@ -140,9 +140,8 @@ impl ComponentSupervisionReadiness {
         stream: &mut UnixStream,
         expectation: &ComponentSupervisionExpectation,
     ) -> Result<ComponentHealthReport, ComponentSupervisionReadinessFailure> {
-        let request = EngineManagementRequest::Query(LifecycleQuery::HealthStatus(
-            expectation.name.clone(),
-        ));
+        let request =
+            EngineManagementRequest::Query(LifecycleQuery::HealthStatus(expectation.name.clone()));
         self.codec.write_request(stream, request).await?;
         match self.codec.read_reply(stream).await? {
             EngineManagementReply::HealthReport(health) => Ok(health),
@@ -258,7 +257,7 @@ impl ComponentSupervisionExpectation {
     }
 
     pub fn version(&self) -> EngineManagementProtocolVersion {
-        self.version.clone()
+        self.version
     }
 
     fn verify_identity(
@@ -275,8 +274,8 @@ impl ComponentSupervisionExpectation {
                 actual_name: identity.component_name.clone(),
                 expected_kind: self.kind.clone(),
                 actual_kind: identity.component_kind.clone(),
-                expected_version: self.version.clone(),
-                actual_version: identity.engine_management_protocol_version.clone(),
+                expected_version: self.version,
+                actual_version: identity.engine_management_protocol_version,
             });
         }
         Ok(())
@@ -408,7 +407,6 @@ impl SupervisionFrameCodec {
                 },
             )
     }
-
 }
 
 #[derive(Debug, Error)]

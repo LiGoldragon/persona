@@ -2,9 +2,7 @@ use meta_signal_persona::{
     ActionAcceptance, ActionRejection, ActionRejectionReason, ComponentShutdown, ComponentStartup,
     EnginePhase, EngineStatusReport, Response,
 };
-use signal_persona::{
-    ComponentDesiredState, ComponentHealth, ComponentName, ComponentStatus,
-};
+use signal_persona::{ComponentDesiredState, ComponentHealth, ComponentName, ComponentStatus};
 
 use crate::engine::EngineComponent;
 
@@ -61,69 +59,52 @@ impl EngineState {
     pub fn start_component(&mut self, startup: ComponentStartup) -> Response {
         let component = startup;
         let Some(status) = self.component_mut(&component) else {
-            return Response::ActionRejected(
-                ActionRejection {
-                    component_name: component.clone(),
-                    action_rejection_reason: ActionRejectionReason::ComponentNotManaged,
-                },
-            );
+            return Response::ActionRejected(ActionRejection {
+                component_name: component.clone(),
+                action_rejection_reason: ActionRejectionReason::ComponentNotManaged,
+            });
         };
         if status.component_desired_state == ComponentDesiredState::Running {
-            return Response::ActionRejected(
-                ActionRejection {
-                    component_name: component.clone(),
-                    action_rejection_reason:
-                        ActionRejectionReason::ComponentAlreadyInDesiredState,
-                },
-            );
+            return Response::ActionRejected(ActionRejection {
+                component_name: component.clone(),
+                action_rejection_reason: ActionRejectionReason::ComponentAlreadyInDesiredState,
+            });
         }
         status.component_desired_state = ComponentDesiredState::Running;
         status.component_health = ComponentHealth::Starting;
         self.advance_generation();
         self.refresh_phase();
-        Response::ActionAccepted(
-            ActionAcceptance {
-                component_name: component,
-                component_desired_state: ComponentDesiredState::Running,
-            },
-        )
+        Response::ActionAccepted(ActionAcceptance {
+            component_name: component,
+            component_desired_state: ComponentDesiredState::Running,
+        })
     }
 
     pub fn stop_component(&mut self, shutdown: ComponentShutdown) -> Response {
         let component = shutdown;
         let Some(status) = self.component_mut(&component) else {
-            return Response::ActionRejected(
-                ActionRejection {
-                    component_name: component.clone(),
-                    action_rejection_reason: ActionRejectionReason::ComponentNotManaged,
-                },
-            );
+            return Response::ActionRejected(ActionRejection {
+                component_name: component.clone(),
+                action_rejection_reason: ActionRejectionReason::ComponentNotManaged,
+            });
         };
         if status.component_desired_state == ComponentDesiredState::Stopped {
-            return Response::ActionRejected(
-                ActionRejection {
-                    component_name: component.clone(),
-                    action_rejection_reason:
-                        ActionRejectionReason::ComponentAlreadyInDesiredState,
-                },
-            );
+            return Response::ActionRejected(ActionRejection {
+                component_name: component.clone(),
+                action_rejection_reason: ActionRejectionReason::ComponentAlreadyInDesiredState,
+            });
         }
         status.component_desired_state = ComponentDesiredState::Stopped;
         status.component_health = ComponentHealth::Stopped;
         self.advance_generation();
         self.refresh_phase();
-        Response::ActionAccepted(
-            ActionAcceptance {
-                component_name: component,
-                component_desired_state: ComponentDesiredState::Stopped,
-            },
-        )
+        Response::ActionAccepted(ActionAcceptance {
+            component_name: component,
+            component_desired_state: ComponentDesiredState::Stopped,
+        })
     }
 
-    fn component_mut(
-        &mut self,
-        component: &ComponentName,
-    ) -> Option<&mut ComponentStatus> {
+    fn component_mut(&mut self, component: &ComponentName) -> Option<&mut ComponentStatus> {
         self.status
             .component_status_vector
             .iter_mut()

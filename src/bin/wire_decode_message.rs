@@ -161,7 +161,11 @@ impl Expectations {
 }
 
 fn write_datom(request: &Query, path: &str) {
-    let text = request.clone().datomize(Vec::new()).protosize().textualize();
+    let text = request
+        .clone()
+        .datomize(Vec::new())
+        .protosize()
+        .textualize();
     let mut file = std::fs::File::create(path).expect("create capture file");
     file.write_all(text.as_bytes()).expect("write capture text");
     file.write_all(b"\n").expect("write capture newline");

@@ -67,7 +67,7 @@ pub enum Error {
     CommandResolution(#[from] crate::launch::CommandResolutionFailure),
 
     #[error("component unit control: {0}")]
-    ComponentUnit(#[from] crate::unit::UnitFailure),
+    ComponentUnit(#[source] Box<crate::unit::UnitFailure>),
 
     #[error("active version is missing: engine={engine}, component={component}")]
     ActiveVersionMissing { engine: String, component: String },
@@ -97,5 +97,11 @@ impl Error {
 impl From<datom_codec::Error> for Error {
     fn from(fault: datom_codec::Error) -> Self {
         Self::Datom(fault)
+    }
+}
+
+impl From<crate::unit::UnitFailure> for Error {
+    fn from(failure: crate::unit::UnitFailure) -> Self {
+        Self::ComponentUnit(Box::new(failure))
     }
 }

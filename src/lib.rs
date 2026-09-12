@@ -6,9 +6,9 @@
 
 pub mod configuration;
 pub mod daemon;
+pub mod datom_text;
 pub mod direct_process;
 pub mod engine;
-pub mod datom_text;
 pub mod engine_event;
 pub mod error;
 pub mod launch;

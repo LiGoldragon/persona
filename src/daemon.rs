@@ -21,7 +21,6 @@ use std::sync::Arc;
 use tokio::runtime::Handle;
 use triad_runtime::AcceptedConnection;
 
-
 use crate::configuration::{ConfigurationError, PersonaDaemonConfiguration};
 use crate::error::{Error, Result};
 use crate::launch::EngineLaunchConfiguration;

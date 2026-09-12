@@ -5,7 +5,18 @@ use std::path::Path;
 use signal_upgrade::ComponentName;
 
 /// A component version's human label, as the upgrade contract spells it.
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+)]
 pub struct VersionLabel(String);
 
 impl VersionLabel {

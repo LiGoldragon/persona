@@ -5,12 +5,12 @@ use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use meta_signal_persona::EngineStatusReport;
-use signal_persona::ComponentHealth;
 use sema_engine::{
     CommitRequest, Engine, EngineOpen, EngineRecord, FamilyName, QueryPlan, RecordKey, SchemaHash,
     SchemaVersion, TableDescriptor, TableName, TableReference, VersionedStoreName,
     VersioningPolicy,
 };
+use signal_persona::ComponentHealth;
 use signal_persona::ComponentName;
 use signal_persona::EngineIdentifier;
 

@@ -13,11 +13,7 @@ use signal_persona::{ComponentDesiredState, ComponentHealth, ComponentKind, Comp
 /// The inline argument a shell would hand Persona, built by the codec that
 /// reads it back — never spelled by hand.
 fn inline_arguments(request: &PersonaRequest) -> Vec<String> {
-    request
-        .textualize()
-        .split(' ')
-        .map(str::to_owned)
-        .collect()
+    request.textualize().split(' ').map(str::to_owned).collect()
 }
 
 #[test]

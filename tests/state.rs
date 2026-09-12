@@ -1,7 +1,7 @@
-use meta_signal_persona::Response;
 use meta_signal_persona::ActionRejectionReason;
-use signal_persona::{ComponentDesiredState, ComponentHealth};
+use meta_signal_persona::Response;
 use persona::state::EngineState;
+use signal_persona::{ComponentDesiredState, ComponentHealth};
 
 #[test]
 fn default_catalog_names_engine_components() {
@@ -39,7 +39,6 @@ fn component_shutdown_advances_generation_and_updates_status() {
     let status = state.component_status("persona-terminal".to_string());
     match status {
         Response::ComponentStatus(component) => {
-            let component = component;
             assert_eq!(
                 component.component_desired_state,
                 ComponentDesiredState::Stopped
@@ -70,7 +69,6 @@ fn repeated_startup_returns_already_desired_rejection() {
 
     match reply {
         Response::ActionRejected(rejection) => {
-            let rejection = rejection;
             assert_eq!(
                 rejection.action_rejection_reason,
                 ActionRejectionReason::ComponentAlreadyInDesiredState

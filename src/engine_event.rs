@@ -113,7 +113,9 @@ pub struct EngineEventDraftInput {
     pub body: EngineEventBody,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, EnumDiscriminants)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, EnumDiscriminants,
+)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -126,7 +128,9 @@ pub enum EngineEventSource {
     Component(ComponentName),
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, EnumDiscriminants)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, EnumDiscriminants,
+)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -225,7 +229,17 @@ pub enum ComponentOperation {
     Terminal(TerminalOperationKind),
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, Copy, PartialEq)]
+#[derive(
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+    datom_codec::Datomizable,
+    datom_codec::Compositional,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+)]
 pub enum UnimplementedReason {
     NotBuiltYet,
     /// Cross-cutting prerequisite work is not landed in the current stack.

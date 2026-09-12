@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use meta_signal_persona::{EngineStatusScope, MetaQuery};
-use signal_persona::{ComponentDesiredState, ComponentHealth};
 use meta_signal_persona::{Query as EngineRequest, Response as EngineReply};
 use persona::manager::{
     EngineManager, HandleEngineRequest, ManagerEvent, ReadTrace, StartComponentUnit,
@@ -9,6 +8,7 @@ use persona::manager::{
 use persona::manager_store::{ManagerStore, ManagerStoreLocation};
 use persona::unit::{ComponentUnit, UnitController, UnitFuture, UnitReceipt, UnitStatusReport};
 use persona::upgrade::Version;
+use signal_persona::{ComponentDesiredState, ComponentHealth};
 
 struct StoreFixture {
     root: std::path::PathBuf,
@@ -122,9 +122,7 @@ async fn constraint_engine_manager_keeps_component_state_between_messages() {
 
     let shutdown = "persona-terminal".to_string();
     let acceptance = manager
-        .ask(HandleEngineRequest::new(EngineRequest::Stop(
-            shutdown.into(),
-        )))
+        .ask(HandleEngineRequest::new(EngineRequest::Stop(shutdown)))
         .await
         .expect("shutdown handled by actor");
 
@@ -139,7 +137,6 @@ async fn constraint_engine_manager_keeps_component_state_between_messages() {
 
     match status {
         EngineReply::ComponentStatus(component) => {
-            let component = component;
             assert_eq!(
                 component.component_desired_state,
                 ComponentDesiredState::Stopped

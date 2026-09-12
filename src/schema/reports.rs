@@ -9,8 +9,7 @@ pub use signal_persona::{ComponentDesiredState, ComponentHealth, ComponentKind, 
 
 use crate::engine_event::{
     ComponentOperation, EngineEvent, EngineEventBody, EngineEventSource, HarnessOperationKind,
-    MessageOperationKind, SystemOperationKind, TerminalOperationKind,
-    UnimplementedReason,
+    MessageOperationKind, SystemOperationKind, TerminalOperationKind, UnimplementedReason,
 };
 use crate::upgrade::ActiveVersionChangeSource;
 

@@ -1,6 +1,5 @@
 use std::path::Path;
 
-
 #[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ExecutablePath(String);
 

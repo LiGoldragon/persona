@@ -3,8 +3,10 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use persona::configuration::PersonaDaemonConfiguration;
+use persona::datom_text::{DatomActualizable, DatomTextualizable};
 use persona::engine::{EngineComponent, EngineTopology};
 use persona::engine_event::EngineEventBody;
+use persona::request::{ComponentShutdown, ComponentStatusQuery, PersonaOutput, PersonaRequest};
 
 mod support;
 
@@ -130,7 +132,15 @@ impl DaemonFixture {
         self.stop_component_process_groups();
     }
 
-    fn persona(&self, request: &str) -> String {
+    /// Drive the real `persona` client, speaking the datom the codec emits
+    /// rather than text spelled here, and read its answer back the same way.
+    fn persona(&self, request: &PersonaRequest) -> PersonaOutput {
+        let text = self.persona_text(&request.textualize());
+        PersonaOutput::actualize_text(&text)
+            .unwrap_or_else(|fault| panic!("persona output restores from {text}: {fault:?}"))
+    }
+
+    fn persona_text(&self, request: &str) -> String {
         let output = Command::new(env!("CARGO_BIN_EXE_persona"))
             .arg(request)
             .env("PERSONA_SOCKET", &self.socket)
@@ -325,26 +335,48 @@ async fn constraint_persona_daemon_launches_message_router_topology_through_engi
 fn constraint_persona_cli_talks_to_persona_daemon_over_socket() {
     let fixture = DaemonFixture::start();
 
-    let shutdown = fixture.persona("(ComponentShutdown (persona-terminal))");
-    assert!(
-        shutdown.contains("(ActionAcceptedReport (persona-terminal Stopped))"),
-        "shutdown output: {shutdown}"
-    );
+    match fixture.persona(&shutdown_request("persona-terminal")) {
+        PersonaOutput::ActionAcceptedReport(report) => {
+            assert_eq!(report.component.as_str(), "persona-terminal");
+            assert_eq!(report.desired_state, "Stopped");
+        }
+        other => panic!("expected an accepted shutdown, got {other:?}"),
+    }
 
-    let status = fixture.persona("(ComponentStatusQuery (persona-terminal))");
-    assert!(status.contains("(ComponentStatusReport "));
-    assert!(status.contains("(persona-terminal Terminal Stopped Stopped)"));
+    match fixture.persona(&status_request("persona-terminal")) {
+        PersonaOutput::ComponentStatusReport(report) => {
+            assert_eq!(report.component.component.as_str(), "persona-terminal");
+            assert_eq!(report.component.kind, "Terminal");
+            assert_eq!(report.component.desired_state, "Stopped");
+            assert_eq!(report.component.health, "Stopped");
+        }
+        other => panic!("expected a component status report, got {other:?}"),
+    }
+}
+
+fn shutdown_request(component: &str) -> PersonaRequest {
+    PersonaRequest::ComponentShutdown(ComponentShutdown {
+        component: component.to_string(),
+    })
+}
+
+fn status_request(component: &str) -> PersonaRequest {
+    PersonaRequest::ComponentStatusQuery(ComponentStatusQuery {
+        component: component.to_string(),
+    })
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn constraint_persona_daemon_persists_cli_mutation_to_manager_store() {
     let mut fixture = DaemonFixture::start();
 
-    let shutdown = fixture.persona("(ComponentShutdown (persona-terminal))");
-    assert!(
-        shutdown.contains("(ActionAcceptedReport (persona-terminal Stopped))"),
-        "shutdown output: {shutdown}"
-    );
+    match fixture.persona(&shutdown_request("persona-terminal")) {
+        PersonaOutput::ActionAcceptedReport(report) => {
+            assert_eq!(report.component.as_str(), "persona-terminal");
+            assert_eq!(report.desired_state, "Stopped");
+        }
+        other => panic!("expected an accepted shutdown, got {other:?}"),
+    }
 
     fixture.stop_daemon();
 
@@ -361,7 +393,6 @@ async fn constraint_persona_daemon_persists_cli_mutation_to_manager_store() {
         .expect("default engine record exists");
     let terminal = record
         .status()
-        
         .component_status_vector
         .iter()
         .find(|component| component.component_name.as_str() == "persona-terminal")

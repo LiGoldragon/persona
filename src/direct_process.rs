@@ -718,9 +718,7 @@ impl DirectProcessLauncher {
                 .supervision_socket_path()
                 .to_string_lossy()
                 .into_owned(),
-            engine_management_socket_mode: i64::from(
-                envelope.supervision_socket_mode().as_octal(),
-            ),
+            engine_management_socket_mode: i64::from(envelope.supervision_socket_mode().as_octal()),
             owner_identity: envelope.owner_identity().clone(),
             harness_instance_configurations: vec![signal_harness::HarnessInstanceConfiguration {
                 harness_name: envelope.component_instance().as_str().to_owned(),
