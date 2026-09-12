@@ -1050,7 +1050,7 @@
 
                 builder_uid="$(id -u)"
                 ${inputs.persona-router.packages.${system}.text}/bin/router-write-configuration \
-                  "(ConfigurationWriteRequest $router_socket $workdir/router-meta.sock $workdir/router-supervision.sock $workdir/router.sema $builder_uid $router_configuration)"
+                  "(ConfigurationWriteRequest $router_socket $workdir/router-meta.sock $workdir/router-supervision.sock $workdir/router.sema None $builder_uid None persona-check-router None $router_configuration)"
                 ${inputs.persona-router.packages.${system}.default}/bin/router-daemon \
                   "$router_configuration" 2> "$router_stderr" &
                 router_pid=$!
@@ -1110,7 +1110,7 @@
 
                 builder_uid="$(id -u)"
                 ${inputs.persona-router.packages.${system}.text}/bin/router-write-configuration \
-                  "(ConfigurationWriteRequest $router_socket $workdir/router-meta.sock $workdir/router-supervision.sock $workdir/router.sema $builder_uid $router_configuration)"
+                  "(ConfigurationWriteRequest $router_socket $workdir/router-meta.sock $workdir/router-supervision.sock $workdir/router.sema None $builder_uid None persona-check-router None $router_configuration)"
                 ${inputs.persona-router.packages.${system}.default}/bin/router-daemon \
                   "$router_configuration" 2> "$router_stderr" &
                 router_pid=$!
@@ -1165,7 +1165,7 @@
 
                 builder_uid="$(id -u)"
                 ${inputs.persona-router.packages.${system}.text}/bin/router-write-configuration \
-                  "(ConfigurationWriteRequest $router_socket $workdir/router-meta.sock $workdir/router-supervision.sock $workdir/router.sema $builder_uid $router_configuration)"
+                  "(ConfigurationWriteRequest $router_socket $workdir/router-meta.sock $workdir/router-supervision.sock $workdir/router.sema None $builder_uid None persona-check-router None $router_configuration)"
                 ${inputs.persona-router.packages.${system}.default}/bin/router-daemon \
                   "$router_configuration" 2> "$router_stderr" &
                 router_pid=$!
