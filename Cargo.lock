@@ -575,7 +575,6 @@ dependencies = [
  "protos",
  "rkyv",
  "sema-engine",
- "signal-frame 0.4.0",
  "signal-harness",
  "signal-introspect",
  "signal-message",
@@ -762,7 +761,7 @@ dependencies = [
  "blake3",
  "rkyv",
  "sema",
- "signal-frame 0.3.1",
+ "signal-frame",
  "signal-sema",
  "thiserror",
 ]
@@ -832,29 +831,8 @@ source = "git+https://github.com/LiGoldragon/signal-frame.git?rev=8aa0bcaeb29fe9
 dependencies = [
  "paste",
  "rkyv",
- "signal-frame-macros 0.1.2 (git+https://github.com/LiGoldragon/signal-frame.git?rev=8aa0bcaeb29fe9e461a11706a469638d2fd109ac)",
+ "signal-frame-macros",
  "thiserror",
-]
-
-[[package]]
-name = "signal-frame"
-version = "0.4.0"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?rev=000d86684d91ab6b38dd0bce7a5d8bae6db7b147#000d86684d91ab6b38dd0bce7a5d8bae6db7b147"
-dependencies = [
- "paste",
- "rkyv",
- "signal-frame-macros 0.1.2 (git+https://github.com/LiGoldragon/signal-frame.git?rev=000d86684d91ab6b38dd0bce7a5d8bae6db7b147)",
- "thiserror",
-]
-
-[[package]]
-name = "signal-frame-macros"
-version = "0.1.2"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?rev=000d86684d91ab6b38dd0bce7a5d8bae6db7b147#000d86684d91ab6b38dd0bce7a5d8bae6db7b147"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -943,7 +921,7 @@ version = "0.7.0"
 source = "git+https://github.com/LiGoldragon/signal-router.git?rev=03ed6bc2217d6a8d0ed5e1291e417ea4d4de168f#03ed6bc2217d6a8d0ed5e1291e417ea4d4de168f"
 dependencies = [
  "rkyv",
- "signal-frame 0.3.1",
+ "signal-frame",
  "thiserror",
 ]
 
@@ -1200,7 +1178,7 @@ dependencies = [
  "kameo 0.20.0 (git+https://github.com/LiGoldragon/kameo.git?rev=f491b45d7dcb55e5837eddde3d5d7ca8ceaa9f01)",
  "rkyv",
  "rustix",
- "signal-frame 0.3.1",
+ "signal-frame",
  "thiserror",
  "tokio",
 ]

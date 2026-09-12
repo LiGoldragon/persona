@@ -37,9 +37,6 @@ pub enum Error {
         detail: String,
     },
 
-    #[error("signal frame: {0}")]
-    SignalFrame(#[from] signal_frame::FrameError),
-
     #[error("daemon frame is too large: {bytes} bytes")]
     DaemonFrameTooLarge { bytes: usize },
 
@@ -48,11 +45,6 @@ pub enum Error {
 
     #[error("unexpected Signal frame: {got}")]
     UnexpectedSignalFrame { got: String },
-
-    #[error("signal request failed structural checks: {reason}")]
-    InvalidSignalRequest {
-        reason: signal_frame::RequestRejectionReason,
-    },
 
     #[error("manager store path is missing a parent directory: {path}")]
     ManagerStorePathMissingParent { path: PathBuf },

@@ -149,3 +149,26 @@ impl From<datom_codec::Error> for ConfigurationWriterError {
         Self::Decode(fault)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use persona::datom_text::{DatomActualizable, DatomTextualizable};
+
+    /// The request the command line carries, round-tripped through the codec
+    /// that reads it. The printed form is what a caller must write.
+    #[test]
+    fn configuration_write_request_round_trips_as_datom() {
+        let request = ConfigurationWriteRequest {
+            manager_socket_path: ConfigurationWriterPath("/run/persona/manager.sock".to_owned()),
+            manager_store_path: ConfigurationWriterPath("/var/lib/persona/manager.sema".to_owned()),
+            output_path: ConfigurationWriterPath("/run/persona/daemon.rkyv".to_owned()),
+        };
+        let text = request.textualize();
+        println!("ConfigurationWriteRequest datom form: {text}");
+        let recovered = ConfigurationWriteRequest::actualize_text(&text)
+            .unwrap_or_else(|fault| panic!("request restores from {text}: {fault:?}"));
+
+        assert_eq!(recovered, request);
+    }
+}

@@ -1872,7 +1872,7 @@
                 export PERSONA_SPIRIT_DAEMON_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-spirit-prototype-launcher
 
                 ${self.packages.${system}.default}/bin/persona-write-configuration \
-                  "(ConfigurationWriteRequest $manager_socket $PERSONA_MANAGER_STORE $configuration)"
+                  "{ { $manager_socket } { $PERSONA_MANAGER_STORE } { $configuration } }"
 
                 ${self.packages.${system}.default}/bin/persona-daemon "$configuration" \
                   > "$work/persona-daemon.stdout" \
@@ -2008,7 +2008,7 @@
                 export PERSONA_MESSAGE_DAEMON_EXECUTABLE=${context.prototypeComponentLaunchers}/bin/persona-message-prototype-launcher
 
                 ${self.packages.${system}.default}/bin/persona-write-configuration \
-                  "(ConfigurationWriteRequest $manager_socket $PERSONA_MANAGER_STORE $configuration)"
+                  "{ { $manager_socket } { $PERSONA_MANAGER_STORE } { $configuration } }"
 
                 ${self.packages.${system}.default}/bin/persona-daemon "$configuration" \
                   > "$work/persona-daemon.stdout" \

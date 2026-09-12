@@ -33,7 +33,6 @@ meta-signal-system    = { git = "https://github.com/LiGoldragon/meta-signal-syst
 meta-signal-persona   = { git = "https://github.com/LiGoldragon/meta-signal-persona.git", rev = "88657088a4f499c758bc3af3e625ab7e7618e038", features = ["datom"] }
 rkyv                   = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
 sema-engine            = { git = "https://github.com/LiGoldragon/sema-engine.git", rev = "27e814a721439af67721c530d48b4d2101141f74" }
-signal-frame           = { git = "https://github.com/LiGoldragon/signal-frame.git", rev = "000d86684d91ab6b38dd0bce7a5d8bae6db7b147" }
 signal-harness            = { git = "https://github.com/LiGoldragon/signal-harness.git", rev = "49d16a31c0dd81a571de99db739e428d96819fd9", features = ["datom"] }
 signal-introspect         = { git = "https://github.com/LiGoldragon/signal-introspect.git", rev = "8de16e35a1aa993b059fcab72a2c2aa4b3a785bf", features = ["datom"] }
 signal-message            = { git = "https://github.com/LiGoldragon/signal-message.git", rev = "2da9c6dde92dda11ba53aedaa75a3f3605b51454", features = ["datom"] }
