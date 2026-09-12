@@ -23,13 +23,14 @@
 
 use std::io::{Read, Write};
 
-use signal_frame::{Reply, SubReply};
-use signal_message::{DotosEncode, Frame, FrameBody, MessageOperationKind, Output};
+use datom_codec::Datomizable;
+use protos::{Protosizable, Textualizable};
+use signal_message::{MessageOperationKind, Response, Restorable, Signal};
 
 #[derive(Debug)]
 enum Expectation {
     SubmissionAccepted {
-        slot: u64,
+        slot: i64,
     },
     InboxListing {
         count: Option<usize>,
@@ -62,7 +63,7 @@ fn parse() -> (Expectation, Option<String>) {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--expect" => variant = args.next(),
-            "--expect-slot" => slot = args.next().map(|v| v.parse::<u64>().expect("slot u64")),
+            "--expect-slot" => slot = args.next().map(|v| v.parse::<i64>().expect("slot i64")),
             "--expect-entry-count" => {
                 count = args
                     .next()
@@ -93,12 +94,11 @@ fn parse() -> (Expectation, Option<String>) {
     (expectation, capture_nota)
 }
 
-fn write_nota(reply: &Output, path: &str) {
-    let text = reply.to_nota();
-    let mut file = std::fs::File::create(path).expect("create capture-nota file");
-    file.write_all(text.as_bytes())
-        .expect("write capture-nota text");
-    file.write_all(b"\n").expect("write capture-nota newline");
+fn write_datom(reply: &Response, path: &str) {
+    let text = reply.clone().datomize(Vec::new()).protosize().textualize();
+    let mut file = std::fs::File::create(path).expect("create capture file");
+    file.write_all(text.as_bytes()).expect("write capture text");
+    file.write_all(b"\n").expect("write capture newline");
 }
 
 fn main() {
@@ -109,29 +109,27 @@ fn main() {
         .read_to_end(&mut bytes)
         .expect("read reply frame bytes from stdin");
 
-    let frame = Frame::decode_length_prefixed(&bytes).expect("decode length-prefixed reply frame");
-
-    let reply_payload = match frame.into_body() {
-        FrameBody::Reply { reply, .. } => match reply {
-            Reply::Accepted { per_operation, .. } => match per_operation.into_head() {
-                SubReply::Ok(payload) => payload,
-                other => panic!("expected SubReply::Ok payload, got {other:?}"),
-            },
-            other => panic!("expected accepted reply, got {other:?}"),
-        },
-        other => panic!("expected reply frame body, got {other:?}"),
-    };
+    assert!(bytes.len() >= 4, "frame is shorter than its length prefix");
+    let length = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
+    assert_eq!(
+        bytes.len() - 4,
+        length,
+        "length prefix does not match the body it frames"
+    );
+    let reply_payload: Response = Signal::<Response>::from(bytes[4..].to_vec())
+        .restore()
+        .expect("restore reply from frame");
 
     if let Some(path) = capture_nota.as_deref() {
-        write_nota(&reply_payload, path);
+        write_datom(&reply_payload, path);
     }
 
     match (expect, &reply_payload) {
         (
             Expectation::SubmissionAccepted { slot: want },
-            Output::SubmissionAccepted(acceptance),
+            Response::SubmissionAccepted(acceptance),
         ) => {
-            let got = *acceptance.payload().payload();
+            let got = *acceptance;
             assert_eq!(
                 got, want,
                 "submission-accepted slot mismatch (expected {want}, got {got})"
@@ -144,9 +142,9 @@ fn main() {
                 body: want_body,
                 sender: want_sender,
             },
-            Output::InboxListing(listing),
+            Response::InboxListing(listing),
         ) => {
-            let entries = listing.entries();
+            let entries = &listing.messages;
             if let Some(want) = want_count {
                 let got = entries.len();
                 assert_eq!(
@@ -157,7 +155,7 @@ fn main() {
             if let Some(want) = want_body.as_deref() {
                 let found = entries
                     .iter()
-                    .any(|entry| entry.message_body.payload().as_str() == want);
+                    .any(|entry| entry.message_body.as_str() == want);
                 assert!(
                     found,
                     "inbox-listing missing entry with body={want:?}; entries={:?}",
@@ -167,7 +165,7 @@ fn main() {
             if let Some(want) = want_sender.as_deref() {
                 let found = entries
                     .iter()
-                    .any(|entry| entry.message_sender.payload().as_str() == want);
+                    .any(|entry| entry.message_sender.as_str() == want);
                 assert!(
                     found,
                     "inbox-listing missing entry with sender={want:?}; entries={:?}",
@@ -179,13 +177,13 @@ fn main() {
                 entries.len(),
                 entries
                     .iter()
-                    .map(|entry| entry.message_body.payload().as_str())
+                    .map(|entry| entry.message_body.as_str())
                     .collect::<Vec<_>>()
             );
         }
         (
             Expectation::Unimplemented { operation: want },
-            Output::MessageRequestUnimplemented(unimplemented),
+            Response::MessageRequestUnimplemented(unimplemented),
         ) => {
             assert_eq!(
                 unimplemented.message_operation_kind, want,

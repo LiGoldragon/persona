@@ -34,9 +34,11 @@
 
 use std::io::{Read, Write};
 
+use datom_codec::Datomizable;
+use protos::{Protosizable, Textualizable};
 use signal_message::{
-    ComponentInstanceName, ComponentName, ConnectionClass, DotosEncode, Frame, FrameBody, Input,
-    InternalComponentInstanceOrigin, MessageOrigin, NetworkPeer, UnixUserIdentifier,
+    ComponentName, ConnectionClass, InternalComponentInstanceOrigin, MessageOrigin, Query,
+    Restorable, Signal,
 };
 
 struct Expectations {
@@ -83,7 +85,7 @@ fn parse_origin(spec: &str) -> MessageOrigin {
             .expect("internal-instance origin expects component:instance");
         return MessageOrigin::InternalComponentInstance(InternalComponentInstanceOrigin {
             component_name: parse_component(component),
-            component_instance_name: ComponentInstanceName::new(instance.to_owned()),
+            component_instance_name: instance.to_owned(),
         });
     }
     if let Some(rest) = spec.strip_prefix("internal:") {
@@ -95,13 +97,11 @@ fn parse_origin(spec: &str) -> MessageOrigin {
         }
         if let Some(uid) = rest.strip_prefix("non-owner-user:") {
             return MessageOrigin::External(ConnectionClass::NonOwnerUser(
-                UnixUserIdentifier::new(uid.parse::<u64>().expect("uid u64")),
+                uid.parse::<i64>().expect("uid i64"),
             ));
         }
         if let Some(peer) = rest.strip_prefix("network:") {
-            return MessageOrigin::External(ConnectionClass::Network(NetworkPeer::new(
-                peer.to_owned(),
-            )));
+            return MessageOrigin::External(ConnectionClass::Network(peer.to_owned()));
         }
     }
     panic!("unknown origin spec: {spec}");
@@ -139,33 +139,32 @@ impl Expectations {
 
     fn assert_submission(&self, submission: &signal_message::MessageSubmission) {
         assert_eq!(
-            submission.message_recipient.payload().as_str(),
+            submission.message_recipient.as_str(),
             self.recipient.as_str(),
             "recipient mismatch (expected {}, got {})",
             self.recipient,
-            submission.message_recipient.payload().as_str()
+            submission.message_recipient.as_str()
         );
         assert_eq!(
-            submission.message_body.payload().as_str(),
+            submission.message_body.as_str(),
             self.body.as_str(),
             "body mismatch (expected {}, got {})",
             self.body,
-            submission.message_body.payload().as_str()
+            submission.message_body.as_str()
         );
         eprintln!(
             "decoded MessageSubmission {{ recipient: {}, body: {} }}",
-            submission.message_recipient.payload().as_str(),
-            submission.message_body.payload().as_str()
+            submission.message_recipient.as_str(),
+            submission.message_body.as_str()
         );
     }
 }
 
-fn write_nota(request: &Input, path: &str) {
-    let text = request.to_nota();
-    let mut file = std::fs::File::create(path).expect("create capture-nota file");
-    file.write_all(text.as_bytes())
-        .expect("write capture-nota text");
-    file.write_all(b"\n").expect("write capture-nota newline");
+fn write_datom(request: &Query, path: &str) {
+    let text = request.clone().datomize(Vec::new()).protosize().textualize();
+    let mut file = std::fs::File::create(path).expect("create capture file");
+    file.write_all(text.as_bytes()).expect("write capture text");
+    file.write_all(b"\n").expect("write capture newline");
 }
 
 fn main() {
@@ -175,20 +174,25 @@ fn main() {
         .read_to_end(&mut bytes)
         .expect("read frame bytes from stdin");
 
-    let frame = Frame::decode_length_prefixed(&bytes).expect("decode length-prefixed frame");
+    assert!(bytes.len() >= 4, "frame is shorter than its length prefix");
+    let length = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
+    assert_eq!(
+        bytes.len() - 4,
+        length,
+        "length prefix does not match the body it frames"
+    );
+    let operation: Query = Signal::<Query>::from(bytes[4..].to_vec())
+        .restore()
+        .expect("restore request from frame");
 
-    match frame.into_body() {
-        FrameBody::Request { request, .. } => {
-            let mut operations = request.payloads.into_vec();
-            assert_eq!(operations.len(), 1, "expected one message operation");
-            let operation = operations.remove(0);
+    if let Some(path) = expect.capture_nota.as_deref() {
+        write_datom(&operation, path);
+    }
 
-            if let Some(path) = expect.capture_nota.as_deref() {
-                write_nota(&operation, path);
-            }
-
+    {
+        {
             match (&expect.variant, &operation) {
-                (Some(ExpectedVariant::Submission) | None, Input::Submit(submission)) => {
+                (Some(ExpectedVariant::Submission) | None, Query::Submit(submission)) => {
                     expect.assert_submission(submission);
                     if expect.origin.is_some() {
                         panic!(
@@ -196,7 +200,7 @@ fn main() {
                         );
                     }
                 }
-                (Some(ExpectedVariant::Stamped) | None, Input::SubmitStamped(stamped)) => {
+                (Some(ExpectedVariant::Stamped) | None, Query::SubmitStamped(stamped)) => {
                     expect.assert_submission(&stamped.message_submission);
                     if let Some(want_origin) = expect.origin.as_ref() {
                         assert_eq!(
@@ -212,16 +216,13 @@ fn main() {
                         eprintln!("decoded origin (unasserted): {:?}", stamped.message_origin);
                     }
                 }
-                (Some(ExpectedVariant::InboxQuery), Input::QueryInbox(query)) => {
+                (Some(ExpectedVariant::InboxQuery), Query::QueryInbox(recipient)) => {
                     assert_eq!(
-                        query.payload().payload().as_str(),
+                        recipient.as_str(),
                         expect.recipient.as_str(),
                         "inbox-query recipient mismatch"
                     );
-                    eprintln!(
-                        "decoded InboxQuery {{ recipient: {} }}",
-                        query.payload().payload().as_str()
-                    );
+                    eprintln!("decoded InboxQuery {{ recipient: {recipient} }}");
                 }
                 (expected, got) => {
                     panic!(
@@ -231,6 +232,5 @@ fn main() {
                 }
             }
         }
-        other => panic!("expected Operation request frame, got {other:?}"),
     }
 }

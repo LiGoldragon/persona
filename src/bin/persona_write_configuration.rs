@@ -4,6 +4,7 @@ use std::{
 };
 
 use persona::PersonaDaemonConfiguration;
+use persona::datom_text::{DatomActualizable, DatomTextualizable};
 use thiserror::Error;
 use triad_runtime::{ArgumentError, ComponentArgument, ComponentCommand};
 
@@ -22,7 +23,7 @@ struct ConfigurationWriterInput {
     text: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, datom_codec::Datomizable, datom_codec::Compositional)]
 struct ConfigurationWriteRequest {
     manager_socket_path: ConfigurationWriterPath,
     manager_store_path: ConfigurationWriterPath,
@@ -32,7 +33,7 @@ struct ConfigurationWriteRequest {
 #[derive(Debug, Clone, PartialEq, datom_codec::Datomizable, datom_codec::Compositional)]
 struct ConfigurationWriterPath(String);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, datom_codec::Datomizable, datom_codec::Compositional)]
 struct ConfigurationWriteOutput {
     output_path: ConfigurationWriterPath,
 }
@@ -48,20 +49,20 @@ impl ConfigurationWriterCommand {
         let source = self.source()?;
         let request = source.parse_request()?;
         let output = request.write()?;
-        println!("{}", output.to_nota());
+        println!("{}", output.textualize());
         Ok(())
     }
 
     fn source(&self) -> Result<ConfigurationWriterInput, ConfigurationWriterError> {
-        match self.command.nota_argument()? {
-            ComponentArgument::InlineNota(argument) => {
+        match self.command.dotos_argument()? {
+            ComponentArgument::InlineDotos(argument) => {
                 Ok(ConfigurationWriterInput::new(argument.into_string()))
             }
-            ComponentArgument::NotaFile(file) => {
+            ComponentArgument::DotosFile(file) => {
                 let path = file.into_path();
                 fs::read_to_string(&path)
                     .map(ConfigurationWriterInput::new)
-                    .map_err(|source| ConfigurationWriterError::ReadNotaFile { path, source })
+                    .map_err(|source| ConfigurationWriterError::ReadRequestFile { path, source })
             }
             ComponentArgument::SignalFile(file) => Err(ConfigurationWriterError::SignalInput {
                 path: file.into_path(),
@@ -75,8 +76,8 @@ impl ConfigurationWriterInput {
         Self { text }
     }
 
-    fn parse_request(&self) -> Result<ConfigurationWriteRequest, DotosDecodeError> {
-        DotosSource::new(&self.text).parse()
+    fn parse_request(&self) -> Result<ConfigurationWriteRequest, datom_codec::Error> {
+        ConfigurationWriteRequest::actualize_text(&self.text)
     }
 }
 
@@ -102,46 +103,6 @@ impl ConfigurationWriteRequest {
     }
 }
 
-impl DotosDecode for ConfigurationWriteRequest {
-    fn from_nota_block(block: &dotos::Block) -> Result<Self, DotosDecodeError> {
-        let body = DotosBlock::new(block)
-            .expect_body(Delimiter::Parenthesis, "ConfigurationWriteRequest")?;
-        let objects = body.root_objects();
-        if objects.len() != 4 {
-            return Err(DotosDecodeError::ExpectedRootCount {
-                type_name: "ConfigurationWriteRequest",
-                expected: 4,
-                found: objects.len(),
-            });
-        }
-        match objects[0].demote_to_string() {
-            Some("ConfigurationWriteRequest") => {}
-            Some(variant) => {
-                return Err(DotosDecodeError::UnknownVariant {
-                    enum_name: "ConfigurationWriteRequest",
-                    variant: variant.to_owned(),
-                });
-            }
-            None => {
-                return Err(DotosDecodeError::ExpectedAtom {
-                    type_name: "ConfigurationWriteRequest",
-                });
-            }
-        }
-        Ok(Self {
-            manager_socket_path: ConfigurationWriterPath::from_nota_block(&objects[1])?,
-            manager_store_path: ConfigurationWriterPath::from_nota_block(&objects[2])?,
-            output_path: ConfigurationWriterPath::from_nota_block(&objects[3])?,
-        })
-    }
-}
-
-impl DotosEncode for ConfigurationWriteOutput {
-    fn to_nota(&self) -> String {
-        format!("(ConfigurationWritten {})", self.output_path.to_nota())
-    }
-}
-
 impl ConfigurationWriterPath {
     fn as_str(&self) -> &str {
         self.0.as_str()
@@ -161,8 +122,8 @@ enum ConfigurationWriterError {
     #[error("command argument error: {0}")]
     Argument(#[from] ArgumentError),
 
-    #[error("read NOTA request file {path}: {source}")]
-    ReadNotaFile {
+    #[error("read datom request file {path}: {source}")]
+    ReadRequestFile {
         path: PathBuf,
         source: std::io::Error,
     },
@@ -170,8 +131,8 @@ enum ConfigurationWriterError {
     #[error("signal input is not accepted by this text-edge helper: {path}")]
     SignalInput { path: PathBuf },
 
-    #[error("decode NOTA request: {0}")]
-    Decode(#[from] DotosDecodeError),
+    #[error("decode datom request: {0:?}")]
+    Decode(datom_codec::Error),
 
     #[error("write daemon configuration archive {path}: {source}")]
     WriteArchive {
@@ -181,4 +142,10 @@ enum ConfigurationWriterError {
 
     #[error("daemon configuration archive error: {0}")]
     Configuration(#[from] persona::ConfigurationError),
+}
+
+impl From<datom_codec::Error> for ConfigurationWriterError {
+    fn from(fault: datom_codec::Error) -> Self {
+        Self::Decode(fault)
+    }
 }

@@ -25,11 +25,9 @@
 
 use std::io::Write;
 
-use signal_frame::{ExchangeIdentifier, ExchangeLane, LaneSequence, RequestPayload, SessionEpoch};
 use signal_message::{
-    ComponentName, ConnectionClass, Frame, FrameBody, InboxQuery, Input, MessageBody, MessageKind,
-    MessageOrigin, MessageRecipient, MessageSubmission, NetworkPeer, StampedMessageSubmission,
-    TimestampNanos, UnixUserIdentifier,
+    ByteViewable, ComponentName, ConnectionClass, MessageKind, MessageOrigin, MessageSubmission,
+    Query, Signalizable, StampedMessageSubmission, ThreadSelection,
 };
 
 #[derive(Debug)]
@@ -71,13 +69,11 @@ fn parse_origin(spec: &str) -> MessageOrigin {
         }
         if let Some(uid) = rest.strip_prefix("non-owner-user:") {
             return MessageOrigin::External(ConnectionClass::NonOwnerUser(
-                UnixUserIdentifier::new(uid.parse::<u64>().expect("uid u64")),
+                uid.parse::<i64>().expect("uid i64"),
             ));
         }
         if let Some(peer) = rest.strip_prefix("network:") {
-            return MessageOrigin::External(ConnectionClass::Network(NetworkPeer::new(
-                peer.to_owned(),
-            )));
+            return MessageOrigin::External(ConnectionClass::Network(peer.to_owned()));
         }
     }
     panic!("unknown origin spec: {spec}");
@@ -88,7 +84,7 @@ struct Cli {
     recipient: String,
     body: Option<String>,
     origin: Option<MessageOrigin>,
-    stamped_at: u64,
+    stamped_at: i64,
 }
 
 impl Cli {
@@ -98,7 +94,7 @@ impl Cli {
         let mut recipient = None;
         let mut body = None;
         let mut origin = None;
-        let mut stamped_at = 0u64;
+        let mut stamped_at = 0i64;
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--variant" => {
@@ -112,7 +108,7 @@ impl Cli {
                         .next()
                         .expect("--stamped-at value")
                         .parse()
-                        .expect("stamped-at u64");
+                        .expect("stamped-at i64");
                 }
                 other => panic!("unknown arg: {other}"),
             }
@@ -126,30 +122,30 @@ impl Cli {
         }
     }
 
-    fn build_request(self) -> Input {
-        let recipient = MessageRecipient::new(self.recipient);
+    fn build_request(self) -> Query {
+        let recipient = self.recipient;
         match self.variant {
-            Variant::Submission => Input::Submit(MessageSubmission {
+            Variant::Submission => Query::Submit(MessageSubmission {
                 message_recipient: recipient,
                 message_kind: MessageKind::Send,
-                message_body: MessageBody::new(
-                    self.body.expect("--body is required for submission"),
-                ),
+                message_body: self.body.expect("--body is required for submission"),
+                thread_selection: ThreadSelection::None,
             }),
             Variant::Stamped => {
-                let body = MessageBody::new(self.body.expect("--body is required for stamped"));
+                let body = self.body.expect("--body is required for stamped");
                 let origin = self.origin.expect("--origin is required for stamped");
-                Input::SubmitStamped(StampedMessageSubmission {
+                Query::SubmitStamped(StampedMessageSubmission {
                     message_submission: MessageSubmission {
                         message_recipient: recipient,
                         message_kind: MessageKind::Send,
                         message_body: body,
+                        thread_selection: ThreadSelection::None,
                     },
                     message_origin: origin,
-                    stamped_at: TimestampNanos::new(self.stamped_at).into(),
+                    stamped_at: self.stamped_at,
                 })
             }
-            Variant::InboxQuery => Input::QueryInbox(InboxQuery::new(recipient)),
+            Variant::InboxQuery => Query::QueryInbox(recipient),
         }
     }
 }
@@ -157,18 +153,11 @@ impl Cli {
 fn main() {
     let cli = Cli::parse();
     let request = cli.build_request();
-    let frame = Frame::new(FrameBody::Request {
-        exchange: ExchangeIdentifier::new(
-            SessionEpoch::new(1),
-            ExchangeLane::Connector,
-            LaneSequence::first(),
-        ),
-        request: request.into_request(),
-    });
-    let bytes = frame
-        .encode_length_prefixed()
-        .expect("encode length-prefixed frame");
-    std::io::stdout()
-        .write_all(&bytes)
-        .expect("write bytes to stdout");
+    let signal = request.signalize().expect("signalize request");
+    let bytes = signal.bytes();
+    let length = u32::try_from(bytes.len()).expect("frame length fits in u32");
+    let mut out = std::io::stdout();
+    out.write_all(&length.to_be_bytes())
+        .expect("write length prefix to stdout");
+    out.write_all(bytes).expect("write bytes to stdout");
 }

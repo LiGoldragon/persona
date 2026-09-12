@@ -20,18 +20,15 @@
 
 use std::io::Write;
 
-use signal_frame::{
-    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, SessionEpoch, SubReply,
-};
 use signal_message::{
-    DependencyKind, Frame, FrameBody, InboxEntry, InboxListing, MessageBody, MessageOperationKind,
-    MessageRequestUnimplemented, MessageSender, MessageSlot, MessageUnimplementedReason, Output,
-    ResourceKind, SubmissionAcceptance,
+    ByteViewable, DependencyKind, InboxEntry, InboxListingReply, MessageOperationKind,
+    MessageRequestUnimplementedReply, MessageUnimplementedReason, ResourceKind, Response,
+    Signalizable, ThreadSelection,
 };
 
 enum Variant {
     SubmissionAccepted {
-        slot: u64,
+        slot: i64,
     },
     InboxListing {
         entries: Vec<EntrySpec>,
@@ -43,7 +40,7 @@ enum Variant {
 }
 
 struct EntrySpec {
-    slot: u64,
+    slot: i64,
     sender: String,
     body: String,
 }
@@ -58,7 +55,7 @@ impl EntrySpec {
                 .split_once('=')
                 .expect("entry field must be key=value");
             match key {
-                "slot" => slot = Some(value.parse::<u64>().expect("slot must be u64")),
+                "slot" => slot = Some(value.parse::<i64>().expect("slot must be i64")),
                 "sender" => sender = Some(value.to_string()),
                 "body" => body = Some(value.to_string()),
                 other => panic!("unknown entry field key: {other}"),
@@ -73,9 +70,11 @@ impl EntrySpec {
 
     fn into_entry(self) -> InboxEntry {
         InboxEntry {
-            message_slot: MessageSlot::new(self.slot),
-            message_sender: MessageSender::new(self.sender),
-            message_body: MessageBody::new(self.body),
+            message_slot: self.slot,
+            message_sender: self.sender,
+            message_body: self.body,
+            thread_selection: ThreadSelection::None,
+            stamped_at: 0,
         }
     }
 }
@@ -118,7 +117,7 @@ fn parse() -> Variant {
             "--slot" => {
                 slot = args
                     .next()
-                    .map(|v| v.parse::<u64>().expect("slot must be u64"))
+                    .map(|v| v.parse::<i64>().expect("slot must be i64"))
             }
             "--entry" => entries.push(EntrySpec::parse(&args.next().expect("--entry needs value"))),
             "--operation" => operation = args.next().map(|v| parse_operation(&v)),
@@ -140,16 +139,14 @@ fn parse() -> Variant {
     }
 }
 
-fn build_reply(variant: Variant) -> Output {
+fn build_reply(variant: Variant) -> Response {
     match variant {
-        Variant::SubmissionAccepted { slot } => {
-            Output::SubmissionAccepted(SubmissionAcceptance::new(MessageSlot::new(slot)))
-        }
-        Variant::InboxListing { entries } => Output::InboxListing(InboxListing::from_entries(
-            entries.into_iter().map(EntrySpec::into_entry).collect(),
-        )),
+        Variant::SubmissionAccepted { slot } => Response::SubmissionAccepted(slot),
+        Variant::InboxListing { entries } => Response::InboxListing(InboxListingReply {
+            messages: entries.into_iter().map(EntrySpec::into_entry).collect(),
+        }),
         Variant::Unimplemented { operation, reason } => {
-            Output::MessageRequestUnimplemented(MessageRequestUnimplemented {
+            Response::MessageRequestUnimplemented(MessageRequestUnimplementedReply {
                 message_operation_kind: operation,
                 message_unimplemented_reason: reason,
             })
@@ -160,18 +157,11 @@ fn build_reply(variant: Variant) -> Output {
 fn main() {
     let variant = parse();
     let reply = build_reply(variant);
-    let frame = Frame::new(FrameBody::Reply {
-        exchange: ExchangeIdentifier::new(
-            SessionEpoch::new(1),
-            ExchangeLane::Connector,
-            LaneSequence::first(),
-        ),
-        reply: Reply::committed(NonEmpty::single(SubReply::Ok(reply))),
-    });
-    let bytes = frame
-        .encode_length_prefixed()
-        .expect("encode length-prefixed reply frame");
-    std::io::stdout()
-        .write_all(&bytes)
-        .expect("write reply bytes to stdout");
+    let signal = reply.signalize().expect("signalize reply");
+    let bytes = signal.bytes();
+    let length = u32::try_from(bytes.len()).expect("frame length fits in u32");
+    let mut out = std::io::stdout();
+    out.write_all(&length.to_be_bytes())
+        .expect("write length prefix to stdout");
+    out.write_all(bytes).expect("write reply bytes to stdout");
 }

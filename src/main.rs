@@ -1,6 +1,5 @@
 use std::process::ExitCode;
 
-use persona::datom_text::DatomTextualizable;
 use persona::request::{CommandLine, PersonaOutput};
 use persona::transport::PersonaClient;
 

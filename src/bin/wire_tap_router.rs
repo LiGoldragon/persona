@@ -31,14 +31,13 @@ use std::io::{Read, Write};
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
 
-use signal_frame::{ExchangeIdentifier, NonEmpty, Reply, SubReply};
 use signal_message::{
-    Frame, FrameBody, MessageOperationKind, MessageRequestUnimplemented, MessageSlot,
-    MessageUnimplementedReason, Output, SubmissionAcceptance,
+    ByteViewable, MessageOperationKind, MessageRequestUnimplementedReply,
+    MessageUnimplementedReason, Response, Signalizable,
 };
 
 enum CannedReply {
-    SubmissionAcceptedSlot(u64),
+    SubmissionAcceptedSlot(i64),
     UnimplementedSubmission,
     UnimplementedStamped,
     UnimplementedInboxQuery,
@@ -88,36 +87,28 @@ impl Cli {
     }
 }
 
-fn build_reply_frame(canned: CannedReply, request_exchange: ExchangeIdentifier) -> Frame {
-    let payload = match canned {
-        CannedReply::SubmissionAcceptedSlot(slot) => {
-            Output::SubmissionAccepted(SubmissionAcceptance::new(MessageSlot::new(slot)))
-        }
+fn build_reply(canned: CannedReply) -> Response {
+    match canned {
+        CannedReply::SubmissionAcceptedSlot(slot) => Response::SubmissionAccepted(slot),
         CannedReply::UnimplementedSubmission => {
-            Output::MessageRequestUnimplemented(MessageRequestUnimplemented {
+            Response::MessageRequestUnimplemented(MessageRequestUnimplementedReply {
                 message_operation_kind: MessageOperationKind::Submit,
                 message_unimplemented_reason: MessageUnimplementedReason::NotInPrototypeScope,
             })
         }
         CannedReply::UnimplementedStamped => {
-            Output::MessageRequestUnimplemented(MessageRequestUnimplemented {
+            Response::MessageRequestUnimplemented(MessageRequestUnimplementedReply {
                 message_operation_kind: MessageOperationKind::SubmitStamped,
                 message_unimplemented_reason: MessageUnimplementedReason::NotInPrototypeScope,
             })
         }
         CannedReply::UnimplementedInboxQuery => {
-            Output::MessageRequestUnimplemented(MessageRequestUnimplemented {
+            Response::MessageRequestUnimplemented(MessageRequestUnimplementedReply {
                 message_operation_kind: MessageOperationKind::QueryInbox,
                 message_unimplemented_reason: MessageUnimplementedReason::NotInPrototypeScope,
             })
         }
-    };
-    // Echo the request's exchange identifier in the reply so the
-    // caller (which round-trips by exchange ID) accepts the reply.
-    Frame::new(FrameBody::Reply {
-        exchange: request_exchange,
-        reply: Reply::committed(NonEmpty::single(SubReply::Ok(payload))),
-    })
+    }
 }
 
 fn read_length_prefixed_frame(stream: &mut std::os::unix::net::UnixStream) -> Vec<u8> {
@@ -160,20 +151,16 @@ fn main() {
         cli.capture.display()
     );
 
-    // Decode just enough of the captured request to extract its
-    // exchange identifier so we echo it on the reply. We don't
-    // re-emit the request, we just need its envelope to match.
-    let request_frame =
-        Frame::decode_length_prefixed(&captured).expect("decode captured request envelope");
-    let request_exchange = match request_frame.into_body() {
-        FrameBody::Request { exchange, .. } => exchange,
-        other => panic!("wire-tap-router expected a Request frame from the caller, got {other:?}"),
-    };
-
-    let reply_frame = build_reply_frame(cli.reply, request_exchange);
-    let reply_bytes = reply_frame
-        .encode_length_prefixed()
-        .expect("encode canned reply frame");
-    stream.write_all(&reply_bytes).expect("write canned reply");
+    // The envelope is retired, so there is no exchange identity to echo:
+    // the reply is the canned contract value behind its length prefix.
+    let signal = build_reply(cli.reply)
+        .signalize()
+        .expect("signalize canned reply");
+    let reply_bytes = signal.bytes();
+    let length = u32::try_from(reply_bytes.len()).expect("reply length fits in u32");
+    stream
+        .write_all(&length.to_be_bytes())
+        .expect("write canned reply length prefix");
+    stream.write_all(reply_bytes).expect("write canned reply");
     stream.flush().expect("flush canned reply");
 }
