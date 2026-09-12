@@ -202,8 +202,6 @@ when `PERSONA_ORCHESTRATE_EXECUTABLE` points at the launcher or daemon.
 | `terminal` | Durable PTY/session owner around `terminal-cell`, visible viewer adapters, raw terminal byte transport, and terminal metadata. It exposes an ordinary terminal communication surface, a meta terminal lifecycle surface, plus one engine-management socket. |
 | `terminal-cell` | Low-level PTY/transcript library consumed by `terminal`; standalone daemon form is a development/test harness. |
 | `sema` | Typed database kernel library over redb/rkyv behind `.sema` files. |
-| `signal-frame` | Signal wire kernel: frames, exchange identifiers, handshake, channel macro. |
-| `signal-sema` | Universal payloadless Sema classification labels (`Assert` / `Mutate` / `Retract` / `Match` / `Subscribe` / `Validate`) used for observation only; `PatternField<T>`, `Slot<T>`, `Revision` primitives. |
 | `meta-signal-persona` | Management contract for Persona. |
 | `signal-message` | Message ingress contract. |
 | `signal-system` | System observation contract. |
