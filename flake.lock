@@ -1272,11 +1272,11 @@
         "nixpkgs": "nixpkgs_3"
       },
       "locked": {
-        "lastModified": 1789181553,
-        "narHash": "sha256-Kv5Cqh7DwS2Um+nW64AzhmBY0kh8DKzlRV7R81BVXdU=",
+        "lastModified": 1789212411,
+        "narHash": "sha256-8fexMdGxAIQvPpdoFz9nTPnfOLNDXNaWJP2kpiDJIAg=",
         "owner": "LiGoldragon",
         "repo": "message",
-        "rev": "38345dae42ac04caad0204ddbb94daf8f92c3367",
+        "rev": "94ff6dfbb39be033a1695bbffedbdf594bcb218b",
         "type": "github"
       },
       "original": {
