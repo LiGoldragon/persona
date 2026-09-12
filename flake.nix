@@ -1270,15 +1270,15 @@
                   test -d "$root/home"
                   test -d "$root/work"
                   test -d "$root/artifacts"
-                  test -f "$root/artifacts/sandbox-manifest.datom"
-                  test -f "$root/artifacts/credential-policy.datom"
+                  test -f "$root/artifacts/sandbox-manifest.nota"
+                  test -f "$root/artifacts/credential-policy.nota"
                   test -f "$root/artifacts/systemd-command.txt"
-                  test -f "$root/artifacts/bwrap-profile.datom"
+                  test -f "$root/artifacts/bwrap-profile.nota"
                 done
-                grep -Fq '(Harness Pi)' "$out/pi/artifacts/sandbox-manifest.datom"
-                grep -Fq '(Harness Claude)' "$out/claude/artifacts/sandbox-manifest.datom"
-                grep -Fq '(Harness Codex)' "$out/codex/artifacts/sandbox-manifest.datom"
-                grep -Fq '(Harness CodexApi)' "$out/codex-api/artifacts/sandbox-manifest.datom"
+                grep -Fq '(Harness Pi)' "$out/pi/artifacts/sandbox-manifest.nota"
+                grep -Fq '(Harness Claude)' "$out/claude/artifacts/sandbox-manifest.nota"
+                grep -Fq '(Harness Codex)' "$out/codex/artifacts/sandbox-manifest.nota"
+                grep -Fq '(Harness CodexApi)' "$out/codex-api/artifacts/sandbox-manifest.nota"
               '';
           persona-engine-sandbox-documents-dedicated-auth =
             context.pkgs.runCommand "persona-engine-sandbox-documents-dedicated-auth" { }
@@ -1290,8 +1290,8 @@
                   --dry-run \
                   --harness codex \
                   --sandbox-dir "$root"
-                grep -Fq 'DedicatedRunnerHome' "$root/artifacts/credential-policy.datom"
-                grep -Fq 'live host auth.json is not copied' "$root/artifacts/credential-policy.datom"
+                grep -Fq 'DedicatedRunnerHome' "$root/artifacts/credential-policy.nota"
+                grep -Fq 'live host auth.json is not copied' "$root/artifacts/credential-policy.nota"
 
                 root=$out/claude
                 mkdir -p "$root"
@@ -1299,8 +1299,8 @@
                   --dry-run \
                   --harness claude \
                   --sandbox-dir "$root"
-                grep -Fq 'DedicatedRunnerHome' "$root/artifacts/credential-policy.datom"
-                grep -Fq 'live host credentials are not copied' "$root/artifacts/credential-policy.datom"
+                grep -Fq 'DedicatedRunnerHome' "$root/artifacts/credential-policy.nota"
+                grep -Fq 'live host credentials are not copied' "$root/artifacts/credential-policy.nota"
               '';
           persona-engine-sandbox-bootstrap-auth-dry-run =
             context.pkgs.runCommand "persona-engine-sandbox-bootstrap-auth-dry-run" { }
@@ -1317,20 +1317,20 @@
                     --sandbox-dir "$root/sandbox" \
                     --credential-root "$root/credentials" \
                     > "$root/bootstrap.stdout"
-                  test -f "$root/sandbox/artifacts/auth-bootstrap.datom"
+                  test -f "$root/sandbox/artifacts/auth-bootstrap.nota"
                   test -f "$root/sandbox/artifacts/auth-bootstrap-env.sh"
                   test ! -e "$root/credentials"
                 done
                 grep -Fq 'CODEX_HOME=' "$out/codex/sandbox/artifacts/auth-bootstrap-env.sh"
-                grep -Fq 'codex login --device-auth' "$out/codex/sandbox/artifacts/auth-bootstrap.datom"
+                grep -Fq 'codex login --device-auth' "$out/codex/sandbox/artifacts/auth-bootstrap.nota"
                 grep -Fq 'CLAUDE_CONFIG_DIR=' "$out/claude/sandbox/artifacts/auth-bootstrap-env.sh"
                 grep -Fq 'CLAUDE_CODE_OAUTH_TOKEN=' "$out/claude/sandbox/artifacts/auth-bootstrap-env.sh"
-                grep -Fq 'claude auth login --claudeai' "$out/claude/sandbox/artifacts/auth-bootstrap.datom"
+                grep -Fq 'claude auth login --claudeai' "$out/claude/sandbox/artifacts/auth-bootstrap.nota"
                 grep -Fq 'PI_CODING_AGENT_DIR=' "$out/pi/sandbox/artifacts/auth-bootstrap-env.sh"
                 grep -Fq 'PI_CODING_AGENT_SESSION_DIR=' "$out/pi/sandbox/artifacts/auth-bootstrap-env.sh"
                 grep -Fq "PI_PACKAGE_DIR='$out/pi/pi-package'" "$out/pi/sandbox/artifacts/auth-bootstrap-env.sh"
                 grep -Fq 'OPENAI_API_KEY=' "$out/codex-api/sandbox/artifacts/auth-bootstrap-env.sh"
-                grep -Fq 'PERSONA_OPENAI_API_KEY_FILE' "$out/codex-api/sandbox/artifacts/auth-bootstrap.datom"
+                grep -Fq 'PERSONA_OPENAI_API_KEY_FILE' "$out/codex-api/sandbox/artifacts/auth-bootstrap.nota"
               '';
           persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs =
             context.pkgs.runCommand "persona-engine-sandbox-pi-bootstrap-creates-isolated-dirs" { }
@@ -1354,8 +1354,8 @@
                   self.packages.${system}.persona-engine-sandbox
                 }/bin/persona-engine-sandbox \
                   ${context.pkgs.bash}/bin/bash ${./scripts/persona-engine-sandbox-auth-isolation-witness} "$out"
-                test -f "$out/auth-isolation-witness.datom"
-                grep -Fq '(AuthIsolationWitness Passed)' "$out/auth-isolation-witness.datom"
+                test -f "$out/auth-isolation-witness.nota"
+                grep -Fq '(AuthIsolationWitness Passed)' "$out/auth-isolation-witness.nota"
               '';
           persona-engine-sandbox-attach-script-builds =
             context.pkgs.runCommand "persona-engine-sandbox-attach-script-builds" { }
@@ -1425,9 +1425,9 @@
                     --dry-run \
                     --sandbox-dir "$out" \
                     > "$out/attach.stdout"
-                test -f "$out/artifacts/host-attach.datom"
+                test -f "$out/artifacts/host-attach.nota"
                 test -f "$out/artifacts/host-attach-command.txt"
-                grep -Fq '(WaylandIntoSandbox false)' "$out/artifacts/host-attach.datom"
+                grep -Fq '(WaylandIntoSandbox false)' "$out/artifacts/host-attach.nota"
                 grep -Fq "$out/run/cell.sock" "$out/artifacts/host-attach-command.txt"
                 grep -Fq 'terminal-cell-view' "$out/artifacts/host-attach-command.txt"
                 if grep -R -Fq 'WAYLAND_DISPLAY' "$out/artifacts"; then
@@ -1443,7 +1443,7 @@
                   --harness pi \
                   --sandbox-dir "$out/sandbox" \
                   > "$out/dry-run.stdout"
-                profile="$out/sandbox/artifacts/bwrap-profile.datom"
+                profile="$out/sandbox/artifacts/bwrap-profile.nota"
                 grep -Fq '(ReadOnlyBind "/nix")' "$profile"
                 grep -Fq '(ReadOnlyBind "/run/current-system")' "$profile"
                 grep -Fq "(ReadWriteBind \"$out/sandbox\")" "$profile"
@@ -1462,8 +1462,8 @@
                   --credential-root "$out/credentials" \
                   > "$out/dry-run.stdout"
                 command="$sandbox/artifacts/systemd-command.txt"
-                manifest="$sandbox/artifacts/sandbox-manifest.datom"
-                profile="$sandbox/artifacts/bwrap-profile.datom"
+                manifest="$sandbox/artifacts/sandbox-manifest.nota"
+                profile="$sandbox/artifacts/bwrap-profile.nota"
                 grep -Fq -- '--property=ProtectHome=tmpfs' "$command"
                 grep -Fq -- "--property=ReadWritePaths=$sandbox" "$command"
                 grep -Fq -- "--property=BindPaths=$out/credentials" "$command"
@@ -2120,9 +2120,9 @@
                 test ! -S "$work/run/default/router.supervision.sock"
                 echo "message-router old supervision socket absence checks passed"
 
-                send_output="$work/message-send.datom"
+                send_output="$work/message-send.nota"
                 send_error="$work/message-send.stderr"
-                inbox_output="$work/message-inbox.datom"
+                inbox_output="$work/message-inbox.nota"
                 inbox_error="$work/message-inbox.stderr"
 
                 MESSAGE_SOCKET="$work/run/default/message.sock" \
@@ -2142,9 +2142,9 @@
                 mkdir -p "$out"
                 cp "$work/persona-daemon.stdout" "$out/persona-daemon.stdout"
                 cp "$work/persona-daemon.stderr" "$out/persona-daemon.stderr"
-                cp "$send_output" "$out/message-send.datom"
+                cp "$send_output" "$out/message-send.nota"
                 cp "$send_error" "$out/message-send.stderr"
-                cp "$inbox_output" "$out/message-inbox.datom"
+                cp "$inbox_output" "$out/message-inbox.nota"
                 cp "$inbox_error" "$out/message-inbox.stderr"
                 cp "$work/state/default"/*.env "$out/"
                 touch "$out/passed"
