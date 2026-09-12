@@ -6,7 +6,7 @@ use std::sync::Arc;
 use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use meta_signal_persona::ComponentName;
+use signal_persona::ComponentName;
 use signal_persona::EngineIdentifier;
 use thiserror::Error;
 use tokio::process::Command;
@@ -55,7 +55,7 @@ impl Actor for ComponentUnitManager {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentUnit {
     engine: EngineIdentifier,
     component: ComponentName,
@@ -91,7 +91,7 @@ impl ComponentUnit {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnitName(String);
 
 impl UnitName {
@@ -118,7 +118,7 @@ impl std::fmt::Display for UnitName {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnitAction {
     Start,
     Stop,
@@ -141,7 +141,7 @@ impl std::fmt::Display for UnitAction {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnitRestartPolicy {
     Disabled,
     OnFailure,
@@ -156,7 +156,7 @@ impl UnitRestartPolicy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentUnitDefinition {
     unit: ComponentUnit,
     command: ComponentCommand,
@@ -189,14 +189,14 @@ impl ComponentUnitDefinition {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentUnitDefinitionInput {
     pub unit: ComponentUnit,
     pub command: ComponentCommand,
     pub restart: UnitRestartPolicy,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentUnitCatalog {
     definitions: Vec<ComponentUnitDefinition>,
 }
@@ -225,7 +225,7 @@ impl Default for ComponentUnitCatalog {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TransientUnitProperties {
     description: String,
     service_type: String,
@@ -279,7 +279,7 @@ impl TransientUnitProperties {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TransientExecStart {
     path: String,
     arguments: Vec<String>,
@@ -315,7 +315,7 @@ impl TransientExecStart {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnitReceipt {
     unit: ComponentUnit,
     action: UnitAction,
@@ -360,7 +360,7 @@ impl UnitReceipt {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnitStatus {
     Active,
     Inactive,
@@ -388,7 +388,7 @@ impl UnitStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnitStatusReport {
     unit: ComponentUnit,
     status: UnitStatus,
@@ -466,7 +466,7 @@ impl UnitController for ManualUnitController {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SystemdBus {
     System,
     User,

@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use kameo::actor::{Actor, ActorRef, Spawn};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use meta_signal_persona::{ComponentHealth, EngineStatus};
+use meta_signal_persona::EngineStatusReport;
+use signal_persona::ComponentHealth;
 use sema_engine::{
     CommitRequest, Engine, EngineOpen, EngineRecord, FamilyName, QueryPlan, RecordKey, SchemaHash,
     SchemaVersion, TableDescriptor, TableName, TableReference, VersionedStoreName,
@@ -23,7 +24,7 @@ use crate::upgrade::{ActiveVersion, ActiveVersionChanged};
 const MANAGER_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(4);
 const MANAGER_RECORDS: TableName = TableName::new("manager.records");
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ManagerStoreLocation {
     path: PathBuf,
 }
@@ -51,14 +52,14 @@ impl ManagerStoreLocation {
     }
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 pub struct StoredEngineRecord {
     engine: EngineIdentifier,
-    status: EngineStatus,
+    status: EngineStatusReport,
 }
 
 impl StoredEngineRecord {
-    pub fn new(engine: EngineIdentifier, status: EngineStatus) -> Self {
+    pub fn new(engine: EngineIdentifier, status: EngineStatusReport) -> Self {
         Self { engine, status }
     }
 
@@ -66,7 +67,7 @@ impl StoredEngineRecord {
         &self.engine
     }
 
-    pub fn status(&self) -> &EngineStatus {
+    pub fn status(&self) -> &EngineStatusReport {
         &self.status
     }
 
@@ -85,7 +86,7 @@ impl StoredEngineRecord {
 /// intermediate stage ARCH names is reserved for the future
 /// `ComponentSocketBound` event; the prototype reducer does not emit it
 /// today.
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum ComponentProcessState {
     Launched,
     Ready,
@@ -95,8 +96,8 @@ pub enum ComponentProcessState {
 
 /// Snapshot row stored in `manager.engine-lifecycle-snapshot`, keyed by
 /// `engine_identifier::component_name`. The reducer overwrites the row on each
-/// transition; readers project the latest state into `EngineStatus`.
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+/// transition; readers project the latest state into `EngineStatusReport`.
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 pub struct ComponentLifecycleSnapshotRow {
     engine: EngineIdentifier,
     component: ComponentName,
@@ -131,9 +132,9 @@ impl ComponentLifecycleSnapshotRow {
 
 /// Snapshot row stored in `manager.engine-status-snapshot`, keyed by
 /// `engine_identifier::component_name`. Carries the same closed-enum
-/// `ComponentHealth` that `meta_signal_persona::EngineStatus` reports to CLI
+/// `ComponentHealth` that `meta_signal_persona::EngineStatusReport` reports to CLI
 /// status queries, with no extra ARCH-aspirational variants.
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 pub struct ComponentStatusSnapshotRow {
     engine: EngineIdentifier,
     component: ComponentName,
@@ -162,7 +163,7 @@ impl ComponentStatusSnapshotRow {
     }
 
     pub fn health(&self) -> ComponentHealth {
-        self.health
+        self.health.clone()
     }
 }
 
@@ -185,7 +186,7 @@ impl SnapshotKey {
     }
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 pub struct StoredActiveVersion {
     engine: EngineIdentifier,
     component: ComponentName,
@@ -226,7 +227,7 @@ impl StoredActiveVersion {
     }
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -893,7 +894,7 @@ impl ManagerStore {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 struct OrphanCandidate {
     engine: EngineIdentifier,
     component: ComponentName,
@@ -930,14 +931,14 @@ pub struct PersistEngineRecord {
 }
 
 impl PersistEngineRecord {
-    pub fn new(engine: EngineIdentifier, status: EngineStatus) -> Self {
+    pub fn new(engine: EngineIdentifier, status: EngineStatusReport) -> Self {
         Self {
             record: StoredEngineRecord::new(engine, status),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ManagerStoreReceipt {
     engine: EngineIdentifier,
     write_count: u64,
@@ -982,7 +983,7 @@ impl AppendEngineEvent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EngineEventReceipt {
     sequence: EngineEventSequence,
     write_count: u64,

@@ -287,7 +287,7 @@ impl Actor for EngineSupervisor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PrototypeSupervisionReport {
     components: Vec<LaunchedComponent>,
 }
@@ -345,7 +345,7 @@ impl Message<ReadEngineSupervisorSnapshot> for EngineSupervisor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EngineSupervisorSnapshot {
     running: Vec<LaunchedComponent>,
     started_supervision_count: u64,

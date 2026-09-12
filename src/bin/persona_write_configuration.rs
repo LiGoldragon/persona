@@ -22,17 +22,17 @@ struct ConfigurationWriterInput {
     text: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 struct ConfigurationWriteRequest {
     manager_socket_path: ConfigurationWriterPath,
     manager_store_path: ConfigurationWriterPath,
     output_path: ConfigurationWriterPath,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, datom_codec::Datomizable, datom_codec::Compositional)]
+#[derive(Debug, Clone, PartialEq, datom_codec::Datomizable, datom_codec::Compositional)]
 struct ConfigurationWriterPath(String);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 struct ConfigurationWriteOutput {
     output_path: ConfigurationWriterPath,
 }

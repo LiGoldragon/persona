@@ -12,32 +12,32 @@ use crate::schema::{
     LaunchRejectionReport, RetirementAcceptanceReport, RetirementRejectionReport,
 };
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, Copy, PartialEq)]
 pub enum EngineStatusScope {
     WholeEngine,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct EngineStatusQuery {
     pub scope: EngineStatusScope,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ComponentStatusQuery {
     pub component: ComponentName,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ComponentStartup {
     pub component: ComponentName,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ComponentShutdown {
     pub component: ComponentName,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub enum PersonaRequest {
     EngineStatusQuery(EngineStatusQuery),
     ComponentStatusQuery(ComponentStatusQuery),
@@ -66,7 +66,7 @@ impl PersonaRequest {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub enum PersonaOutput {
     LaunchAccepted(LaunchAcceptanceReport),
     LaunchRejected(LaunchRejectionReport),
@@ -129,7 +129,7 @@ impl PersonaOutput {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CommandLine {
     arguments: Vec<OsString>,
 }
@@ -187,7 +187,7 @@ impl CommandLine {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RequestFile {
     path: PathBuf,
 }

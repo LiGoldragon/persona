@@ -5,10 +5,8 @@ use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::os::unix::net::UnixStream as StandardUnixStream;
 
 use kameo::actor::ActorRef;
-use meta_signal_persona::{Frame, FrameBody, Operation as EngineRequest, Reply as EngineReply};
-use signal_frame::{
-    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
-    SubReply,
+use meta_signal_persona::{
+    ByteViewable, Query as EngineRequest, Response as EngineReply, Restorable, Signal, Signalizable,
 };
 use signal_persona::EngineIdentifier;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -42,7 +40,7 @@ fn prepare_socket_parent(path: &Path) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PersonaEndpoint {
     path: PathBuf,
 }
@@ -71,7 +69,7 @@ impl PersonaEndpoint {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentHandoffEndpoint {
     component_name: String,
     public_socket_mode: crate::engine::SocketMode,
@@ -137,7 +135,7 @@ impl ComponentHandoffEndpoint {
 #[derive(Debug, Clone)]
 pub struct ManagerStoreActiveVersionReader {
     engine: EngineIdentifier,
-    component_name: meta_signal_persona::ComponentName,
+    component_name: signal_persona::ComponentName,
     store: ActorRef<ManagerStore>,
 }
 
@@ -157,7 +155,7 @@ impl ManagerStoreActiveVersionReader {
     ) -> Self {
         Self {
             engine,
-            component_name: meta_signal_persona::ComponentName::new(component_name),
+            component_name: component_name.into(),
             store,
         }
     }
@@ -293,7 +291,7 @@ impl ComponentHandoffRouter {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PersonaFrameCodec {
     maximum_frame_bytes: usize,
 }
@@ -305,7 +303,12 @@ impl PersonaFrameCodec {
         }
     }
 
-    pub async fn read_frame(&self, stream: &mut UnixStream) -> Result<Frame> {
+    /// Read one length-prefixed Signal off the stream.
+    ///
+    /// The manager wire is one request and one reply per connection, so the
+    /// frame carries the contract value and nothing else: no exchange
+    /// identity, no lane, no batch.
+    async fn read_signal<T>(&self, stream: &mut UnixStream) -> Result<Signal<T>> {
         let mut prefix = [0_u8; 4];
         stream.read_exact(&mut prefix).await?;
         let length = u32::from_be_bytes(prefix) as usize;
@@ -313,118 +316,66 @@ impl PersonaFrameCodec {
             return Err(Error::DaemonFrameTooLarge { bytes: length });
         }
 
-        let mut bytes = Vec::with_capacity(4 + length);
-        bytes.extend_from_slice(&prefix);
-        bytes.resize(4 + length, 0);
-        stream.read_exact(&mut bytes[4..]).await?;
-
-        Ok(Frame::decode_length_prefixed(&bytes)?)
+        let mut bytes = vec![0_u8; length];
+        stream.read_exact(&mut bytes).await?;
+        Ok(Signal::from(bytes))
     }
 
-    pub async fn write_frame(&self, stream: &mut UnixStream, frame: &Frame) -> Result<()> {
-        let bytes = frame.encode_length_prefixed()?;
-        stream.write_all(&bytes).await?;
+    async fn write_signal<T>(&self, stream: &mut UnixStream, signal: &Signal<T>) -> Result<()> {
+        let bytes = signal.bytes();
+        let length = u32::try_from(bytes.len()).map_err(|_| Error::DaemonFrameTooLarge {
+            bytes: bytes.len(),
+        })?;
+        stream.write_all(&length.to_be_bytes()).await?;
+        stream.write_all(bytes).await?;
         stream.flush().await?;
         Ok(())
     }
 
-    pub fn request_frame(&self, request: EngineRequest) -> Frame {
-        Frame::new(FrameBody::Request {
-            exchange: self.initial_exchange(),
-            request: Request::from_payload(request),
-        })
+    pub async fn read_request(&self, stream: &mut UnixStream) -> Result<EngineRequest> {
+        self.read_signal::<EngineRequest>(stream)
+            .await?
+            .restore()
+            .map_err(|fault| Error::UnexpectedSignalFrame {
+                got: format!("{fault:?}"),
+            })
     }
 
-    pub fn reply_frame(&self, exchange: ExchangeIdentifier, reply: EngineReply) -> Frame {
-        Frame::new(FrameBody::Reply {
-            exchange,
-            reply: Reply::committed(NonEmpty::single(SubReply::Ok(reply))),
-        })
+    pub async fn write_request(
+        &self,
+        stream: &mut UnixStream,
+        request: &EngineRequest,
+    ) -> Result<()> {
+        let signal = request
+            .signalize()
+            .map_err(|fault| Error::UnexpectedSignalFrame {
+                got: format!("{fault:?}"),
+            })?;
+        self.write_signal(stream, &signal).await
     }
 
-    pub fn request_from_frame(&self, frame: Frame) -> Result<ReceivedEngineRequest> {
-        match frame.into_body() {
-            FrameBody::Request { exchange, request } => {
-                let mut operations = request.payloads.into_vec();
-                if operations.len() != 1 {
-                    return Err(Error::UnexpectedSignalFrame {
-                        got: format!(
-                            "persona manager currently accepts one operation, got {}",
-                            operations.len()
-                        ),
-                    });
-                }
-                let operation = operations.remove(0);
-                Ok(ReceivedEngineRequest::new(exchange, operation))
-            }
-            other => Err(Error::UnexpectedSignalFrame {
-                got: format!("{other:?}"),
-            }),
-        }
+    pub async fn read_reply(&self, stream: &mut UnixStream) -> Result<EngineReply> {
+        self.read_signal::<EngineReply>(stream)
+            .await?
+            .restore()
+            .map_err(|fault| Error::UnexpectedSignalFrame {
+                got: format!("{fault:?}"),
+            })
     }
 
-    pub fn reply_from_frame(&self, frame: Frame) -> Result<EngineReply> {
-        match frame.into_body() {
-            FrameBody::Reply { reply, .. } => match reply {
-                Reply::Accepted { per_operation, .. } => {
-                    let mut operations = per_operation.into_vec();
-                    if operations.len() != 1 {
-                        return Err(Error::UnexpectedSignalFrame {
-                            got: format!(
-                                "persona client currently accepts one reply operation, got {}",
-                                operations.len()
-                            ),
-                        });
-                    }
-                    match operations.remove(0) {
-                        SubReply::Ok(payload) => Ok(payload),
-                        other => Err(Error::UnexpectedSignalFrame {
-                            got: format!("{other:?}"),
-                        }),
-                    }
-                }
-                Reply::Rejected { reason } => Err(Error::UnexpectedSignalFrame {
-                    got: format!("{reason:?}"),
-                }),
-            },
-            other => Err(Error::UnexpectedSignalFrame {
-                got: format!("{other:?}"),
-            }),
-        }
-    }
-
-    fn initial_exchange(&self) -> ExchangeIdentifier {
-        ExchangeIdentifier::new(
-            SessionEpoch::new(1),
-            ExchangeLane::Connector,
-            LaneSequence::first(),
-        )
+    pub async fn write_reply(&self, stream: &mut UnixStream, reply: &EngineReply) -> Result<()> {
+        let signal = reply
+            .signalize()
+            .map_err(|fault| Error::UnexpectedSignalFrame {
+                got: format!("{fault:?}"),
+            })?;
+        self.write_signal(stream, &signal).await
     }
 }
 
 impl Default for PersonaFrameCodec {
     fn default() -> Self {
         Self::new(1024 * 1024)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReceivedEngineRequest {
-    exchange: ExchangeIdentifier,
-    request: EngineRequest,
-}
-
-impl ReceivedEngineRequest {
-    pub fn new(exchange: ExchangeIdentifier, request: EngineRequest) -> Self {
-        Self { exchange, request }
-    }
-
-    pub fn exchange(&self) -> ExchangeIdentifier {
-        self.exchange
-    }
-
-    pub fn into_request(self) -> EngineRequest {
-        self.request
     }
 }
 
@@ -448,14 +399,12 @@ impl PersonaClient {
 
     pub async fn submit(&self, request: EngineRequest) -> Result<EngineReply> {
         let mut stream = UnixStream::connect(self.endpoint.as_path()).await?;
-        let frame = self.codec.request_frame(request);
-        self.codec.write_frame(&mut stream, &frame).await?;
-        let reply = self.codec.read_frame(&mut stream).await?;
-        self.codec.reply_from_frame(reply)
+        self.codec.write_request(&mut stream, &request).await?;
+        self.codec.read_reply(&mut stream).await
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PersonaLaunchPlan {
     engine: EngineIdentifier,
     topology: EngineTopology,
@@ -534,7 +483,7 @@ impl PersonaLaunchPlan {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PersonaLaunchPlanInput {
     pub engine: EngineIdentifier,
     pub topology: EngineTopology,

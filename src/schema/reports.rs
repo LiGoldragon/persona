@@ -4,20 +4,19 @@ use meta_signal_upgrade::{ForceReason, QuarantineReason, RollbackReason};
 use signal_persona::EngineIdentifier;
 
 pub use crate::engine_event::{EngineEventBodyKind, EngineEventSourceKind};
-pub use contract::{
-    ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName, EnginePhase,
-};
+pub use contract::EnginePhase;
+pub use signal_persona::{ComponentDesiredState, ComponentHealth, ComponentKind, ComponentName};
 
 use crate::engine_event::{
     ComponentOperation, EngineEvent, EngineEventBody, EngineEventSource, HarnessOperationKind,
-    MessageOperationKind, MindOperationKind, SystemOperationKind, TerminalOperationKind,
+    MessageOperationKind, SystemOperationKind, TerminalOperationKind,
     UnimplementedReason,
 };
 use crate::upgrade::ActiveVersionChangeSource;
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct EngineEventReport {
-    pub sequence: u64,
+    pub sequence: i64,
     pub engine: EngineIdentifier,
     pub source: EngineEventSourceKind,
     pub source_component: Option<ComponentName>,
@@ -27,7 +26,7 @@ pub struct EngineEventReport {
 impl EngineEventReport {
     pub fn from_event(event: &EngineEvent) -> Self {
         Self {
-            sequence: event.sequence().into_u64(),
+            sequence: event.sequence().into_u64() as i64,
             engine: event.engine().clone(),
             source: event.source().into(),
             source_component: EngineEventSourceComponent::from_event_source(event.source())
@@ -63,91 +62,91 @@ impl EngineEventSourceComponent {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ComponentLifecycleEventReport {
     pub component: ComponentName,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ComponentUnimplementedReport {
     pub component: ComponentName,
     pub operation: ComponentOperationReport,
     pub reason: UnimplementedReason,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ComponentExitedReport {
     pub component: ComponentName,
-    pub exit_code: Option<u64>,
+    pub exit_code: Option<i64>,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ComponentOrphanedReport {
     pub component: ComponentName,
-    pub spawned_sequence: u64,
+    pub spawned_sequence: i64,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct RestartScheduledReport {
     pub component: ComponentName,
-    pub attempt: u64,
+    pub attempt: i64,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct RestartExhaustedReport {
     pub component: ComponentName,
-    pub attempts: u64,
+    pub attempts: i64,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct EngineStateChangedReport {
     pub phase: String,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct UpgradePreparedReport {
     pub component: ComponentName,
     pub current_version: String,
     pub next_version: String,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ActiveVersionChangedReport {
     pub component: ComponentName,
     pub active_version: String,
     pub source: ActiveVersionChangeSourceReport,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub enum ActiveVersionChangeSourceReport {
     HandoverMarker(HandoverMarkerSourceReport),
     ForceFlip(ForceFlipSourceReport),
     Rollback(RollbackSourceReport),
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct HandoverMarkerSourceReport {
-    pub state_sequence: u64,
+    pub state_sequence: i64,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ForceFlipSourceReport {
     pub reason: ForceReason,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct RollbackSourceReport {
     pub reason: RollbackReason,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct VersionQuarantinedReport {
     pub component: ComponentName,
     pub version: String,
     pub reason: QuarantineReason,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub enum EngineEventBodyReport {
     ComponentSpawned(ComponentLifecycleEventReport),
     ComponentReady(ComponentLifecycleEventReport),
@@ -163,19 +162,17 @@ pub enum EngineEventBodyReport {
     VersionQuarantined(VersionQuarantinedReport),
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub enum ComponentOperationReport {
-    Engine(String),
     Message(MessageOperationKind),
-    Mind(MindOperationKind),
     System(SystemOperationKind),
     Harness(HarnessOperationKind),
     Terminal(TerminalOperationKind),
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct EngineStatusReport {
-    pub generation: u64,
+    pub generation: i64,
     pub phase: String,
     pub components: Vec<LifecycleComponentStatusReport>,
 }
@@ -183,10 +180,10 @@ pub struct EngineStatusReport {
 impl EngineStatusReport {
     pub fn from_contract(status: contract::EngineStatusReport) -> Self {
         Self {
-            generation: status.generation as u64,
-            phase: format!("{:?}", status.phase),
+            generation: status.engine_generation,
+            phase: format!("{:?}", status.engine_phase),
             components: status
-                .components
+                .component_status_vector
                 .into_iter()
                 .map(LifecycleComponentStatusReport::from_contract)
                 .collect(),
@@ -202,42 +199,42 @@ impl EngineStatusReport {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ComponentStatusReport {
     pub component: LifecycleComponentStatusReport,
 }
 
 impl ComponentStatusReport {
-    pub fn from_contract(status: contract::LifecycleComponentStatus) -> Self {
+    pub fn from_contract(status: signal_persona::ComponentStatus) -> Self {
         Self {
             component: LifecycleComponentStatusReport::from_contract(status),
         }
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ComponentStatusMissingReport {
     pub component: ComponentName,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct RetirementAcceptanceReport {
     pub engine: EngineIdentifier,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ActionAcceptedReport {
     pub component: ComponentName,
     pub desired_state: String,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ActionRejectedReport {
     pub component: ComponentName,
     pub reason: String,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct LifecycleComponentStatusReport {
     pub component: ComponentName,
     pub kind: String,
@@ -246,7 +243,7 @@ pub struct LifecycleComponentStatusReport {
 }
 
 impl LifecycleComponentStatusReport {
-    pub fn from_contract(status: contract::LifecycleComponentStatus) -> Self {
+    pub fn from_contract(status: signal_persona::ComponentStatus) -> Self {
         Self {
             component: status.component_name,
             kind: format!("{:?}", status.component_kind),
@@ -256,7 +253,7 @@ impl LifecycleComponentStatusReport {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct LaunchAcceptanceReport {
     pub engine: EngineIdentifier,
     pub label: String,
@@ -265,13 +262,13 @@ pub struct LaunchAcceptanceReport {
 impl LaunchAcceptanceReport {
     pub fn from_contract(acceptance: contract::LaunchAcceptance) -> Self {
         Self {
-            engine: acceptance.engine,
-            label: acceptance.label.as_str().to_owned(),
+            engine: acceptance.engine_identifier,
+            label: acceptance.engine_label,
         }
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct LaunchRejectionReport {
     pub label: String,
     pub reason: String,
@@ -280,13 +277,13 @@ pub struct LaunchRejectionReport {
 impl LaunchRejectionReport {
     pub fn from_contract(rejection: contract::LaunchRejection) -> Self {
         Self {
-            label: rejection.label.as_str().to_owned(),
-            reason: format!("{:?}", rejection.reason),
+            label: rejection.engine_label,
+            reason: format!("{:?}", rejection.launch_rejection_reason),
         }
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct EngineCatalogReport {
     pub engines: Vec<EngineCatalogEntryReport>,
 }
@@ -295,7 +292,6 @@ impl EngineCatalogReport {
     pub fn from_contract(catalog: contract::EngineCatalog) -> Self {
         Self {
             engines: catalog
-                .into_payload()
                 .into_iter()
                 .map(EngineCatalogEntryReport::from_contract)
                 .collect(),
@@ -303,7 +299,7 @@ impl EngineCatalogReport {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct EngineCatalogEntryReport {
     pub engine: EngineIdentifier,
     pub label: String,
@@ -313,14 +309,14 @@ pub struct EngineCatalogEntryReport {
 impl EngineCatalogEntryReport {
     pub fn from_contract(entry: contract::EngineCatalogEntry) -> Self {
         Self {
-            engine: entry.engine,
-            label: entry.label.as_str().to_owned(),
-            phase: format!("{:?}", entry.phase),
+            engine: entry.engine_identifier,
+            label: entry.engine_label,
+            phase: format!("{:?}", entry.engine_phase),
         }
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct RetirementRejectionReport {
     pub engine: EngineIdentifier,
     pub reason: String,
@@ -329,8 +325,8 @@ pub struct RetirementRejectionReport {
 impl RetirementRejectionReport {
     pub fn from_contract(rejection: contract::RetirementRejection) -> Self {
         Self {
-            engine: rejection.engine,
-            reason: format!("{:?}", rejection.reason),
+            engine: rejection.engine_identifier,
+            reason: format!("{:?}", rejection.retirement_rejection_reason),
         }
     }
 }
@@ -354,25 +350,25 @@ impl EngineEventBodyReport {
             EngineEventBody::ComponentExited(event) => {
                 Self::ComponentExited(ComponentExitedReport {
                     component: event.component().clone(),
-                    exit_code: event.exit_code().and_then(|code| u64::try_from(code).ok()),
+                    exit_code: event.exit_code().map(i64::from),
                 })
             }
             EngineEventBody::ComponentOrphaned(event) => {
                 Self::ComponentOrphaned(ComponentOrphanedReport {
                     component: event.component().clone(),
-                    spawned_sequence: event.spawned_sequence().into_u64(),
+                    spawned_sequence: event.spawned_sequence().into_u64() as i64,
                 })
             }
             EngineEventBody::RestartScheduled(event) => {
                 Self::RestartScheduled(RestartScheduledReport {
                     component: event.component().clone(),
-                    attempt: u64::from(event.attempt()),
+                    attempt: i64::from(event.attempt()),
                 })
             }
             EngineEventBody::RestartExhausted(event) => {
                 Self::RestartExhausted(RestartExhaustedReport {
                     component: event.component().clone(),
-                    attempts: u64::from(event.attempts()),
+                    attempts: i64::from(event.attempts()),
                 })
             }
             EngineEventBody::ComponentStopped(event) => Self::ComponentStopped(
@@ -385,21 +381,21 @@ impl EngineEventBodyReport {
             }
             EngineEventBody::UpgradePrepared(event) => {
                 Self::UpgradePrepared(UpgradePreparedReport {
-                    component: ComponentName::new(event.component().payload()),
+                    component: event.component().clone(),
                     current_version: event.current_version().as_str().to_string(),
                     next_version: event.next_version().as_str().to_string(),
                 })
             }
             EngineEventBody::ActiveVersionChanged(event) => {
                 Self::ActiveVersionChanged(ActiveVersionChangedReport {
-                    component: ComponentName::new(event.component().payload()),
+                    component: event.component().clone(),
                     active_version: event.active_version().as_str().to_string(),
                     source: ActiveVersionChangeSourceReport::from_source(event.source()),
                 })
             }
             EngineEventBody::VersionQuarantined(event) => {
                 Self::VersionQuarantined(VersionQuarantinedReport {
-                    component: ComponentName::new(event.component().payload()),
+                    component: event.component().clone(),
                     version: event.version().as_str().to_string(),
                     reason: event.reason(),
                 })
@@ -417,17 +413,21 @@ impl ActiveVersionChangeSourceReport {
                 })
             }
             ActiveVersionChangeSource::ForceFlip { reason } => {
-                Self::ForceFlip(ForceFlipSourceReport { reason: *reason })
+                Self::ForceFlip(ForceFlipSourceReport {
+                    reason: reason.clone(),
+                })
             }
             ActiveVersionChangeSource::Rollback { reason } => {
-                Self::Rollback(RollbackSourceReport { reason: *reason })
+                Self::Rollback(RollbackSourceReport {
+                    reason: reason.clone(),
+                })
             }
         }
     }
 }
 
 impl ComponentLifecycleEventReport {
-    pub fn from_component(component: &contract::ComponentName) -> Self {
+    pub fn from_component(component: &ComponentName) -> Self {
         Self {
             component: component.clone(),
         }
@@ -437,12 +437,10 @@ impl ComponentLifecycleEventReport {
 impl ComponentOperationReport {
     pub fn from_operation(operation: &ComponentOperation) -> Self {
         match operation {
-            ComponentOperation::Engine(kind) => Self::Engine(format!("{kind:?}")),
-            ComponentOperation::Message(kind) => Self::Message(*kind),
-            ComponentOperation::Mind(kind) => Self::Mind(*kind),
-            ComponentOperation::System(kind) => Self::System(*kind),
-            ComponentOperation::Harness(kind) => Self::Harness(*kind),
-            ComponentOperation::Terminal(kind) => Self::Terminal(*kind),
+            ComponentOperation::Message(kind) => Self::Message(kind.clone()),
+            ComponentOperation::System(kind) => Self::System(kind.clone()),
+            ComponentOperation::Harness(kind) => Self::Harness(kind.clone()),
+            ComponentOperation::Terminal(kind) => Self::Terminal(kind.clone()),
         }
     }
 }

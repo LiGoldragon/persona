@@ -36,7 +36,7 @@ type DirectProcessSerializer<'archive> = rkyv::api::high::HighSerializer<
 mod spirit_daemon_configuration {
     use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 
-    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq)]
     pub struct DaemonConfiguration {
         pub ordinary_socket_path: SocketPath,
         pub meta_socket_path: SocketPath,
@@ -49,16 +49,16 @@ mod spirit_daemon_configuration {
         pub engine_management_socket_mode: Option<SocketMode>,
     }
 
-    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq)]
     pub struct SocketPath(String);
 
-    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq)]
     pub struct StorePath(String);
 
-    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq)]
     pub struct BootstrapPolicyPath(String);
 
-    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, Copy, PartialEq)]
     pub struct SocketMode(u32);
 
     impl SocketPath {
@@ -80,7 +80,7 @@ mod spirit_daemon_configuration {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ChildProcessIdentifier(u32);
 
 impl ChildProcessIdentifier {
@@ -93,7 +93,7 @@ impl ChildProcessIdentifier {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LaunchedComponent {
     component_instance: ComponentInstanceName,
     component: EngineComponent,
@@ -126,7 +126,7 @@ impl LaunchedComponent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LauncherSnapshot {
     running: Vec<LaunchedComponent>,
     launch_count: u64,
@@ -179,7 +179,7 @@ impl LauncherSnapshot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 struct LauncherSnapshotInput {
     running: Vec<LaunchedComponent>,
     launch_count: u64,
@@ -533,24 +533,30 @@ impl DirectProcessLauncher {
             .find(|peer| peer.component() == EngineComponent::Router)
             .ok_or(DirectProcessFailure::MissingRouterPeerForMessage)?
             .domain_socket_path();
-        let configuration = message::Configuration::new(
-            envelope.domain_socket_path(),
-            Self::meta_socket_path(envelope),
-            router_socket_path,
-            envelope.state_path(),
-            envelope.component_instance().as_str(),
-            Self::message_owner_user_identifier(envelope.owner_identity())?,
-        );
+        let configuration = signal_message::MessageDaemonConfiguration {
+            message_socket_path: envelope.domain_socket_path().to_string_lossy().into_owned(),
+            message_socket_mode: i64::from(envelope.domain_socket_mode().as_octal()),
+            supervision_socket_path: envelope
+                .supervision_socket_path()
+                .to_string_lossy()
+                .into_owned(),
+            supervision_socket_mode: i64::from(envelope.supervision_socket_mode().as_octal()),
+            router_socket_path: router_socket_path.to_string_lossy().into_owned(),
+            component_ingresses: Vec::new(),
+            owner_identity: Self::message_owner_identity(envelope.owner_identity()),
+        };
         Self::write_configuration_binary_file(envelope, &configuration)
     }
 
-    fn message_owner_user_identifier(
+    fn message_owner_identity(
         owner: &signal_persona::OwnerIdentity,
-    ) -> Result<u32, DirectProcessFailure> {
+    ) -> signal_message::OwnerIdentity {
         match owner {
-            signal_persona::OwnerIdentity::UnixUser(user) => Ok((user as u32)),
-            signal_persona::OwnerIdentity::System(_) => {
-                Err(DirectProcessFailure::MessageOwnerIdentityUnsupportedSystem)
+            signal_persona::OwnerIdentity::UnixUser(user) => {
+                signal_message::OwnerIdentity::UnixUser(*user)
+            }
+            signal_persona::OwnerIdentity::System(principal) => {
+                signal_message::OwnerIdentity::System(principal.clone())
             }
         }
     }
@@ -592,7 +598,7 @@ impl DirectProcessLauncher {
                     .map(|path| signal_router::WirePath::new(path.to_string_lossy().into_owned())),
                 owner_identity: Self::router_owner_identity(envelope.owner_identity())?,
                 tailnet_listen_address: None,
-                router_identity: signal_router::RemoteRouterIdentity::new(
+                router_identity: signal_router::CriomeHostId::new(
                     envelope.component_instance().as_str(),
                 ),
                 criome_socket_path: None,
@@ -606,7 +612,7 @@ impl DirectProcessLauncher {
         match owner {
             signal_persona::OwnerIdentity::UnixUser(user) => {
                 Ok(signal_router::OwnerIdentity::UnixUser(
-                    signal_router::UnixUserIdentifier::new((user as u64)),
+                    signal_router::UnixUserIdentifier::new(*user as u64),
                 ))
             }
             signal_persona::OwnerIdentity::System(_) => {
@@ -690,10 +696,10 @@ impl DirectProcessLauncher {
     ) -> signal_terminal::OwnerIdentity {
         match owner {
             signal_persona::OwnerIdentity::UnixUser(user) => {
-                signal_terminal::OwnerIdentity::UnixUser(user)
+                signal_terminal::OwnerIdentity::UnixUser(*user)
             }
             signal_persona::OwnerIdentity::System(principal) => {
-                signal_terminal::OwnerIdentity::System(principal.as_str().to_owned())
+                signal_terminal::OwnerIdentity::System(principal.clone())
             }
         }
     }
@@ -706,29 +712,21 @@ impl DirectProcessLauncher {
         // production stack will widen this; for the prototype path
         // every supervised harness is fixture-shaped.
         let configuration = signal_harness::HarnessDaemonConfiguration {
-            domain_socket_path: signal_persona::DomainSocketPath::new(
-                envelope.domain_socket_path().to_string_lossy().into_owned(),
-            ),
-            domain_socket_mode: signal_persona::DomainSocketMode::new(u64::from(
-                envelope.domain_socket_mode().as_octal(),
-            )),
-            engine_management_socket_path: signal_persona::EngineManagementSocketPath::new(
-                envelope
-                    .supervision_socket_path()
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
-            engine_management_socket_mode: signal_persona::EngineManagementSocketMode::new(
-                u64::from(envelope.supervision_socket_mode().as_octal()),
+            domain_socket_path: envelope.domain_socket_path().to_string_lossy().into_owned(),
+            domain_socket_mode: i64::from(envelope.domain_socket_mode().as_octal()),
+            engine_management_socket_path: envelope
+                .supervision_socket_path()
+                .to_string_lossy()
+                .into_owned(),
+            engine_management_socket_mode: i64::from(
+                envelope.supervision_socket_mode().as_octal(),
             ),
             owner_identity: envelope.owner_identity().clone(),
-            harnesses: vec![signal_harness::HarnessInstanceConfiguration {
-                harness_name: signal_harness::HarnessName::new(
-                    envelope.component_instance().as_str(),
-                ),
+            harness_instance_configurations: vec![signal_harness::HarnessInstanceConfiguration {
+                harness_name: envelope.component_instance().as_str().to_owned(),
                 harness_kind: signal_harness::HarnessKind::Fixture,
-                terminal_socket_path: Self::paired_terminal_socket_path(envelope),
-                pi_rpc_adapter: None,
+                terminal_socket_path_option: Self::paired_terminal_socket_path(envelope),
+                pi_rpc_jsonl_adapter_configuration_option: None,
             }],
         };
         Self::write_configuration_binary_file(envelope, &configuration)
@@ -751,34 +749,26 @@ impl DirectProcessLauncher {
                     .iter()
                     .find(|peer| peer.component() == EngineComponent::Terminal)
             })?;
-        Some(signal_harness::TerminalSocketPath::new(
+        Some(
             terminal_peer
                 .domain_socket_path()
                 .to_string_lossy()
                 .into_owned(),
-        ))
+        )
     }
 
     fn write_system_daemon_configuration_file(
         envelope: &ComponentSpawnEnvelope,
     ) -> Result<PathBuf, DirectProcessFailure> {
-        let configuration = signal_system::SystemDaemonConfiguration {
-            system_socket_path: signal_system::WirePath::new(
-                envelope.domain_socket_path().to_string_lossy().into_owned(),
-            ),
-            system_socket_mode: signal_system::SocketMode::new(u64::from(
-                envelope.domain_socket_mode().as_octal(),
-            )),
-            supervision_socket_path: signal_system::WirePath::new(
-                envelope
-                    .supervision_socket_path()
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
-            supervision_socket_mode: signal_system::SocketMode::new(u64::from(
-                envelope.supervision_socket_mode().as_octal(),
-            )),
-            backend: signal_system::SystemBackend::Niri,
+        let configuration = meta_signal_system::SystemDaemonConfiguration {
+            system_socket_path: envelope.domain_socket_path().to_string_lossy().into_owned(),
+            system_socket_mode: i64::from(envelope.domain_socket_mode().as_octal()),
+            supervision_socket_path: envelope
+                .supervision_socket_path()
+                .to_string_lossy()
+                .into_owned(),
+            supervision_socket_mode: i64::from(envelope.supervision_socket_mode().as_octal()),
+            system_backend: meta_signal_system::SystemBackend::Niri,
             owner_identity: envelope.owner_identity().clone(),
         };
         Self::write_configuration_binary_file(envelope, &configuration)
@@ -995,7 +985,7 @@ impl LaunchComponent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 struct ThreeHarnessRouterBootstrap {
     document: RouterBootstrapDocument,
 }
@@ -1068,7 +1058,7 @@ impl ThreeHarnessRouterBootstrap {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LaunchComponentReceipt {
     component_instance: ComponentInstanceName,
     component: EngineComponent,
@@ -1129,7 +1119,7 @@ impl StopComponentProcess {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StopComponentReceipt {
     component_instance: ComponentInstanceName,
     component: EngineComponent,

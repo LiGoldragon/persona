@@ -7,8 +7,8 @@ pub enum Error {
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("datom: {0}")]
-    Datom(#[from] datom_codec::Error),
+    #[error("datom: {0:?}")]
+    Datom(datom_codec::Error),
 
     #[error("sema engine: {0}")]
     SemaEngine(#[from] sema_engine::Error),
@@ -91,5 +91,11 @@ impl Error {
             operation,
             detail: format!("{error:?}"),
         }
+    }
+}
+
+impl From<datom_codec::Error> for Error {
+    fn from(fault: datom_codec::Error) -> Self {
+        Self::Datom(fault)
     }
 }

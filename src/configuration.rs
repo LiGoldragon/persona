@@ -17,7 +17,7 @@ const MAXIMUM_CONCURRENT_REQUESTS: usize = 64;
 /// The binary rkyv startup message the persona daemon decodes from its single
 /// argument. Paths are stored as their lossless UTF-8 byte string; the manager
 /// socket is the working listener, the store path is the manager `.sema`.
-#[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Archive, RkyvSerialize, RkyvDeserialize, Debug, Clone, PartialEq)]
 pub struct PersonaDaemonConfiguration {
     manager_socket_path: String,
     manager_store_path: String,

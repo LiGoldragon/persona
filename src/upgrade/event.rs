@@ -6,7 +6,7 @@ use signal_upgrade::{ComponentName, ContractVersion, HandoverMarkerData, StateSe
 use super::handover::{SocketPath, Target, VersionLabel};
 
 /// A handover has been prepared for a component: both versions, both endpoints.
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -48,7 +48,7 @@ impl PreparedEvent {
 }
 
 /// Why an engine's active version changed.
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -72,7 +72,7 @@ impl ActiveVersionChangeSource {
 }
 
 /// An engine's active version changed.
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -133,7 +133,7 @@ impl ActiveVersionChanged {
 }
 
 /// A component version was quarantined and must not be selected.
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -173,12 +173,12 @@ impl VersionQuarantined {
     }
 
     pub fn reason(&self) -> QuarantineReason {
-        self.reason
+        self.reason.clone()
     }
 }
 
 /// The active version an engine is currently on, as stored.
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 pub struct ActiveVersion {
     component: ComponentName,
     active_version: VersionLabel,

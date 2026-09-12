@@ -4,15 +4,11 @@ use std::time::Duration;
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use signal_frame::{
-    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, SessionEpoch,
-    SubReply,
-};
 use signal_persona::{
-    ComponentHealth, ComponentHealthReport, ComponentIdentity, ComponentKind, ComponentName,
-    ComponentNotReady, ComponentReady, EngineManagementProtocolVersion,
-    Frame as EngineManagementFrame, FrameBody, Operation as EngineManagementRequest, Presence,
-    Query as EngineManagementQuery, Reply as EngineManagementReply,
+    ByteViewable, ComponentHealth, ComponentHealthReport, ComponentIdentity, ComponentKind,
+    ComponentName, ComponentNotReady, ComponentReady, EngineManagementProtocolVersion,
+    LifecycleQuery, Presence, Query as EngineManagementRequest, Response as EngineManagementReply,
+    Restorable, Signal, Signalizable,
 };
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -78,10 +74,10 @@ impl ComponentSupervisionReadiness {
 
         let ready = self.request_readiness(&mut stream, expectation).await?;
         let health = self.request_health(&mut stream, expectation).await?;
-        if *health.payload() != ComponentHealth::Running {
+        if health != ComponentHealth::Running {
             return Err(ComponentSupervisionReadinessFailure::Unhealthy {
                 component: expectation.component,
-                health: *health.payload(),
+                health,
             });
         }
 
@@ -98,17 +94,14 @@ impl ComponentSupervisionReadiness {
         stream: &mut UnixStream,
         expectation: &ComponentSupervisionExpectation,
     ) -> Result<ComponentIdentity, ComponentSupervisionReadinessFailure> {
-        let request = EngineManagementRequest::Announce(
-            Presence {
-                expected_component: expectation.name.clone().into(),
-                expected_kind: expectation.kind.into(),
-                engine_management_protocol_version: expectation.version.clone(),
-            }
-            .into(),
-        );
+        let request = EngineManagementRequest::Announce(Presence {
+            expected_component: expectation.name.clone(),
+            expected_kind: expectation.kind.clone(),
+            engine_management_protocol_version: expectation.version,
+        });
         self.codec.write_request(stream, request).await?;
         match self.codec.read_reply(stream).await? {
-            EngineManagementReply::Identified(identity) => Ok(identity.into_payload()),
+            EngineManagementReply::Identified(identity) => Ok(identity),
             other => Err(ComponentSupervisionReadinessFailure::UnexpectedReply {
                 component: expectation.component,
                 operation: "component hello",
@@ -122,16 +115,16 @@ impl ComponentSupervisionReadiness {
         stream: &mut UnixStream,
         expectation: &ComponentSupervisionExpectation,
     ) -> Result<ComponentReady, ComponentSupervisionReadinessFailure> {
-        let request = EngineManagementRequest::Query(
-            EngineManagementQuery::ReadinessStatus(expectation.name.clone()).into(),
-        );
+        let request = EngineManagementRequest::Query(LifecycleQuery::ReadinessStatus(
+            expectation.name.clone(),
+        ));
         self.codec.write_request(stream, request).await?;
         match self.codec.read_reply(stream).await? {
-            EngineManagementReply::Ready(ready) => Ok(ready.into_payload()),
+            EngineManagementReply::Ready(ready) => Ok(ready),
             EngineManagementReply::NotReady(not_ready) => {
                 Err(ComponentSupervisionReadinessFailure::NotReady {
                     component: expectation.component,
-                    not_ready: not_ready.into_payload(),
+                    not_ready,
                 })
             }
             other => Err(ComponentSupervisionReadinessFailure::UnexpectedReply {
@@ -147,12 +140,12 @@ impl ComponentSupervisionReadiness {
         stream: &mut UnixStream,
         expectation: &ComponentSupervisionExpectation,
     ) -> Result<ComponentHealthReport, ComponentSupervisionReadinessFailure> {
-        let request = EngineManagementRequest::Query(
-            EngineManagementQuery::HealthStatus(expectation.name.clone()).into(),
-        );
+        let request = EngineManagementRequest::Query(LifecycleQuery::HealthStatus(
+            expectation.name.clone(),
+        ));
         self.codec.write_request(stream, request).await?;
         match self.codec.read_reply(stream).await? {
-            EngineManagementReply::HealthReport(health) => Ok(health.into_payload()),
+            EngineManagementReply::HealthReport(health) => Ok(health),
             other => Err(ComponentSupervisionReadinessFailure::UnexpectedReply {
                 component: expectation.component,
                 operation: "component health",
@@ -212,7 +205,7 @@ impl Message<VerifyComponentSupervision> for ComponentSupervisionReadiness {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentSupervisionExpectation {
     component: EngineComponent,
     path: PathBuf,
@@ -261,7 +254,7 @@ impl ComponentSupervisionExpectation {
     }
 
     pub fn kind(&self) -> ComponentKind {
-        self.kind
+        self.kind.clone()
     }
 
     pub fn version(&self) -> EngineManagementProtocolVersion {
@@ -280,8 +273,8 @@ impl ComponentSupervisionExpectation {
                 component: self.component,
                 expected_name: self.name.clone(),
                 actual_name: identity.component_name.clone(),
-                expected_kind: self.kind,
-                actual_kind: identity.component_kind,
+                expected_kind: self.kind.clone(),
+                actual_kind: identity.component_kind.clone(),
                 expected_version: self.version.clone(),
                 actual_version: identity.engine_management_protocol_version.clone(),
             });
@@ -290,7 +283,7 @@ impl ComponentSupervisionExpectation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentSupervisionReady {
     component: EngineComponent,
     identity: ComponentIdentity,
@@ -316,7 +309,7 @@ impl ComponentSupervisionReady {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SupervisionFrameCodec {
     maximum_frame_bytes: usize,
 }
@@ -328,103 +321,13 @@ impl SupervisionFrameCodec {
         }
     }
 
-    pub async fn write_request(
+    /// The engine-management wire is one request and one reply per exchange
+    /// on a dedicated stream, so a frame is a length prefix and the contract
+    /// value: no exchange identity, no lane, no batch.
+    async fn read_signal<T>(
         &self,
         stream: &mut UnixStream,
-        request: EngineManagementRequest,
-    ) -> Result<(), ComponentSupervisionReadinessFailure> {
-        let frame = EngineManagementFrame::new(FrameBody::Request {
-            exchange: self.initial_exchange(),
-            request: Request::from_payload(request),
-        });
-        self.write_frame(stream, &frame).await
-    }
-
-    pub async fn write_reply(
-        &self,
-        stream: &mut UnixStream,
-        reply: EngineManagementReply,
-    ) -> Result<(), ComponentSupervisionReadinessFailure> {
-        let frame = EngineManagementFrame::new(FrameBody::Reply {
-            exchange: self.initial_exchange(),
-            reply: Reply::committed(NonEmpty::single(SubReply::Ok(reply))),
-        });
-        self.write_frame(stream, &frame).await
-    }
-
-    pub async fn read_reply(
-        &self,
-        stream: &mut UnixStream,
-    ) -> Result<EngineManagementReply, ComponentSupervisionReadinessFailure> {
-        match self.read_frame(stream).await?.into_body() {
-            FrameBody::Reply { reply, .. } => match reply {
-                Reply::Accepted { per_operation, .. } => {
-                    let mut operations = per_operation.into_vec();
-                    if operations.len() != 1 {
-                        return Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
-                            got: format!(
-                                "supervision readiness expects one reply operation, got {}",
-                                operations.len()
-                            ),
-                        });
-                    }
-                    match operations.remove(0) {
-                        SubReply::Ok(payload) => Ok(payload),
-                        other => Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
-                            got: format!("{other:?}"),
-                        }),
-                    }
-                }
-                Reply::Rejected { reason } => {
-                    Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
-                        got: format!("{reason:?}"),
-                    })
-                }
-            },
-            other => Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
-                got: format!("{other:?}"),
-            }),
-        }
-    }
-
-    pub async fn read_request(
-        &self,
-        stream: &mut UnixStream,
-    ) -> Result<EngineManagementRequest, ComponentSupervisionReadinessFailure> {
-        match self.read_frame(stream).await?.into_body() {
-            FrameBody::Request { request, .. } => {
-                let mut operations = request.payloads.into_vec();
-                if operations.len() != 1 {
-                    return Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
-                        got: format!(
-                            "supervision readiness expects one request operation, got {}",
-                            operations.len()
-                        ),
-                    });
-                }
-                Ok(operations.remove(0))
-            }
-            other => Err(ComponentSupervisionReadinessFailure::UnexpectedFrame {
-                got: format!("{other:?}"),
-            }),
-        }
-    }
-
-    async fn write_frame(
-        &self,
-        stream: &mut UnixStream,
-        frame: &EngineManagementFrame,
-    ) -> Result<(), ComponentSupervisionReadinessFailure> {
-        let bytes = frame.encode_length_prefixed()?;
-        stream.write_all(&bytes).await?;
-        stream.flush().await?;
-        Ok(())
-    }
-
-    async fn read_frame(
-        &self,
-        stream: &mut UnixStream,
-    ) -> Result<EngineManagementFrame, ComponentSupervisionReadinessFailure> {
+    ) -> Result<Signal<T>, ComponentSupervisionReadinessFailure> {
         let mut prefix = [0_u8; 4];
         stream.read_exact(&mut prefix).await?;
         let length = u32::from_be_bytes(prefix) as usize;
@@ -432,20 +335,80 @@ impl SupervisionFrameCodec {
             return Err(ComponentSupervisionReadinessFailure::FrameTooLarge { bytes: length });
         }
 
-        let mut bytes = Vec::with_capacity(4 + length);
-        bytes.extend_from_slice(&prefix);
-        bytes.resize(4 + length, 0);
-        stream.read_exact(&mut bytes[4..]).await?;
-        Ok(EngineManagementFrame::decode_length_prefixed(&bytes)?)
+        let mut bytes = vec![0_u8; length];
+        stream.read_exact(&mut bytes).await?;
+        Ok(Signal::from(bytes))
     }
 
-    fn initial_exchange(&self) -> ExchangeIdentifier {
-        ExchangeIdentifier::new(
-            SessionEpoch::new(1),
-            ExchangeLane::Connector,
-            LaneSequence::first(),
-        )
+    async fn write_signal<T>(
+        &self,
+        stream: &mut UnixStream,
+        signal: &Signal<T>,
+    ) -> Result<(), ComponentSupervisionReadinessFailure> {
+        let bytes = signal.bytes();
+        let length = u32::try_from(bytes.len()).map_err(|_| {
+            ComponentSupervisionReadinessFailure::FrameTooLarge { bytes: bytes.len() }
+        })?;
+        stream.write_all(&length.to_be_bytes()).await?;
+        stream.write_all(bytes).await?;
+        stream.flush().await?;
+        Ok(())
     }
+
+    pub async fn write_request(
+        &self,
+        stream: &mut UnixStream,
+        request: EngineManagementRequest,
+    ) -> Result<(), ComponentSupervisionReadinessFailure> {
+        let signal = request.signalize().map_err(|fault| {
+            ComponentSupervisionReadinessFailure::UnexpectedFrame {
+                got: format!("{fault:?}"),
+            }
+        })?;
+        self.write_signal(stream, &signal).await
+    }
+
+    pub async fn write_reply(
+        &self,
+        stream: &mut UnixStream,
+        reply: EngineManagementReply,
+    ) -> Result<(), ComponentSupervisionReadinessFailure> {
+        let signal = reply.signalize().map_err(|fault| {
+            ComponentSupervisionReadinessFailure::UnexpectedFrame {
+                got: format!("{fault:?}"),
+            }
+        })?;
+        self.write_signal(stream, &signal).await
+    }
+
+    pub async fn read_reply(
+        &self,
+        stream: &mut UnixStream,
+    ) -> Result<EngineManagementReply, ComponentSupervisionReadinessFailure> {
+        self.read_signal::<EngineManagementReply>(stream)
+            .await?
+            .restore()
+            .map_err(
+                |fault| ComponentSupervisionReadinessFailure::UnexpectedFrame {
+                    got: format!("{fault:?}"),
+                },
+            )
+    }
+
+    pub async fn read_request(
+        &self,
+        stream: &mut UnixStream,
+    ) -> Result<EngineManagementRequest, ComponentSupervisionReadinessFailure> {
+        self.read_signal::<EngineManagementRequest>(stream)
+            .await?
+            .restore()
+            .map_err(
+                |fault| ComponentSupervisionReadinessFailure::UnexpectedFrame {
+                    got: format!("{fault:?}"),
+                },
+            )
+    }
+
 }
 
 #[derive(Debug, Error)]
@@ -493,8 +456,6 @@ pub enum ComponentSupervisionReadinessFailure {
     UnexpectedFrame { got: String },
     #[error("supervision frame is too large: {bytes} bytes")]
     FrameTooLarge { bytes: usize },
-    #[error("signal frame: {0}")]
-    SignalFrame(#[from] signal_frame::FrameError),
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 }

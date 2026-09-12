@@ -21,7 +21,7 @@ use crate::unit::{
 };
 use crate::upgrade::Version;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ManagerEvent {
     Started,
     EngineRequestAccepted,
@@ -204,7 +204,7 @@ impl EngineManager {
             MetaQuery::Catalog(_) => Response::Catalog(vec![EngineCatalogEntry {
                 engine_identifier: self.engine.clone(),
                 engine_label: self.engine.clone(),
-                engine_phase: self.state.snapshot().engine_phase,
+                engine_phase: self.state.snapshot().engine_phase.clone(),
             }]),
         }
     }
@@ -351,7 +351,7 @@ impl ReadTrace {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TraceProbe {
     minimum_events: usize,
 }
@@ -368,14 +368,12 @@ impl Message<ReadTrace> for EngineManager {
     }
 }
 
-impl From<ComponentStartup> for HandleEngineRequest {
-    fn from(startup: ComponentStartup) -> Self {
-        Self::new(Query::Start(startup))
+impl HandleEngineRequest {
+    pub fn start(component: ComponentStartup) -> Self {
+        Self::new(Query::Start(component))
     }
-}
 
-impl From<ComponentShutdown> for HandleEngineRequest {
-    fn from(shutdown: ComponentShutdown) -> Self {
-        Self::new(Query::Stop(shutdown))
+    pub fn stop(component: ComponentShutdown) -> Self {
+        Self::new(Query::Stop(component))
     }
 }

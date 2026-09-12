@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use signal_persona::{EngineIdentifier, OwnerIdentity, UnixUserIdentifier};
+use signal_persona::{EngineIdentifier, OwnerIdentity};
 
 use crate::launch::{ComponentCommand, ResolvedComponentCommands};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PersonaDaemonPaths {
     state_root: PathBuf,
     run_root: PathBuf,
@@ -120,7 +120,7 @@ impl PersonaDaemonPaths {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EngineLayout {
     engine: EngineIdentifier,
     owner_identity: OwnerIdentity,
@@ -234,7 +234,7 @@ impl EngineLayout {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PreparedEngineLayout {
     state_dir: PathBuf,
     run_dir: PathBuf,
@@ -250,7 +250,7 @@ impl PreparedEngineLayout {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EngineTopology {
     FullPrototype,
     MessageRouter,
@@ -297,7 +297,7 @@ impl EngineTopology {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ComponentTopologyEntry {
     component: EngineComponent,
     instance_name: &'static str,
@@ -324,7 +324,7 @@ impl ComponentTopologyEntry {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, Copy, PartialEq, Hash)]
 pub enum EngineComponent {
     Mind,
     Orchestrate,
@@ -604,7 +604,7 @@ impl ComponentInstanceName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentLayout {
     instance_name: ComponentInstanceName,
     component: EngineComponent,
@@ -665,7 +665,7 @@ impl ComponentLayout {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentSocket {
     component: EngineComponent,
     path: PathBuf,
@@ -686,7 +686,7 @@ impl ComponentSocket {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SocketMode(u32);
 
 impl SocketMode {
@@ -703,7 +703,7 @@ impl SocketMode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentSpawnEnvelope {
     engine: EngineIdentifier,
     owner_identity: OwnerIdentity,
@@ -803,7 +803,7 @@ impl ComponentSpawnEnvelope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentPeerSocket {
     instance_name: ComponentInstanceName,
     component: EngineComponent,

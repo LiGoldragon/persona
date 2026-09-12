@@ -8,7 +8,7 @@ use signal_persona::{
 
 use crate::engine::EngineComponent;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EngineState {
     status: EngineStatusReport,
 }

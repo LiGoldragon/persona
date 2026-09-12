@@ -47,7 +47,7 @@ struct Expectations {
     capture_nota: Option<String>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 enum ExpectedVariant {
     Submission,
     Stamped,

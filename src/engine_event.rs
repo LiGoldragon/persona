@@ -1,9 +1,7 @@
-pub use meta_signal_persona::OperationKind as EngineOperationKind;
-use meta_signal_persona::{ComponentName, EnginePhase};
+use meta_signal_persona::EnginePhase;
 pub use signal_harness::HarnessOperationKind;
 pub use signal_message::MessageOperationKind;
-pub use signal_mind::MindOperationKind;
-use signal_persona::EngineIdentifier;
+use signal_persona::{ComponentName, EngineIdentifier};
 pub use signal_system::SystemOperationKind;
 pub use signal_terminal::TerminalOperationKind;
 use strum::EnumDiscriminants;
@@ -14,7 +12,7 @@ use crate::upgrade::{ActiveVersionChanged, PreparedEvent, VersionQuarantined};
 ///
 /// The sequence is not per engine. It gives the manager log one total order
 /// across every engine whose events are stored in the same `manager.sema`.
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct EngineEventSequence(u64);
 
 impl EngineEventSequence {
@@ -31,7 +29,7 @@ impl EngineEventSequence {
     }
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -74,7 +72,7 @@ impl EngineEvent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EngineEventInput {
     pub sequence: EngineEventSequence,
     pub engine: EngineIdentifier,
@@ -82,7 +80,7 @@ pub struct EngineEventInput {
     pub body: EngineEventBody,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EngineEventDraft {
     engine: EngineIdentifier,
     source: EngineEventSource,
@@ -108,23 +106,14 @@ impl EngineEventDraft {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EngineEventDraftInput {
     pub engine: EngineIdentifier,
     pub source: EngineEventSource,
     pub body: EngineEventBody,
 }
 
-#[derive(
-    rkyv::Archive,
-    rkyv::Serialize,
-    rkyv::Deserialize,
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    EnumDiscriminants,
-)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, EnumDiscriminants)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -137,16 +126,7 @@ pub enum EngineEventSource {
     Component(ComponentName),
 }
 
-#[derive(
-    rkyv::Archive,
-    rkyv::Serialize,
-    rkyv::Deserialize,
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    EnumDiscriminants,
-)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, EnumDiscriminants)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -174,7 +154,7 @@ pub enum EngineEventBody {
     VersionQuarantined(VersionQuarantined),
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -193,7 +173,7 @@ impl ComponentLifecycleEvent {
     }
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -226,39 +206,26 @@ impl ComponentUnimplemented {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentUnimplementedInput {
     pub component: ComponentName,
     pub operation: ComponentOperation,
     pub reason: UnimplementedReason,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
 )))]
 pub enum ComponentOperation {
-    Engine(EngineOperationKind),
     Message(MessageOperationKind),
-    Mind(MindOperationKind),
     System(SystemOperationKind),
     Harness(HarnessOperationKind),
     Terminal(TerminalOperationKind),
 }
 
-#[derive(
-    rkyv::Archive,
-    rkyv::Serialize,
-    rkyv::Deserialize,
-    datom_codec::Datomizable,
-    datom_codec::Compositional,
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, Copy, PartialEq)]
 pub enum UnimplementedReason {
     NotBuiltYet,
     /// Cross-cutting prerequisite work is not landed in the current stack.
@@ -268,7 +235,7 @@ pub enum UnimplementedReason {
     DependencyTrackNotLanded,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -295,7 +262,7 @@ impl ComponentExited {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentExitedInput {
     pub component: ComponentName,
     pub exit_code: Option<i32>,
@@ -307,7 +274,7 @@ pub struct ComponentExitedInput {
 /// during startup event-log replay and is recording the orphan. Carries
 /// the sequence number of the `ComponentSpawned` event that started the
 /// orphan arc so audit can correlate the two events.
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -334,13 +301,13 @@ impl ComponentOrphaned {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentOrphanedInput {
     pub component: ComponentName,
     pub spawned_sequence: EngineEventSequence,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -367,13 +334,13 @@ impl RestartScheduled {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RestartScheduledInput {
     pub component: ComponentName,
     pub attempt: u32,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -400,13 +367,13 @@ impl RestartExhausted {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RestartExhaustedInput {
     pub component: ComponentName,
     pub attempts: u32,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(bytecheck(bounds(
     __C: rkyv::validation::ArchiveContext,
     __C::Error: rkyv::rancor::Source
@@ -420,7 +387,7 @@ impl EngineStateChanged {
         Self { phase }
     }
 
-    pub const fn phase(self) -> EnginePhase {
-        self.phase
+    pub fn phase(&self) -> &EnginePhase {
+        &self.phase
     }
 }

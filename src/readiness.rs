@@ -137,7 +137,7 @@ impl Message<VerifyComponentSocket> for ComponentSocketReadiness {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentSocketExpectation {
     component: EngineComponent,
     path: PathBuf,
@@ -182,7 +182,7 @@ impl ComponentSocketExpectation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentSocketReady {
     component: EngineComponent,
     path: PathBuf,

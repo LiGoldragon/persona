@@ -4,7 +4,7 @@ use crate::engine::{EngineComponent, EngineTopology};
 
 use super::command::{ComponentCommand, ExecutablePath};
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ComponentCommandEntry {
     component: EngineComponent,
     command: ComponentCommand,
@@ -27,13 +27,13 @@ impl ComponentCommandEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentCommandEntryInput {
     pub component: EngineComponent,
     pub command: ComponentCommand,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentCommandCatalog {
     entries: Vec<ComponentCommandEntry>,
     required_components: Vec<EngineComponent>,
@@ -158,7 +158,7 @@ impl ComponentCommandCatalog {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct EngineLaunchConfiguration {
     overrides: Vec<ComponentCommandOverride>,
 }
@@ -196,7 +196,7 @@ impl EngineLaunchConfiguration {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq, Eq)]
+#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
 pub struct ComponentCommandOverride {
     component: EngineComponent,
     command: ComponentCommand,
@@ -219,13 +219,13 @@ impl ComponentCommandOverride {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComponentCommandOverrideInput {
     pub component: EngineComponent,
     pub command: ComponentCommand,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedComponentCommands {
     entries: Vec<ResolvedComponentCommand>,
 }
@@ -247,7 +247,7 @@ impl ResolvedComponentCommands {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedComponentCommand {
     component: EngineComponent,
     command: ComponentCommand,
@@ -270,13 +270,13 @@ impl ResolvedComponentCommand {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedComponentCommandInput {
     pub component: EngineComponent,
     pub command: ComponentCommand,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, PartialEq, Error)]
 pub enum CommandResolutionFailure {
     #[error("missing command for required component {component:?}")]
     MissingRequiredCommand { component: EngineComponent },

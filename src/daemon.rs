@@ -21,7 +21,6 @@ use std::sync::Arc;
 use tokio::runtime::Handle;
 use triad_runtime::AcceptedConnection;
 
-use signal_persona::EngineIdentifier;
 
 use crate::configuration::{ConfigurationError, PersonaDaemonConfiguration};
 use crate::error::{Error, Result};
@@ -51,20 +50,17 @@ pub struct PersonaEngine {
 }
 
 impl PersonaEngine {
-    /// Decode one request `Frame` off the accepted stream, drive it through the
-    /// manager actor, and write the reply `Frame` back.
+    /// Read one request off the accepted stream, drive it through the manager
+    /// actor, and write the reply back.
     async fn serve_connection(&self, mut connection: AcceptedConnection) -> Result<()> {
-        let frame = self.codec.read_frame(connection.stream_mut()).await?;
-        let received = self.codec.request_from_frame(frame)?;
-        let exchange = received.exchange();
+        let request = self.codec.read_request(connection.stream_mut()).await?;
         let reply = self
             .manager
-            .ask(HandleEngineRequest::new(received.into_request()))
+            .ask(HandleEngineRequest::new(request))
             .await
             .map_err(|error| Error::actor("handle daemon engine request", error))?;
-        let reply_frame = self.codec.reply_frame(exchange, reply);
         self.codec
-            .write_frame(connection.stream_mut(), &reply_frame)
+            .write_reply(connection.stream_mut(), &reply)
             .await
     }
 }
