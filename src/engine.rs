@@ -324,9 +324,7 @@ impl ComponentTopologyEntry {
     }
 }
 
-#[derive(
-    datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, Copy, PartialEq, Hash,
-)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, Copy, PartialEq, Hash)]
 pub enum EngineComponent {
     Mind,
     Orchestrate,

@@ -425,24 +425,25 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
         "router configuration decodes",
     );
     let bootstrap_path = configuration
-        .bootstrap_path()
+        .bootstrap_path
+        .as_ref()
         .expect("three-harness topology writes a router bootstrap");
     let bootstrap = DirectProcessFixture::decode_archive::<RouterBootstrapDocument>(
-        std::path::Path::new(bootstrap_path.payload()),
+        std::path::Path::new(bootstrap_path),
         "router bootstrap decodes",
     );
-    assert_eq!(bootstrap.operations().len(), 9);
+    assert_eq!(bootstrap.len(), 9);
 
     for name in ["initiator", "responder", "reviewer"] {
         assert!(
-            bootstrap.operations().iter().any(|operation| matches!(
+            bootstrap.iter().any(|operation| matches!(
                 operation,
                 RouterBootstrapOperation::RegisterActor(registration)
-                    if registration.actor.name.payload().payload() == name
-                        && *registration.actor.process.payload() == 0
-                        && registration.actor.endpoint().is_some_and(|endpoint|
-                            *endpoint.kind.payload() == EndpointKind::HarnessSocket
-                                && endpoint.target.payload().ends_with(format!("{name}.sock").as_str())
+                    if registration.actor.name == name
+                        && registration.actor.process == 0
+                        && registration.actor.endpoint.as_ref().is_some_and(|endpoint|
+                            endpoint.endpoint_kind == EndpointKind::HarnessSocket
+                                && endpoint.target.ends_with(format!("{name}.sock").as_str())
                         )
             )),
             "bootstrap did not register {name}: {bootstrap:?}"
@@ -457,11 +458,10 @@ async fn constraint_three_harness_chain_router_launch_writes_bootstrap_for_named
         ("reviewer", "owner"),
     ] {
         assert!(
-            bootstrap.operations().iter().any(|operation| matches!(
+            bootstrap.iter().any(|operation| matches!(
                 operation,
                 RouterBootstrapOperation::GrantDirectMessage(grant)
-                    if grant.source_actor.payload().payload() == from
-                        && grant.destination_actor.payload().payload() == to
+                    if grant.source_actor == from && grant.destination_actor == to
             )),
             "bootstrap did not include grant {from}->{to}: {bootstrap:?}"
         );

@@ -13,7 +13,7 @@ use crate::engine_event::{
 };
 use crate::upgrade::ActiveVersionChangeSource;
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct EngineEventReport {
     pub sequence: i64,
     pub engine: EngineIdentifier,
@@ -61,91 +61,91 @@ impl EngineEventSourceComponent {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ComponentLifecycleEventReport {
     pub component: ComponentName,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ComponentUnimplementedReport {
     pub component: ComponentName,
     pub operation: ComponentOperationReport,
     pub reason: UnimplementedReason,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ComponentExitedReport {
     pub component: ComponentName,
     pub exit_code: Option<i64>,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ComponentOrphanedReport {
     pub component: ComponentName,
     pub spawned_sequence: i64,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct RestartScheduledReport {
     pub component: ComponentName,
     pub attempt: i64,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct RestartExhaustedReport {
     pub component: ComponentName,
     pub attempts: i64,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct EngineStateChangedReport {
     pub phase: String,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct UpgradePreparedReport {
     pub component: ComponentName,
     pub current_version: String,
     pub next_version: String,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ActiveVersionChangedReport {
     pub component: ComponentName,
     pub active_version: String,
     pub source: ActiveVersionChangeSourceReport,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub enum ActiveVersionChangeSourceReport {
     HandoverMarker(HandoverMarkerSourceReport),
     ForceFlip(ForceFlipSourceReport),
     Rollback(RollbackSourceReport),
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct HandoverMarkerSourceReport {
     pub state_sequence: i64,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ForceFlipSourceReport {
     pub reason: ForceReason,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct RollbackSourceReport {
     pub reason: RollbackReason,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct VersionQuarantinedReport {
     pub component: ComponentName,
     pub version: String,
     pub reason: QuarantineReason,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub enum EngineEventBodyReport {
     ComponentSpawned(ComponentLifecycleEventReport),
     ComponentReady(ComponentLifecycleEventReport),
@@ -161,7 +161,7 @@ pub enum EngineEventBodyReport {
     VersionQuarantined(VersionQuarantinedReport),
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub enum ComponentOperationReport {
     Message(MessageOperationKind),
     System(SystemOperationKind),
@@ -169,7 +169,7 @@ pub enum ComponentOperationReport {
     Terminal(TerminalOperationKind),
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct EngineStatusReport {
     pub generation: i64,
     pub phase: String,
@@ -198,7 +198,7 @@ impl EngineStatusReport {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ComponentStatusReport {
     pub component: LifecycleComponentStatusReport,
 }
@@ -211,29 +211,29 @@ impl ComponentStatusReport {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ComponentStatusMissingReport {
     pub component: ComponentName,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct RetirementAcceptanceReport {
     pub engine: EngineIdentifier,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ActionAcceptedReport {
     pub component: ComponentName,
     pub desired_state: String,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ActionRejectedReport {
     pub component: ComponentName,
     pub reason: String,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct LifecycleComponentStatusReport {
     pub component: ComponentName,
     pub kind: String,
@@ -252,7 +252,7 @@ impl LifecycleComponentStatusReport {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct LaunchAcceptanceReport {
     pub engine: EngineIdentifier,
     pub label: String,
@@ -267,7 +267,7 @@ impl LaunchAcceptanceReport {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct LaunchRejectionReport {
     pub label: String,
     pub reason: String,
@@ -282,7 +282,7 @@ impl LaunchRejectionReport {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct EngineCatalogReport {
     pub engines: Vec<EngineCatalogEntryReport>,
 }
@@ -298,7 +298,7 @@ impl EngineCatalogReport {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct EngineCatalogEntryReport {
     pub engine: EngineIdentifier,
     pub label: String,
@@ -315,7 +315,7 @@ impl EngineCatalogEntryReport {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct RetirementRejectionReport {
     pub engine: EngineIdentifier,
     pub reason: String,

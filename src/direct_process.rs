@@ -14,7 +14,7 @@ use signal_router::{
     Actor as BootstrapActor, EndpointKind as RouterBootstrapEndpointKind,
     EndpointTransport as RouterBootstrapEndpointTransport,
     GrantDirectMessage as RouterBootstrapGrantDirectMessage, RegisterActor,
-    RouterBootstrapDocument, RouterBootstrapOperation, RouterDaemonConfigurationParts,
+    RouterBootstrapDocument, RouterBootstrapOperation,
 };
 use thiserror::Error;
 use tokio::process::Command;
@@ -568,41 +568,25 @@ impl DirectProcessLauncher {
         let bootstrap_path = ThreeHarnessRouterBootstrap::for_envelope(envelope)?
             .map(|document| document.write_next_to(envelope.envelope_path()))
             .transpose()?;
-        let configuration =
-            signal_router::RouterDaemonConfiguration::from(RouterDaemonConfigurationParts {
-                router_socket_path: signal_router::WirePath::new(
-                    envelope.domain_socket_path().to_string_lossy().into_owned(),
-                ),
-                router_socket_mode: signal_router::SocketMode::new(u64::from(
-                    envelope.domain_socket_mode().as_octal(),
-                )),
-                meta_router_socket_path: signal_router::WirePath::new(
-                    Self::meta_socket_path(envelope)
-                        .to_string_lossy()
-                        .into_owned(),
-                ),
-                meta_router_socket_mode: signal_router::SocketMode::new(u64::from(
-                    envelope.domain_socket_mode().as_octal(),
-                )),
-                supervision_socket_path: signal_router::WirePath::new(
-                    envelope
-                        .supervision_socket_path()
-                        .to_string_lossy()
-                        .into_owned(),
-                ),
-                supervision_socket_mode: signal_router::SocketMode::new(u64::from(
-                    envelope.supervision_socket_mode().as_octal(),
-                )),
-                store_path: signal_router::WirePath::new(store_path.to_string_lossy().into_owned()),
-                bootstrap_path: bootstrap_path
-                    .map(|path| signal_router::WirePath::new(path.to_string_lossy().into_owned())),
-                owner_identity: Self::router_owner_identity(envelope.owner_identity())?,
-                tailnet_listen_address: None,
-                router_identity: signal_router::CriomeHostId::new(
-                    envelope.component_instance().as_str(),
-                ),
-                criome_socket_path: None,
-            });
+        let configuration = signal_router::RouterDaemonConfiguration {
+            router_socket_path: envelope.domain_socket_path().to_string_lossy().into_owned(),
+            router_socket_mode: i64::from(envelope.domain_socket_mode().as_octal()),
+            meta_router_socket_path: Self::meta_socket_path(envelope)
+                .to_string_lossy()
+                .into_owned(),
+            meta_router_socket_mode: i64::from(envelope.domain_socket_mode().as_octal()),
+            supervision_socket_path: envelope
+                .supervision_socket_path()
+                .to_string_lossy()
+                .into_owned(),
+            supervision_socket_mode: i64::from(envelope.supervision_socket_mode().as_octal()),
+            store_path: store_path.to_string_lossy().into_owned(),
+            bootstrap_path: bootstrap_path.map(|path| path.to_string_lossy().into_owned()),
+            owner_identity: Self::router_owner_identity(envelope.owner_identity())?,
+            tailnet_listen_address: None,
+            router_identity: envelope.component_instance().as_str().to_owned(),
+            criome_socket_path: None,
+        };
         Self::write_configuration_binary_file(envelope, &configuration)
     }
 
@@ -611,9 +595,7 @@ impl DirectProcessLauncher {
     ) -> Result<signal_router::OwnerIdentity, DirectProcessFailure> {
         match owner {
             signal_persona::OwnerIdentity::UnixUser(user) => {
-                Ok(signal_router::OwnerIdentity::UnixUser(
-                    signal_router::UnixUserIdentifier::new(*user as u64),
-                ))
+                Ok(signal_router::OwnerIdentity::UnixUser(*user))
             }
             signal_persona::OwnerIdentity::System(_) => {
                 Err(DirectProcessFailure::RouterOwnerIdentityUnsupportedSystem)
@@ -1001,20 +983,18 @@ impl ThreeHarnessRouterBootstrap {
             }) else {
                 return Ok(None);
             };
-            operations.push(RouterBootstrapOperation::register_actor(
-                RegisterActor::new(
-                    BootstrapActor::new(
-                        signal_router::ActorIdentifier::new(name),
-                        0,
-                        Some(RouterBootstrapEndpointTransport::new(
-                            RouterBootstrapEndpointKind::HarnessSocket,
-                            peer.domain_socket_path().to_string_lossy().into_owned(),
-                            None,
-                        )),
-                    ),
-                    None,
-                ),
-            ));
+            operations.push(RouterBootstrapOperation::RegisterActor(RegisterActor {
+                actor: BootstrapActor {
+                    name: name.to_string(),
+                    process: 0,
+                    endpoint: Some(RouterBootstrapEndpointTransport {
+                        endpoint_kind: RouterBootstrapEndpointKind::HarnessSocket,
+                        target: peer.domain_socket_path().to_string_lossy().into_owned(),
+                        auxiliary: None,
+                    }),
+                },
+                home: None,
+            }));
         }
 
         for (from, to) in [
@@ -1025,15 +1005,15 @@ impl ThreeHarnessRouterBootstrap {
             ("responder", "reviewer"),
             ("reviewer", "owner"),
         ] {
-            operations.push(RouterBootstrapOperation::grant_direct_message(
+            operations.push(RouterBootstrapOperation::GrantDirectMessage(
                 RouterBootstrapGrantDirectMessage {
-                    source_actor: signal_router::ActorIdentifier::new(from).into(),
-                    destination_actor: signal_router::ActorIdentifier::new(to).into(),
+                    source_actor: from.to_string(),
+                    destination_actor: to.to_string(),
                 },
             ));
         }
         Ok(Some(Self {
-            document: RouterBootstrapDocument::from_operations(operations),
+            document: operations,
         }))
     }
 

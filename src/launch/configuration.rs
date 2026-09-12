@@ -4,7 +4,7 @@ use crate::engine::{EngineComponent, EngineTopology};
 
 use super::command::{ComponentCommand, ExecutablePath};
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ComponentCommandEntry {
     component: EngineComponent,
     command: ComponentCommand,
@@ -158,7 +158,7 @@ impl ComponentCommandCatalog {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct EngineLaunchConfiguration {
     overrides: Vec<ComponentCommandOverride>,
 }
@@ -196,7 +196,7 @@ impl EngineLaunchConfiguration {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ComponentCommandOverride {
     component: EngineComponent,
     command: ComponentCommand,

@@ -12,32 +12,32 @@ use crate::schema::{
     LaunchRejectionReport, RetirementAcceptanceReport, RetirementRejectionReport,
 };
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, Copy, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, Copy, PartialEq)]
 pub enum EngineStatusScope {
     WholeEngine,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct EngineStatusQuery {
     pub scope: EngineStatusScope,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ComponentStatusQuery {
     pub component: ComponentName,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ComponentStartup {
     pub component: ComponentName,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub struct ComponentShutdown {
     pub component: ComponentName,
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub enum PersonaRequest {
     EngineStatusQuery(EngineStatusQuery),
     ComponentStatusQuery(ComponentStatusQuery),
@@ -66,7 +66,7 @@ impl PersonaRequest {
     }
 }
 
-#[derive(datom_codec::Datomizable, datom_codec::Compositional, Debug, Clone, PartialEq)]
+#[derive(datom_codec::Datomizable, datom_codec::Composing, Debug, Clone, PartialEq)]
 pub enum PersonaOutput {
     LaunchAccepted(LaunchAcceptanceReport),
     LaunchRejected(LaunchRejectionReport),

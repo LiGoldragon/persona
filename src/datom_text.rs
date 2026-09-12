@@ -5,7 +5,7 @@
 //! protosize, print — cannot fault; the descent — delineate, conceive,
 //! incorporate — can, and names its layer, path and extent when it does.
 
-use datom_codec::{Actualizing, Budget, Compositional, Datomizable, Potential};
+use datom_codec::{Actualizing, Budget, Composing, Datomizable, Potential};
 use protos::{Protosizable, ReaderBudget, Textualizable as ProtosTextualizable};
 
 /// The reading and composition allowance one Persona text value may spend.
@@ -40,7 +40,7 @@ pub trait DatomActualizable: Sized {
     fn actualize_text(text: &str) -> Result<Self, datom_codec::Error>;
 }
 
-impl<T: Compositional> DatomActualizable for T {
+impl<T: Composing> DatomActualizable for T {
     fn actualize_text(text: &str) -> Result<Self, datom_codec::Error> {
         Potential::<Self>::from(text).actualize(&mut budget())
     }

@@ -23,17 +23,17 @@ struct ConfigurationWriterInput {
     text: String,
 }
 
-#[derive(Debug, Clone, PartialEq, datom_codec::Datomizable, datom_codec::Compositional)]
+#[derive(Debug, Clone, PartialEq, datom_codec::Datomizable, datom_codec::Composing)]
 struct ConfigurationWriteRequest {
     manager_socket_path: ConfigurationWriterPath,
     manager_store_path: ConfigurationWriterPath,
     output_path: ConfigurationWriterPath,
 }
 
-#[derive(Debug, Clone, PartialEq, datom_codec::Datomizable, datom_codec::Compositional)]
+#[derive(Debug, Clone, PartialEq, datom_codec::Datomizable, datom_codec::Composing)]
 struct ConfigurationWriterPath(String);
 
-#[derive(Debug, Clone, PartialEq, datom_codec::Datomizable, datom_codec::Compositional)]
+#[derive(Debug, Clone, PartialEq, datom_codec::Datomizable, datom_codec::Composing)]
 struct ConfigurationWriteOutput {
     output_path: ConfigurationWriterPath,
 }
@@ -54,11 +54,11 @@ impl ConfigurationWriterCommand {
     }
 
     fn source(&self) -> Result<ConfigurationWriterInput, ConfigurationWriterError> {
-        match self.command.dotos_argument()? {
-            ComponentArgument::InlineDotos(argument) => {
+        match self.command.datom_argument()? {
+            ComponentArgument::InlineDatom(argument) => {
                 Ok(ConfigurationWriterInput::new(argument.into_string()))
             }
-            ComponentArgument::DotosFile(file) => {
+            ComponentArgument::DatomFile(file) => {
                 let path = file.into_path();
                 fs::read_to_string(&path)
                     .map(ConfigurationWriterInput::new)

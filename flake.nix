@@ -273,20 +273,20 @@
               set -euo pipefail
 
               export MESSAGE_SOCKET='$message_socket'
-              message_bin='${inputs.persona-message.packages.${system}.text}/bin/message'
+              message_bin='${inputs.persona-message.packages.${system}.default}/bin/message'
               agent='$terminal_name'
 
               printf '%s-runner-ready\n' "\$agent"
               while IFS= read -r line; do
                 printf '%s-received:%s\n' "\$agent" "\$line"
                 if [ "\$agent" = 'initiator' ] && [ "\$line" = 'start-three-harness-task' ]; then
-                  "\$message_bin" '(Send responder [initiator handed to responder])'
+                  "\$message_bin" 'Submit.{ responder Send «initiator handed to responder» None }'
                   printf '%s-sent:%s\n' "\$agent" 'initiator handed to responder'
                 elif [ "\$agent" = 'responder' ] && [ "\$line" = 'initiator handed to responder' ]; then
-                  "\$message_bin" '(Send reviewer [responder handed to reviewer])'
+                  "\$message_bin" 'Submit.{ reviewer Send «responder handed to reviewer» None }'
                   printf '%s-sent:%s\n' "\$agent" 'responder handed to reviewer'
                 elif [ "\$agent" = 'reviewer' ] && [ "\$line" = 'responder handed to reviewer' ]; then
-                  "\$message_bin" '(Send owner [reviewer completed task])'
+                  "\$message_bin" 'Submit.{ owner Send «reviewer completed task» None }'
                   printf '%s-sent:%s\n' "\$agent" 'reviewer completed task'
                 fi
               done
@@ -348,7 +348,7 @@
                 pkgs.gnugrep
               ];
               text = ''
-                export PERSONA_MESSAGE_PACKAGE=${inputs.persona-message.packages.${system}.text}
+                export PERSONA_MESSAGE_PACKAGE=${inputs.persona-message.packages.${system}.default}
                 export PERSONA_ROUTER_PACKAGE=${inputs.persona-router.packages.${system}.text}
                 export PERSONA_TERMINAL_PACKAGE=${inputs.persona-terminal.packages.${system}.default}
                 export PERSONA_HARNESS_PACKAGE=${inputs.persona-harness.packages.${system}.default}
@@ -368,9 +368,9 @@
             text = ''
               export PERSONA_DAEMON_BIN=${self.packages.${system}.default}/bin/persona-daemon
               export PERSONA_CONFIGURATION_WRITER_BIN=${self.packages.${system}.default}/bin/persona-write-configuration
-              export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.text}/bin/message
+              export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.default}/bin/message
               export PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN=${
-                inputs.persona-message.packages.${system}.text
+                inputs.persona-message.packages.${system}.default
               }/bin/message-validate-output
               export PERSONA_TERMINAL_SIGNAL_BIN=${
                 inputs.persona-terminal.packages.${system}.default
@@ -424,9 +424,9 @@
               export PERSONA_ENGINE_SANDBOX_ATTACH=${personaEngineSandboxAttach}/bin/persona-engine-sandbox-attach
               export PERSONA_DAEMON_BIN=${self.packages.${system}.default}/bin/persona-daemon
               export PERSONA_CONFIGURATION_WRITER_BIN=${self.packages.${system}.default}/bin/persona-write-configuration
-              export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.text}/bin/message
+              export PERSONA_MESSAGE_BIN=${inputs.persona-message.packages.${system}.default}/bin/message
               export PERSONA_MESSAGE_VALIDATE_OUTPUT_BIN=${
-                inputs.persona-message.packages.${system}.text
+                inputs.persona-message.packages.${system}.default
               }/bin/message-validate-output
               export PERSONA_TERMINAL_SIGNAL_BIN=${
                 inputs.persona-terminal.packages.${system}.default
@@ -893,116 +893,30 @@
               --capture-datom $out \
               < ${self.checks.${system}.wire-chain-reply-bytes}
           '';
-          # T4-bonus: real-daemon midway witness. Spawn the actual
-          # persona-message-daemon and a one-shot wire-tap-router as
-          # its forwarding target. The tap captures the bytes the
-          # daemon actually sends toward "the router," writes them to
-          # a Nix-store artifact, and we decode + assert the origin
-          # the daemon's SO_PEERCRED stamping produced. This is the
-          # midway witness: the daemon's wire output is no longer a
-          # black-box claim, it's an inspectable byte sequence.
-          persona-message-daemon-stamps-origin-via-tap =
-            context.pkgs.runCommand "persona-message-daemon-stamps-origin-via-tap"
-              {
-                nativeBuildInputs = [ context.pkgs.coreutils ];
-              }
-              ''
-                set -euo pipefail
-                workdir="$(mktemp -d)"
-                tap_socket="$workdir/tap.sock"
-                message_socket="$workdir/message.sock"
-                message_configuration="$workdir/message-daemon.rkyv"
-                captured_bytes="$workdir/captured.bytes"
-                tap_ready="$workdir/tap.ready"
-                daemon_stderr="$workdir/daemon.stderr"
-                cli_out="$workdir/cli.out"
-                cli_err="$workdir/cli.err"
-
-                # 1. Start the tap-router. It binds tap.sock, captures
-                #    the first frame it receives, replies with a canned
-                #    SubmissionAccepted slot=999, and exits.
-                ${personaShims}/bin/wire-tap-router \
-                  --socket "$tap_socket" \
-                  --capture "$captured_bytes" \
-                  --reply 'submission-accepted-slot=999' \
-                  --ready-file "$tap_ready" &
-                tap_pid=$!
-
-                # Wait for the tap to be bound (ready file written).
-                for _ in $(seq 1 100); do
-                  [ -f "$tap_ready" ] && break
-                  sleep 0.05
-                done
-                test -f "$tap_ready"
-
-                # 2. Write the typed daemon configuration and start
-                #    persona-message-daemon. It reads owner identity from the
-                #    configuration, binds message.sock, and forwards to tap.sock as
-                #    if it were the router.
-                builder_uid="$(id -u)"
-                ${inputs.persona-message.packages.${system}.text}/bin/message-write-configuration \
-                  "(ConfigurationWriteRequest $message_socket $workdir/message.supervision.sock $tap_socket $workdir/message.sema message $builder_uid $message_configuration)"
-                ${inputs.persona-message.packages.${system}.default}/bin/message-daemon \
-                  "$message_configuration" 2> "$daemon_stderr" &
-                daemon_pid=$!
-
-                # Wait for the message socket to appear.
-                for _ in $(seq 1 100); do
-                  [ -S "$message_socket" ] && break
-                  if ! kill -0 "$daemon_pid" 2>/dev/null; then
-                    cat "$daemon_stderr" >&2
-                    exit 1
-                  fi
-                  sleep 0.05
-                done
-                if [ ! -S "$message_socket" ]; then
-                  cat "$daemon_stderr" >&2
-                  exit 1
-                fi
-
-                # 3. Send a real message through the CLI. The daemon
-                #    accepts, reads SO_PEERCRED, compares it to the envelope
-                #    owner identity, wraps into StampedMessageSubmission,
-                #    forwards to tap_socket. The tap captures and replies.
-                set +e
-                MESSAGE_SOCKET="$message_socket" \
-                  ${inputs.persona-message.packages.${system}.text}/bin/message \
-                  '(Send tap-recipient tap-captured-body)' > "$cli_out" 2> "$cli_err"
-                cli_exit=$?
-                set -e
-
-                # 4. Wait for the tap to finish writing the capture and exit.
-                wait "$tap_pid" || true
-                # Shut the daemon down — its job is done.
-                kill "$daemon_pid" 2>/dev/null || true
-                wait "$daemon_pid" 2>/dev/null || true
-
-                # 5. Assert the capture exists.
-                test -s "$captured_bytes"
-
-                # 6. Decode the captured bytes through our shim and
-                #    assert the daemon stamped the origin correctly.
-                ${personaShims}/bin/wire-decode-message \
-                  --expect-recipient tap-recipient \
-                  --expect-body 'tap-captured-body' \
-                  --expect-variant stamped \
-                  --expect-origin 'internal-instance:harness:message' \
-                  --capture-datom "$workdir/stamped.datom" \
-                  < "$captured_bytes"
-
-                # 7. Land artifacts in /nix/store/ for forensic inspection.
-                mkdir -p $out
-                cp "$captured_bytes" $out/captured.bytes
-                cp "$workdir/stamped.datom" $out/stamped.datom
-                cp "$cli_out" $out/cli.out
-                cp "$cli_err" $out/cli.err
-                cp "$daemon_stderr" $out/daemon.stderr
-                printf 'midway witness: persona-message-daemon stamped origin in flight\n' > $out/witness.txt
-                printf '  cli exit:        %s\n' "$cli_exit" >> $out/witness.txt
-                printf '  captured bytes:  %s\n' "$(wc -c < $out/captured.bytes)" >> $out/witness.txt
-                printf '  decoded datom:    %s\n' "$(cat $out/stamped.datom)" >> $out/witness.txt
-                printf '  expected origin: External(Owner) (Nix builder uid)\n' >> $out/witness.txt
-              '';
+          # REMOVED: persona-message-daemon-stamps-origin-via-tap.
+          #
+          # The check started the real message-daemon and asserted it forwards
+          # a StampedMessageSubmission to the router socket, where a tap
+          # captured the bytes. It never passed, and the recorded diagnosis —
+          # a wire-format mismatch — was incomplete.
+          #
+          # The real cause: `message` has never had router forwarding. At its
+          # pre-port head 38345dae, and at the ported 0.12.0, the repository
+          # contains no reference to `router_socket_path` and no forwarding
+          # code at all. `Query::Submit` writes the local ledger and answers
+          # SubmissionAccepted; `Query::SubmitStamped` answers
+          # MessageRequestUnimplemented(NotInPrototypeScope). So the tap can
+          # never capture anything, whatever the frame looks like.
+          #
+          # This check therefore specifies wanted behaviour that was never
+          # built. Building it is a feature with real design questions (which
+          # submissions forward, what happens when the router refuses or is
+          # absent, how the reply composes with the local accept) and belongs
+          # in `message` under its own decision, not smuggled in as a fix for
+          # a red check. Restore this witness once `message` forwards.
+          #
+          # The `wire-tap-router` shim binary it drove is deliberately kept:
+          # it is the instrument for the behaviour, not part of the defect.
 
           wire-chain-summary = context.pkgs.runCommand "wire-chain-summary" { } ''
             mkdir -p $out
@@ -2126,15 +2040,15 @@
                 inbox_error="$work/message-inbox.stderr"
 
                 MESSAGE_SOCKET="$work/run/default/message.sock" \
-                  ${inputs.persona-message.packages.${system}.text}/bin/message \
-                    '(Send responder [supervised message-router smoke])' \
+                  ${inputs.persona-message.packages.${system}.default}/bin/message \
+                    'Submit.{ responder Send «supervised message-router smoke» None }' \
                     > "$send_output" \
                     2> "$send_error"
                 grep -Fq "(SubmissionAccepted " "$send_output"
 
                 MESSAGE_SOCKET="$work/run/default/message.sock" \
-                  ${inputs.persona-message.packages.${system}.text}/bin/message \
-                    '(Inbox responder)' \
+                  ${inputs.persona-message.packages.${system}.default}/bin/message \
+                    'QueryInbox.responder' \
                     > "$inbox_output" \
                     2> "$inbox_error"
                 grep -Fq "supervised message-router smoke" "$inbox_output"

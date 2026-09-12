@@ -121,7 +121,7 @@ pub struct EngineEventDraftInput {
     __C::Error: rkyv::rancor::Source
 )))]
 #[strum_discriminants(name(EngineEventSourceKind))]
-#[strum_discriminants(derive(datom_codec::Datomizable, datom_codec::Compositional))]
+#[strum_discriminants(derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub enum EngineEventSource {
     Manager,
     /// Manager-observed component fact. The component does not write the log.
@@ -136,7 +136,7 @@ pub enum EngineEventSource {
     __C::Error: rkyv::rancor::Source
 )))]
 #[strum_discriminants(name(EngineEventBodyKind))]
-#[strum_discriminants(derive(datom_codec::Datomizable, datom_codec::Compositional))]
+#[strum_discriminants(derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub enum EngineEventBody {
     ComponentSpawned(ComponentLifecycleEvent),
     ComponentReady(ComponentLifecycleEvent),
@@ -234,7 +234,7 @@ pub enum ComponentOperation {
     rkyv::Serialize,
     rkyv::Deserialize,
     datom_codec::Datomizable,
-    datom_codec::Compositional,
+    datom_codec::Composing,
     Debug,
     Clone,
     Copy,

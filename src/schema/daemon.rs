@@ -79,7 +79,7 @@ impl<Daemon: ComponentDaemon> DaemonCommand<Daemon> {
                 Daemon::load_configuration(file.as_path())
                     .map_err(DaemonError::Configuration)
             }
-            ComponentArgument::InlineDotos(_) | ComponentArgument::DotosFile(_) => {
+            ComponentArgument::InlineDatom(_) | ComponentArgument::DatomFile(_) => {
                 Err(DaemonError::Argument(ArgumentError::ExpectedSignalFile))
             }
         }

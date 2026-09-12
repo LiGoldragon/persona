@@ -135,8 +135,8 @@ dependencies = [
 
 [[package]]
 name = "datom-codec"
-version = "0.26.3"
-source = "git+https://github.com/LiGoldragon/datom-codec?rev=627db67f2655efd9f786864009955005fd8ab2ad#627db67f2655efd9f786864009955005fd8ab2ad"
+version = "0.27.0"
+source = "git+https://github.com/LiGoldragon/datom-codec?rev=6dccc76b75918a91d3370a9d4fe88aa7dd567876#6dccc76b75918a91d3370a9d4fe88aa7dd567876"
 dependencies = [
  "datom-codec-derive",
  "protos",
@@ -144,8 +144,8 @@ dependencies = [
 
 [[package]]
 name = "datom-codec-derive"
-version = "0.26.0"
-source = "git+https://github.com/LiGoldragon/datom-codec?rev=627db67f2655efd9f786864009955005fd8ab2ad#627db67f2655efd9f786864009955005fd8ab2ad"
+version = "0.27.0"
+source = "git+https://github.com/LiGoldragon/datom-codec?rev=6dccc76b75918a91d3370a9d4fe88aa7dd567876#6dccc76b75918a91d3370a9d4fe88aa7dd567876"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -209,8 +209,8 @@ dependencies = [
 
 [[package]]
 name = "ethos-zero"
-version = "8.0.1"
-source = "git+https://github.com/LiGoldragon/ethos-zero?rev=de3d9928b156f2e1a92d060b7817af201abfdbef#de3d9928b156f2e1a92d060b7817af201abfdbef"
+version = "9.0.0"
+source = "git+https://github.com/LiGoldragon/ethos-zero?rev=b232d35e03011161fe7ec9129ad99a9914413348#b232d35e03011161fe7ec9129ad99a9914413348"
 dependencies = [
  "datom-codec",
  "prettyplease",
@@ -470,32 +470,34 @@ dependencies = [
 
 [[package]]
 name = "meta-signal-persona"
-version = "2.0.0"
-source = "git+https://github.com/LiGoldragon/meta-signal-persona.git?rev=88657088a4f499c758bc3af3e625ab7e7618e038#88657088a4f499c758bc3af3e625ab7e7618e038"
+version = "3.0.0"
+source = "git+https://github.com/LiGoldragon/meta-signal-persona.git?rev=bfe4c964b096637166f46c759aad69456186e85f#bfe4c964b096637166f46c759aad69456186e85f"
 dependencies = [
  "datom-codec",
  "ethos-zero",
  "protos",
  "rkyv",
+ "signal",
  "signal-persona",
 ]
 
 [[package]]
 name = "meta-signal-system"
-version = "2.0.0"
-source = "git+https://github.com/LiGoldragon/meta-signal-system.git?rev=17591d96dd770b7a1c30dc895aa7a26e7534eeb5#17591d96dd770b7a1c30dc895aa7a26e7534eeb5"
+version = "3.0.0"
+source = "git+https://github.com/LiGoldragon/meta-signal-system.git?rev=18e9599ea60701650cc7bd9cb9917a18e4f16830#18e9599ea60701650cc7bd9cb9917a18e4f16830"
 dependencies = [
  "datom-codec",
  "ethos-zero",
  "protos",
  "rkyv",
+ "signal",
  "signal-persona",
 ]
 
 [[package]]
 name = "meta-signal-upgrade"
-version = "2.0.1"
-source = "git+https://github.com/LiGoldragon/meta-signal-upgrade.git?rev=a319e1ba35aedec650aeeffdcb1378e495aa9407#a319e1ba35aedec650aeeffdcb1378e495aa9407"
+version = "3.0.0"
+source = "git+https://github.com/LiGoldragon/meta-signal-upgrade.git?rev=ccccef7facb50dfcfd6a43575b3428feffbfc033#ccccef7facb50dfcfd6a43575b3428feffbfc033"
 dependencies = [
  "datom-codec",
  "ethos-zero",
@@ -557,14 +559,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f38d5652c16fde515bb1ecef450ab0f6a219d619a7274976324d5e377f7dceba"
 
 [[package]]
-name = "paste"
-version = "1.0.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
-
-[[package]]
 name = "persona"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "datom-codec",
  "kameo 0.20.0 (git+https://github.com/LiGoldragon/kameo.git?rev=3486e4f63ea4e87123476cfbdefeb12403540306)",
@@ -755,13 +751,12 @@ dependencies = [
 
 [[package]]
 name = "sema-engine"
-version = "0.15.1"
-source = "git+https://github.com/LiGoldragon/sema-engine.git?rev=27e814a721439af67721c530d48b4d2101141f74#27e814a721439af67721c530d48b4d2101141f74"
+version = "0.16.0"
+source = "git+https://github.com/LiGoldragon/sema-engine.git?rev=516f01fe0b03157efc6cc3d38b588f0ca123ac94#516f01fe0b03157efc6cc3d38b588f0ca123ac94"
 dependencies = [
  "blake3",
  "rkyv",
  "sema",
- "signal-frame",
  "signal-sema",
  "thiserror",
 ]
@@ -814,46 +809,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
-name = "signal-domain"
-version = "2.0.1"
-source = "git+https://github.com/LiGoldragon/signal-domain.git?rev=0e3c55bb2b833057ef8261af5c509552bfd2ee96#0e3c55bb2b833057ef8261af5c509552bfd2ee96"
+name = "signal"
+version = "5.0.0"
+source = "git+https://github.com/LiGoldragon/signal?rev=7bcb0949cdaa4501651ed519625eba48e283fac0#7bcb0949cdaa4501651ed519625eba48e283fac0"
 dependencies = [
  "datom-codec",
  "ethos-zero",
  "protos",
  "rkyv",
-]
-
-[[package]]
-name = "signal-frame"
-version = "0.3.1"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?rev=8aa0bcaeb29fe9e461a11706a469638d2fd109ac#8aa0bcaeb29fe9e461a11706a469638d2fd109ac"
-dependencies = [
- "paste",
- "rkyv",
- "signal-frame-macros",
  "thiserror",
 ]
 
 [[package]]
-name = "signal-frame-macros"
-version = "0.1.2"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?rev=8aa0bcaeb29fe9e461a11706a469638d2fd109ac#8aa0bcaeb29fe9e461a11706a469638d2fd109ac"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "signal-harness"
-version = "2.0.0"
-source = "git+https://github.com/LiGoldragon/signal-harness.git?rev=49d16a31c0dd81a571de99db739e428d96819fd9#49d16a31c0dd81a571de99db739e428d96819fd9"
+name = "signal-domain"
+version = "3.0.0"
+source = "git+https://github.com/LiGoldragon/signal-domain.git?rev=0289b88bbdaadc7e957dc55c612f2132d93463e6#0289b88bbdaadc7e957dc55c612f2132d93463e6"
 dependencies = [
  "datom-codec",
  "ethos-zero",
  "protos",
  "rkyv",
+]
+
+[[package]]
+name = "signal-harness"
+version = "4.0.0"
+source = "git+https://github.com/LiGoldragon/signal-harness.git?rev=17bdd58bebe230548ff278ee394f89bbecc6ce86#17bdd58bebe230548ff278ee394f89bbecc6ce86"
+dependencies = [
+ "datom-codec",
+ "ethos-zero",
+ "protos",
+ "rkyv",
+ "signal",
  "signal-persona",
 ]
 
@@ -869,60 +856,64 @@ dependencies = [
 
 [[package]]
 name = "signal-introspect"
-version = "2.0.1"
-source = "git+https://github.com/LiGoldragon/signal-introspect.git?rev=8de16e35a1aa993b059fcab72a2c2aa4b3a785bf#8de16e35a1aa993b059fcab72a2c2aa4b3a785bf"
+version = "3.0.0"
+source = "git+https://github.com/LiGoldragon/signal-introspect.git?rev=ccea830fc5648270e8a90a044299424009862eec#ccea830fc5648270e8a90a044299424009862eec"
 dependencies = [
  "datom-codec",
  "ethos-zero",
  "protos",
  "rkyv",
+ "signal",
  "signal-message",
  "signal-persona",
 ]
 
 [[package]]
 name = "signal-message"
-version = "2.0.1"
-source = "git+https://github.com/LiGoldragon/signal-message.git?rev=2da9c6dde92dda11ba53aedaa75a3f3605b51454#2da9c6dde92dda11ba53aedaa75a3f3605b51454"
+version = "3.0.0"
+source = "git+https://github.com/LiGoldragon/signal-message.git?rev=f692865ae9620d6b6bb5a140d9721e50fdc64b03#f692865ae9620d6b6bb5a140d9721e50fdc64b03"
 dependencies = [
  "datom-codec",
  "ethos-zero",
  "protos",
  "rkyv",
+ "signal",
 ]
 
 [[package]]
 name = "signal-mind"
-version = "2.0.0"
-source = "git+https://github.com/LiGoldragon/signal-mind.git?rev=7a08e51d43f86a00a10a0133432ff763c7fd0d67#7a08e51d43f86a00a10a0133432ff763c7fd0d67"
+version = "3.0.0"
+source = "git+https://github.com/LiGoldragon/signal-mind.git?rev=5d5352b2ef2655dabe6b0def6183020ed5de9849#5d5352b2ef2655dabe6b0def6183020ed5de9849"
 dependencies = [
  "datom-codec",
  "ethos-zero",
  "protos",
  "rkyv",
+ "signal",
  "signal-domain",
  "signal-persona",
 ]
 
 [[package]]
 name = "signal-persona"
-version = "2.0.1"
-source = "git+https://github.com/LiGoldragon/signal-persona.git?rev=48118557368f26b7292f6b0fb2f98df5cec29fc5#48118557368f26b7292f6b0fb2f98df5cec29fc5"
+version = "4.0.0"
+source = "git+https://github.com/LiGoldragon/signal-persona.git?rev=5ed07a66d473f4fff7b293102023fc26588a3d94#5ed07a66d473f4fff7b293102023fc26588a3d94"
 dependencies = [
  "datom-codec",
  "ethos-zero",
  "protos",
  "rkyv",
+ "signal",
 ]
 
 [[package]]
 name = "signal-router"
-version = "0.7.0"
-source = "git+https://github.com/LiGoldragon/signal-router.git?rev=03ed6bc2217d6a8d0ed5e1291e417ea4d4de168f#03ed6bc2217d6a8d0ed5e1291e417ea4d4de168f"
+version = "5.0.0"
+source = "git+https://github.com/LiGoldragon/signal-router.git?rev=f8fd16446d1f1a6fff3a4545adca145e4a9379e7#f8fd16446d1f1a6fff3a4545adca145e4a9379e7"
 dependencies = [
+ "ethos-zero",
  "rkyv",
- "signal-frame",
- "thiserror",
+ "signal",
 ]
 
 [[package]]
@@ -936,20 +927,21 @@ dependencies = [
 
 [[package]]
 name = "signal-system"
-version = "2.0.0"
-source = "git+https://github.com/LiGoldragon/signal-system.git?rev=603923142ba44331eb674f5d8641f5972051288b#603923142ba44331eb674f5d8641f5972051288b"
+version = "3.0.0"
+source = "git+https://github.com/LiGoldragon/signal-system.git?rev=5ae2944e343cf3deee2d20766256ba1d8e485956#5ae2944e343cf3deee2d20766256ba1d8e485956"
 dependencies = [
  "datom-codec",
  "ethos-zero",
  "meta-signal-system",
  "protos",
  "rkyv",
+ "signal",
 ]
 
 [[package]]
 name = "signal-terminal"
-version = "2.0.1"
-source = "git+https://github.com/LiGoldragon/signal-terminal.git?rev=bb6963650cdd507c25b3650d85fd3bfc232f9a07#bb6963650cdd507c25b3650d85fd3bfc232f9a07"
+version = "3.0.0"
+source = "git+https://github.com/LiGoldragon/signal-terminal.git?rev=82ffb06a0c3cf2af31d4a0e59e1e15dd5efa5905#82ffb06a0c3cf2af31d4a0e59e1e15dd5efa5905"
 dependencies = [
  "datom-codec",
  "ethos-zero",
@@ -959,8 +951,8 @@ dependencies = [
 
 [[package]]
 name = "signal-upgrade"
-version = "2.0.1"
-source = "git+https://github.com/LiGoldragon/signal-upgrade.git?rev=b1bec686f4067fb1be16b47120b47225d1bf8d20#b1bec686f4067fb1be16b47120b47225d1bf8d20"
+version = "3.0.0"
+source = "git+https://github.com/LiGoldragon/signal-upgrade.git?rev=4762886625ea4161e489d055418c67db06aecaac#4762886625ea4161e489d055418c67db06aecaac"
 dependencies = [
  "datom-codec",
  "ethos-zero",
@@ -1172,13 +1164,12 @@ dependencies = [
 
 [[package]]
 name = "triad-runtime"
-version = "0.8.1"
-source = "git+https://github.com/LiGoldragon/triad-runtime.git?rev=02cdd49df63a1769b3cf1b2761261a87eeaa75a4#02cdd49df63a1769b3cf1b2761261a87eeaa75a4"
+version = "0.10.0"
+source = "git+https://github.com/LiGoldragon/triad-runtime.git?rev=b7cffcb25eb8e192add65af3df8c67fe06fc59b1#b7cffcb25eb8e192add65af3df8c67fe06fc59b1"
 dependencies = [
  "kameo 0.20.0 (git+https://github.com/LiGoldragon/kameo.git?rev=f491b45d7dcb55e5837eddde3d5d7ca8ceaa9f01)",
  "rkyv",
  "rustix",
- "signal-frame",
  "thiserror",
  "tokio",
 ]
