@@ -12,20 +12,21 @@ visible. Component implementation belongs in the component repos:
 - `router` for delivery routing;
 - `system` for OS and window-manager observations;
 - `harness` for harness actors;
-- `message` for the NOTA CLI boundary.
+- `message` for the message CLI boundary.
 
-The current binary is a minimal NOTA client over the in-process engine-manager
+The current binary is a minimal datom client over the in-process engine-manager
 stub. With no arguments it queries engine status:
 
 ```sh
 cargo run --bin persona
 ```
 
-It also accepts inline NOTA or a path to a `.nota` request:
+It also accepts one inline datom value, or a path to a file holding one. An
+argument is read as a path only when it names one — absolute, `./` or `../`:
 
 ```sh
-cargo run --bin persona -- '(ComponentStatusQuery ([persona-router]))'
-cargo run --bin persona -- examples/engine-status.nota
+cargo run --bin persona -- 'ComponentStatusQuery.{ persona-router }'
+cargo run --bin persona -- ./examples/engine-status.datom
 ```
 
 Start with:
