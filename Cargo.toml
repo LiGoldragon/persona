@@ -50,9 +50,6 @@ unix-ancillary         = "0.2"
 version-projection     = { git = "https://github.com/LiGoldragon/version-projection.git", rev = "a6a79025cb28b02008a55481e2fc78047e45505e" }
 zbus                   = { version = "5.15", default-features = false, features = ["tokio"] }
 
-
-[dev-dependencies]
-
 # ─── Wire-test shim binaries (for nix-chained tests) ──────
 # These exercise signal-message end-to-end through
 # real bytes on stdout/stdin.
