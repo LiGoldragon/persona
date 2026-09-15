@@ -1,0 +1,5 @@
+Signal
+[]
+[ RecordQuota.QuotaSample AssembleFirstPrompt.FirstPrompt ]
+[ QuotaRecorded.QuotaSample QuotaUnknown.UnknownQuota FirstPromptAssembled.FirstPrompt ]
+[ SubscriptionId.String InlineDatom.String FirstPrompt.String ObservedAt.Integer SourceTimestamp.Integer ResetInterval.Integer RemainingAmount.Integer QuotaSample.{ SubscriptionId SourceTimestamp ResetInterval RemainingAmount } UnknownQuota.[ FutureSourceTimestamp ZeroRemainingInterval SupersededWindow ] ]

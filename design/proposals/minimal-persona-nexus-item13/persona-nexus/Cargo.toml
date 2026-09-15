@@ -1,0 +1,15 @@
+[package]
+name = "persona-nexus-draft"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+name = "persona_nexus"
+
+[dependencies]
+meta-signal-persona-draft = { path = "../meta-signal-persona" }
+signal-persona-draft = { path = "../signal-persona" }
+sema-engine = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
+
+[dev-dependencies]

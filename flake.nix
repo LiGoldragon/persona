@@ -115,6 +115,19 @@
             name = "source";
           };
           cargoVendorDir = craneLib.vendorCargoDeps { inherit src; };
+          minimalPersonaNexusItem13Src = pkgs.lib.cleanSourceWith {
+            src = ./design/proposals/minimal-persona-nexus-item13;
+            filter = craneLib.filterCargoSources;
+            name = "minimal-persona-nexus-item13-source";
+          };
+          minimalPersonaNexusItem13Vendor = craneLib.vendorCargoDeps {
+            src = minimalPersonaNexusItem13Src;
+          };
+          minimalPersonaNexusItem13Artifacts = craneLib.buildDepsOnly {
+            src = minimalPersonaNexusItem13Src;
+            cargoVendorDir = minimalPersonaNexusItem13Vendor;
+            strictDeps = true;
+          };
           commonArgs = {
             inherit src cargoVendorDir;
             strictDeps = true;
@@ -539,6 +552,9 @@
             craneLib
             commonArgs
             cargoArtifacts
+            minimalPersonaNexusItem13Src
+            minimalPersonaNexusItem13Vendor
+            minimalPersonaNexusItem13Artifacts
             personaDevStack
             personaEngineSandbox
             personaEngineSandboxAttach
@@ -623,6 +639,12 @@
               inherit (context) cargoArtifacts;
             }
           );
+          persona-minimal-nexus-item13 = context.craneLib.cargoTest {
+            src = context.minimalPersonaNexusItem13Src;
+            cargoVendorDir = context.minimalPersonaNexusItem13Vendor;
+            cargoArtifacts = context.minimalPersonaNexusItem13Artifacts;
+            strictDeps = true;
+          };
           persona-harness = inputs.persona-harness.checks.${system}.default;
           persona-message = inputs.persona-message.checks.${system}.default;
           mind = inputs.mind.checks.${system}.default;

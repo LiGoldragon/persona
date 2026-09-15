@@ -1,0 +1,7 @@
+[workspace]
+resolver = "3"
+members = ["signal-persona", "meta-signal-persona", "persona-nexus"]
+
+[workspace.package]
+edition = "2024"
+publish = false

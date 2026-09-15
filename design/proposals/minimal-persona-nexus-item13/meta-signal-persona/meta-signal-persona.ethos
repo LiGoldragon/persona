@@ -1,0 +1,5 @@
+Signal
+[]
+[ AssembleMetaFirstPrompt.FirstPrompt InspectSubscription.SubscriptionId ]
+[ MetaFirstPromptAssembled.FirstPrompt SubscriptionInspected.SubscriptionId ]
+[ SubscriptionId.String FirstPrompt.String ]
