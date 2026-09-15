@@ -40,6 +40,7 @@ pub enum UnknownQuota {
     FutureSourceTimestamp,
     ZeroRemainingInterval,
     SupersededWindow,
+    StorageUnavailable,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

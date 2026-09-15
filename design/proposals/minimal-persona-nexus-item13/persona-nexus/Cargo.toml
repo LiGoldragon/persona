@@ -9,7 +9,9 @@ name = "persona_nexus"
 
 [dependencies]
 meta-signal-persona-draft = { path = "../meta-signal-persona" }
+nexus = { git = "https://github.com/LiGoldragon/nexus.git", rev = "c495f2acbfff57e017092b9cc1fbf9f73ca2badf" }
+rkyv = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
 signal-persona-draft = { path = "../signal-persona" }
-sema-engine = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
+sema-engine = { git = "https://github.com/LiGoldragon/sema-engine.git", rev = "516f01fe0b03157efc6cc3d38b588f0ca123ac94" }
 
 [dev-dependencies]

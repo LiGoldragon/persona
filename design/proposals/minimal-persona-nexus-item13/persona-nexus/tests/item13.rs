@@ -1,26 +1,64 @@
 use std::collections::BTreeMap;
 
 use meta_signal_persona::FirstPrompt as MetaFirstPrompt;
+use nexus::{Permissive, SocketAuthority};
 use persona_nexus::{
     DraftLaunch, HarnessFirstPrompt, MemoryQuotaLedger, OrdinarySocket, PersonaNexus, QuotaLedger,
-    QuotaState, SemaEngineQuotaLedger, SemaEngineQuotaStore,
+    QuotaState, QuotaWindowStorage, SemaEngineQuotaLedger,
 };
 use signal_persona::{
     FirstPrompt, ObservedAt, Query, QuotaSample, RemainingAmount, ResetInterval, Signal,
     SourceTimestamp, SubscriptionId, UnknownQuota,
 };
 
-struct FakeSemaStore {
+struct RecordingQuotaWindowStorage {
     windows: BTreeMap<SubscriptionId, persona_nexus::QuotaWindow>,
+    writes: Vec<StorageWrite>,
 }
 
-impl SemaEngineQuotaStore for FakeSemaStore {
-    fn replace_window(&mut self, subscription: SubscriptionId, window: persona_nexus::QuotaWindow) {
-        self.windows.insert(subscription, window);
+#[derive(Debug, Eq, PartialEq)]
+enum StorageWrite {
+    Asserted,
+    Mutated,
+}
+
+impl QuotaWindowStorage for RecordingQuotaWindowStorage {
+    fn load_window(
+        &self,
+        subscription: &SubscriptionId,
+    ) -> Result<Option<persona_nexus::QuotaWindow>, sema_engine::Error> {
+        Ok(self.windows.get(subscription).cloned())
     }
 
-    fn window(&self, subscription: &SubscriptionId) -> Option<persona_nexus::QuotaWindow> {
-        self.windows.get(subscription).cloned()
+    fn store_window(
+        &mut self,
+        prior: Option<&persona_nexus::QuotaWindow>,
+        window: persona_nexus::QuotaWindow,
+    ) -> Result<(), sema_engine::Error> {
+        self.writes.push(if prior.is_some() {
+            StorageWrite::Mutated
+        } else {
+            StorageWrite::Asserted
+        });
+        self.windows
+            .insert(window.sample.subscription.clone(), window);
+        Ok(())
+    }
+}
+
+struct RecordingSignalTransport {
+    sent: Vec<Signal>,
+}
+
+impl RecordingSignalTransport {
+    fn send<Ledger: QuotaLedger>(
+        &mut self,
+        nexus: &mut PersonaNexus<Ledger>,
+        signal: Signal,
+        observed_at: ObservedAt,
+    ) -> Signal {
+        self.sent.push(signal.clone());
+        nexus.receive_signal(signal, observed_at)
     }
 }
 
@@ -79,38 +117,30 @@ fn future_timestamps_and_zero_intervals_are_explicitly_unknown() {
 }
 
 #[test]
-fn independent_fixture_ledgers_keep_subscription_windows_separate() {
+fn fixture_storage_uses_explicit_assert_then_mutate_operations() {
     let mut first = SemaEngineQuotaLedger {
-        store: FakeSemaStore {
+        storage: RecordingQuotaWindowStorage {
             windows: BTreeMap::new(),
+            writes: vec![],
         },
-        engine: None,
-    };
-    let mut second = SemaEngineQuotaLedger {
-        store: FakeSemaStore {
-            windows: BTreeMap::new(),
-        },
-        engine: None,
     };
     assert!(matches!(
         first.record_quota(ObservedAt(10), sample("subscription-a", 10, 10, 5)),
         QuotaState::Known(_)
     ));
     assert!(matches!(
-        second.record_quota(ObservedAt(10), sample("subscription-a", 10, 10, 1)),
+        first.record_quota(ObservedAt(10), sample("subscription-a", 10, 10, 1)),
         QuotaState::Known(_)
     ));
     assert_eq!(
-        first.store.windows[&SubscriptionId("subscription-a".into())]
-            .sample
-            .remaining,
-        RemainingAmount(5)
-    );
-    assert_eq!(
-        second.store.windows[&SubscriptionId("subscription-a".into())]
+        first.storage.windows[&SubscriptionId("subscription-a".into())]
             .sample
             .remaining,
         RemainingAmount(1)
+    );
+    assert_eq!(
+        first.storage.writes,
+        vec![StorageWrite::Asserted, StorageWrite::Mutated]
     );
 }
 
@@ -118,8 +148,12 @@ fn independent_fixture_ledgers_keep_subscription_windows_separate() {
 fn nexus_receives_signal_while_the_cli_translation_seam_remains_outside_it() {
     let mut nexus = PersonaNexus {
         ledger: MemoryQuotaLedger::default(),
+        ordinary_authority: SocketAuthority::Ordinary,
+        meta_authority: SocketAuthority::Privileged,
     };
-    let reply = nexus.receive_signal(
+    let mut transport = RecordingSignalTransport { sent: vec![] };
+    let reply = transport.send(
+        &mut nexus,
         Signal::Query(Query::RecordQuota(sample("alpha", 10, 10, 4))),
         ObservedAt(10),
     );
@@ -127,6 +161,11 @@ fn nexus_receives_signal_while_the_cli_translation_seam_remains_outside_it() {
         reply,
         Signal::Response(signal_persona::Response::QuotaRecorded(_))
     ));
+    assert_eq!(transport.sent.len(), 1);
+    assert_eq!(nexus.ordinary_authority.mode(), 0o660);
+    assert_eq!(nexus.meta_authority.mode(), 0o600);
+    assert!(nexus.meta_authority.admits(42, 42));
+    assert!(!nexus.meta_authority.admits(7, 42));
 }
 
 #[test]

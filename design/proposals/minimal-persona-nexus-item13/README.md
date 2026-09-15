@@ -24,9 +24,17 @@ launchers.
 The ledger is keyed by subscription. A later reset window replaces the former
 window; an old-window sample is `Unknown(SupersededWindow)`. A future source
 timestamp and a zero reset interval are respectively explicit Unknown states.
-It adopts no provider target, daily count, or pacing estimate. `SemaEngineQuotaStore`
-is the sema-engine persistence seam; its fixture is a pure in-memory adapter,
-so this draft does not open a `.sema` file.
+It adopts no provider target, daily count, or pacing estimate.
+
+`SemaEngineQuotaStorage` is the concrete persistence adapter. It registers the
+typed `persona_quota_windows` table, reads it through sema-engine's read-only
+storage reader, and commits an explicit `assert` or `mutate` request. Its
+dependencies are immutable: `nexus` is pinned to
+`c495f2acbfff57e017092b9cc1fbf9f73ca2badf` and `sema-engine` to
+`516f01fe0b03157efc6cc3d38b588f0ca123ac94`. The test fixture instead uses a
+pure recording `QuotaWindowStorage`; it proves the assert-then-mutate decision
+without opening a `.sema` file. Opening an `Engine` remains runtime work owned
+by a real Nexus and is deliberately not exercised here.
 
 ## Historical item 10 relationship
 

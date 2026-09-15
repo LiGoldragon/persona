@@ -181,6 +181,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus"
+version = "0.5.0"
+source = "git+https://github.com/LiGoldragon/nexus.git?rev=c495f2acbfff57e017092b9cc1fbf9f73ca2badf#c495f2acbfff57e017092b9cc1fbf9f73ca2badf"
+dependencies = [
+ "rkyv",
+ "thiserror",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -191,6 +200,8 @@ name = "persona-nexus-draft"
 version = "0.0.0"
 dependencies = [
  "meta-signal-persona-draft",
+ "nexus",
+ "rkyv",
  "sema-engine",
  "signal-persona-draft",
 ]
@@ -315,7 +326,7 @@ dependencies = [
 [[package]]
 name = "sema-engine"
 version = "0.16.0"
-source = "git+https://github.com/LiGoldragon/sema-engine.git?branch=main#516f01fe0b03157efc6cc3d38b588f0ca123ac94"
+source = "git+https://github.com/LiGoldragon/sema-engine.git?rev=516f01fe0b03157efc6cc3d38b588f0ca123ac94#516f01fe0b03157efc6cc3d38b588f0ca123ac94"
 dependencies = [
  "blake3",
  "rkyv",
