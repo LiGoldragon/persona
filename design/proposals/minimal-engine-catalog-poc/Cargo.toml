@@ -1,0 +1,9 @@
+[package]
+name = "persona-minimal-engine-catalog-poc"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Draft-only, in-memory Persona engine catalog proof of concept"
+
+[lib]
+path = "src/lib.rs"

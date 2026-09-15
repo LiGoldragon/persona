@@ -1,0 +1,17 @@
+Library
+[]
+[ EngineId.String
+  Generation.Integer
+  ObservedAt.Integer
+  SourceTimestamp.Integer
+  ResetInterval.Integer
+  RemainingAmount.Integer
+  PaceAmount.Integer
+  PaceInterval.Integer
+  ResetInterpretation.[ FixedWindow RollingWindow ProviderDefined ]
+  DesiredEngine.{ EngineId Generation }
+  ObservedEngine.{ EngineId Generation ObservedAt }
+  QuotaPace.{ PaceAmount PaceInterval }
+  QuotaSnapshot.{ SourceTimestamp ResetInterval RemainingAmount QuotaPace ResetInterpretation } ]
+[]
+[]
