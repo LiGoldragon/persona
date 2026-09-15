@@ -27,12 +27,13 @@ surface.
 
 ```sh
 cargo test --manifest-path design/proposals/minimal-engine-catalog-poc/Cargo.toml
-nix flake check --no-build design/proposals/minimal-engine-catalog-poc
+nix flake check --no-build path:design/proposals/minimal-engine-catalog-poc
 ```
 
 The Nix check is draft-only: it exposes the Cargo test command for a configured
-remote builder and does not activate or deploy anything. The fixture IDs in the
-tests are provisional.
+remote builder and does not activate or deploy anything. Its Nixpkgs revision
+is pinned directly in `flake.nix`; no local Nix build was run. The fixture IDs
+in the tests are provisional.
 
 ## Limits
 

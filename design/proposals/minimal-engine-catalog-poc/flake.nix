@@ -1,7 +1,7 @@
 {
   description = "Draft-only Nix check for the Persona minimal engine catalog proof of concept";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/ac62194c3917d5f474c1a844b6fd6da2db95077d";
 
   outputs = { nixpkgs, ... }:
     let
